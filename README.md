@@ -9,11 +9,18 @@ contrat `docs/api/openapi.json`, branchées sur l'OpenStack de Synelia et sur le
 solutions libres du catalogue. Sans Blesta : clients, souscriptions, facturation et
 paiements sont un domaine natif du backend.
 
-**Commencer par [`docs/PLAN-DIRECTEUR.md`](docs/PLAN-DIRECTEUR.md)** : cadre
-technique (Node 24, Fastify 5, Zod 4, PostgreSQL 18 + Drizzle, Temporal, Valkey),
-structure du monorepo, tenancy organisation ↔ Keystone, correspondance contrat ↔
-OpenStack, modèle de données, facturation, feuille de route en onze phases et
-décisions restant à prendre.
+**Commencer par les deux plans directeurs**, écrits pour le même contrat et les mêmes
+systèmes amont, avec une comparaison honnête à la fin du second :
+
+- [`docs/PLAN-DIRECTEUR.md`](docs/PLAN-DIRECTEUR.md) — variante **Node.js** : Node 24,
+  Fastify 5, Zod 4, PostgreSQL 18 + Drizzle, Temporal, Valkey, client OpenStack à écrire.
+  Contient tout ce qui ne dépend pas du langage : règles du contrat, tenancy
+  organisation ↔ Keystone, modèle de données, correspondance contrat ↔ OpenStack,
+  facturation, feuille de route en onze phases, décisions à prendre.
+- [`docs/PLAN-DIRECTEUR-PYTHON.md`](docs/PLAN-DIRECTEUR-PYTHON.md) — variante **Python** :
+  Python 3.13, FastAPI, Pydantic 2, SQLAlchemy 2 + Alembic, Temporal, Valkey, **openstacksdk**
+  officiel, Authlib, Schemathesis. Renvoie au premier pour ce qui est commun et compare
+  les deux pistes (§9) avec une recommandation.
 
 ```
 synelia-cloud (frontend) ──► apps/api · apps/worker · apps/scheduler (ce dépôt)
