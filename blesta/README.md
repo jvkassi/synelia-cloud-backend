@@ -42,6 +42,16 @@ it for a genuinely fresh start. Set `FORCE_REINSTALL` back to `0`
 immediately after (a Dokploy env change + redeploy, not a code change) so
 a later unrelated redeploy can never accidentally wipe the DB again.
 
+**`BLESTA_DOMAIN` must match whatever domain Dokploy is actually routing
+traffic to.** Blesta's license is tied to the domain given at install time
+and validated against the request's Host header on every load — switching
+the Dokploy domain afterward without reinstalling produces a "License
+Invalid" / "trial already issued" page even though nothing else is wrong.
+Hit this once already: installed against `blesta.osdconsulting.net`, then
+pointed Dokploy's domain at `blesta.fleetops.services` without redoing the
+install — fixed by reinstalling with `BLESTA_DOMAIN=blesta.fleetops.services`
+to match.
+
 ## Remaining one-time manual setup
 
 1. Log in as admin, go to **Settings -> System -> General -> Basic Setup**
