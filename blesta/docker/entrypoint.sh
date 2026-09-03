@@ -20,6 +20,26 @@ fi
 
 chown -R nobody:nobody /opt/blesta/data
 
+# One-time reinstall, gated by an env var (not left unconditional like the
+# earlier debugging pass -- flip FORCE_REINSTALL off in Dokploy's compose
+# env right after this runs once, no code change/redeploy needed to undo it).
+if [ "${FORCE_REINSTALL:-0}" = "1" ]; then
+  {
+    echo "--- force reinstall: resetting DB and config ---"
+    mariadb --host=mariadb --user=root --password="${MARIADB_ROOT_PASSWORD}" \
+      -e "DROP DATABASE IF EXISTS blesta; CREATE DATABASE blesta CHARACTER SET utf8mb4;"
+    rm -f /opt/blesta/data/config/blesta.php
+    echo "--- running installer ---"
+    cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\n%s\n%s\n\nJean\nKassi\njean.kassi@synelia.tech\nadmin\n%s\n' \
+      "${MARIADB_BLESTA_PASSWORD}" "${BLESTA_DOMAIN:-blesta.osdconsulting.net}" "${BLESTA_ADMIN_PASSWORD}" \
+      | timeout 40 php index.php install
+    echo "--- license key on file ---"
+    mariadb --host=mariadb --user=root --password="${MARIADB_ROOT_PASSWORD}" blesta \
+      -e "SELECT * FROM licenses;" 2>&1 || true
+  } > /opt/blesta/blesta/diag 2>&1 || true
+  chmod 644 /opt/blesta/blesta/diag || true
+fi
+
 trap 'kill -TERM ${PHPFPM_PID:-} ${NGINX_PID:-} 2>/dev/null || true; wait' TERM INT
 
 php-fpm -F &

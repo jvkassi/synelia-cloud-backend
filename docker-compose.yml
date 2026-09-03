@@ -5,6 +5,12 @@ services:
     build:
       context: ./blesta
       dockerfile: Dockerfile
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Missing MARIADB_ROOT_PASSWORD}
+      MARIADB_BLESTA_PASSWORD: ${MARIADB_BLESTA_PASSWORD:?Missing MARIADB_BLESTA_PASSWORD}
+      BLESTA_DOMAIN: ${BLESTA_DOMAIN:-}
+      BLESTA_ADMIN_PASSWORD: ${BLESTA_ADMIN_PASSWORD:-}
+      FORCE_REINSTALL: ${FORCE_REINSTALL:-0}
     networks:
       - dokploy-network
     volumes:
