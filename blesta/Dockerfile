@@ -81,6 +81,7 @@ RUN mkdir -p /opt/blesta/defaults \
     && ln -s /opt/blesta/data/cache /opt/blesta/blesta/cache
 
 COPY docker/nginx.conf /etc/nginx/nginx.conf
+COPY docker/00-ioncube.ini "/etc/php${PHP_VERSION}/conf.d/00-ioncube.ini"
 COPY docker/php-custom.ini "/etc/php${PHP_VERSION}/conf.d/99-custom.ini"
 COPY docker/php-fpm-pool.conf "/etc/php${PHP_VERSION}/php-fpm.d/www.conf"
 COPY docker/entrypoint.sh /entrypoint.sh
