@@ -2,6 +2,7 @@
 set -eu
 
 mkdir -p /tmp/nginx/client-body /tmp/nginx/fastcgi /tmp/nginx/proxy
+chown -R nobody:nobody /tmp/nginx
 mkdir -p /opt/blesta/data/config /opt/blesta/data/cache /opt/blesta/data/logs \
   /opt/blesta/data/uploads /opt/blesta/data/sessions
 
