@@ -4,10 +4,11 @@ Real backend stack for [synelia-cloud](https://github.com/jvkassi/synelia-cloud)
 Next.js frontend).
 
 **Live:** Blesta is installed and running at
-https://synelia-blesta-94b350-51-68-240-164.sslip.io/admin/login/ (a
-Dokploy-generated sslip.io domain — a real custom domain can replace it
-any time via `domain.create` / the Dokploy dashboard). A few post-install
-settings are still manual — see `blesta/README.md`.
+https://blesta.fleetops.services/admin/login/ — `*.fleetops.services`
+already wildcards to this Dokploy server, so this domain worked
+immediately with no DNS changes needed (unlike `*.osdconsulting.net`,
+which points elsewhere and would need its own DNS record added first).
+A few post-install settings are still manual — see `blesta/README.md`.
 
 Target architecture:
 

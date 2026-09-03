@@ -31,7 +31,7 @@ if [ "${FORCE_REINSTALL:-0}" = "1" ]; then
     rm -f /opt/blesta/data/config/blesta.php
     echo "--- running installer ---"
     cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\n%s\n%s\n\nJean\nKassi\njean.kassi@synelia.tech\nadmin\n%s\n' \
-      "${MARIADB_BLESTA_PASSWORD}" "${BLESTA_DOMAIN:-blesta.osdconsulting.net}" "${BLESTA_ADMIN_PASSWORD}" \
+      "${MARIADB_BLESTA_PASSWORD}" "${BLESTA_DOMAIN:-blesta.fleetops.services}" "${BLESTA_ADMIN_PASSWORD}" \
       | timeout 40 php index.php install
   } > /opt/blesta/blesta/diag 2>&1 || true
   chmod 644 /opt/blesta/blesta/diag || true
