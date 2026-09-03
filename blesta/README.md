@@ -21,28 +21,33 @@ problem to work around:
   paths inside the container's own writable layer, which *do* survive a
   restart of the same container but are lost on a rebuild/redeploy.
 
-## One-time manual setup (you have to do this — it's an interactive web wizard)
+## Install status: done
 
-1. Once deployed, visit the app's URL and complete Blesta's install wizard.
-   The database step is **not** pre-filled — enter:
-   - Host: `mariadb`, Port: `3306`, Database: `blesta`, Username: `blesta`
-   - Password: the `MARIADB_BLESTA_PASSWORD` value set in Dokploy's
-     compose env (ask whoever provisioned it, or check the Dokploy
-     dashboard — it isn't in this repo).
+The install wizard has been run (via Blesta's CLI installer,
+`php index.php install` inside the container — its exact prompt sequence
+is documented as a comment in `docker/entrypoint.sh`'s git history if this
+ever needs redoing on a fresh volume). Admin login is live at `/admin/login/`;
+first-run credentials were shared with the repo owner directly (not
+committed here) — change the password on first login.
 
-   Then create the admin account. Choosing **"Start a 30-day free trial"**
-   when asked for a license key requires no account or card.
-2. Log in as admin, go to **Settings -> System -> General -> Basic Setup**
+## Remaining one-time manual setup
+
+1. Log in as admin, go to **Settings -> System -> General -> Basic Setup**
    and set:
    - **Uploads Directory** -> `/opt/blesta/data/uploads/`
    - **Log Directory** -> `/opt/blesta/data/logs/`
    - Check **"My installation is behind a proxy or load balancer"** (Dokploy
      terminates TLS via Traefik in front of this container).
-3. Under **Settings -> Company -> Emails -> Mail Settings**, configure an
+2. Under **Settings -> Company -> Emails -> Mail Settings**, configure an
    external SMTP provider — this container doesn't run a local MTA.
-4. Create a staff API-access user (**Staff -> Manage -> API Access**) and
-   put its username/API key into `middleware`'s `BLESTA_API_USER` /
-   `BLESTA_API_KEY`.
+3. Create a staff API-access user (**Staff -> Manage -> API Access**) and
+   put its username/API key into `middleware`'s `BLESTA_API_URL` /
+   `BLESTA_API_USER` / `BLESTA_API_KEY` (set on the `middleware` service in
+   Dokploy's compose env).
+4. The license request during install needs Blesta's licensing servers to
+   be reachable from the container at install time — confirm under
+   **Settings -> Company -> License** that a trial (or real) license is
+   actually active; if it shows unlicensed, re-request it from there.
 
 ## Extending with custom modules/plugins
 
