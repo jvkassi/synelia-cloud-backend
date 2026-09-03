@@ -1,47 +1,36 @@
 # synelia-cloud-backend
 
-Real backend stack for [synelia-cloud](https://github.com/jvkassi/synelia-cloud) (currently a mock-only
-Next.js frontend).
+Backend de [synelia-cloud](https://github.com/jvkassi/synelia-cloud), le portail
+Next.js de Synelia Cloud (vitrine, espace client, espace super admin), aujourd'hui
+servi par des données fictives.
 
-**Live:** Blesta is installed and running at
-https://blesta.fleetops.services/admin/login/ — `*.fleetops.services`
-already wildcards to this Dokploy server, so this domain worked
-immediately with no DNS changes needed (unlike `*.osdconsulting.net`,
-which points elsewhere and would need its own DNS record added first).
-A few post-install settings are still manual — see `blesta/README.md`.
+Ce dépôt construit **tout ce que le portail attend** : les 514 opérations de son
+contrat `docs/api/openapi.json`, branchées sur l'OpenStack de Synelia et sur les
+solutions libres du catalogue. Sans Blesta : clients, souscriptions, facturation et
+paiements sont un domaine natif du backend.
 
-Target architecture:
+**Commencer par [`docs/PLAN-DIRECTEUR.md`](docs/PLAN-DIRECTEUR.md)** : cadre
+technique (Node 24, Fastify 5, Zod 4, PostgreSQL 18 + Drizzle, Temporal, Valkey),
+structure du monorepo, tenancy organisation ↔ Keystone, correspondance contrat ↔
+OpenStack, modèle de données, facturation, feuille de route en onze phases et
+décisions restant à prendre.
 
 ```
-synelia-cloud (frontend) -> middleware/ (this repo) -> Blesta (billing/provisioning) -> OpenStack (infra)
+synelia-cloud (frontend) ──► apps/api · apps/worker · apps/scheduler (ce dépôt)
+                                   │
+        PostgreSQL · Valkey · Temporal · OpenStack Gazpacho · Kubernetes · Stalwart ·
+        Postal · Nextcloud · Plesk · Designate · ACME · CinetPay · Stripe · Victoria*
 ```
 
-## Layout
+## État du dépôt
 
-- `blesta/` — Blesta billing/client-management core, containerized, deployed on
-  [Dokploy](https://dokploy.com) (self-hosted PaaS). See `blesta/README.md`.
-- `middleware/` — REST API service matching `synelia-cloud`'s existing contract
-  (`docs/api/openapi.json` / `src/lib/types.ts` in that repo). Calls Blesta's API for
-  anything it already models (clients, invoices, services); calls a `provisioner`
-  interface for actual infra — a real OpenStack (Nova/Cinder) implementation against
-  a lab tenant, not a mock. See `middleware/README.md`.
-- `docker-compose.yml` — the whole stack (blesta, mariadb, middleware) deployed
-  together as one Dokploy compose application.
+La Phase 0 du plan (socle du monorepo) n'a pas encore commencé. Les deux dossiers
+présents sont l'héritage de la première approche, retenue puis abandonnée :
 
-## Why Dokploy instead of Vercel
-
-Vercel's Dockerfile-based Container Images feature requires a permission/entitlement
-that isn't enabled on the team's Hobby plan (confirmed by testing — the build silently
-no-ops and serves a 404 instead of running the container). Rather than block on a plan
-upgrade, Blesta runs on Dokploy, a self-hosted PaaS already available
-(`https://paas.fleetops.services`), which also gives Blesta the persistent disk it wants
-by default (uploads, sessions, generated invoices) — no ephemeral-filesystem workarounds
-needed, unlike Vercel's serverless container model.
-
-## Why a custom Blesta image instead of the community one
-
-`ppmathis/docker-blesta` is a solid reference (informed the nginx/PHP-FPM layout here),
-but Synelia will be writing its own Blesta module for OpenStack provisioning, so the
-image is built from Blesta's own source with `blesta/plugins/` and `blesta/modules/`
-as first-class extension points baked into the build — not something bolted onto
-someone else's maintained image.
+- `blesta/` — image Docker de Blesta et son installation sur Dokploy. **Abandonné** :
+  la facturation est native. À supprimer en Phase 0.
+- `middleware/` — premier essai Express avec un client Keystone/Nova/Cinder minimal.
+  **Remplacé** par `apps/api` et `packages/openstack` ; son code sert de graine et
+  disparaît en Phase 0.
+- `docker-compose.yml` — pile Blesta + MariaDB + middleware. Remplacée par la pile du
+  plan (Postgres, Valkey, Temporal) en Phase 0.
