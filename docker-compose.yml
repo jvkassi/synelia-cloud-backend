@@ -5,9 +5,6 @@ services:
     build:
       context: ./blesta
       dockerfile: Dockerfile
-    environment:
-      BLESTA_ADDRESS: ${BLESTA_ADDRESS:?Missing BLESTA_ADDRESS}
-      BLESTA_HOST: ${BLESTA_HOST:?Missing BLESTA_HOST}
     networks:
       - dokploy-network
     volumes:
