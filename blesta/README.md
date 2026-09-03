@@ -24,11 +24,23 @@ problem to work around:
 ## Install status: done
 
 The install wizard has been run (via Blesta's CLI installer,
-`php index.php install` inside the container — its exact prompt sequence
-is documented as a comment in `docker/entrypoint.sh`'s git history if this
-ever needs redoing on a fresh volume). Admin login is live at `/admin/login/`;
+`php index.php install` inside the container). Admin login is live;
 first-run credentials were shared with the repo owner directly (not
-committed here) — change the password on first login.
+committed here) — change the password on first login. A 30-day trial
+license was requested automatically and is active (`license_key` in the
+`settings` table starts with `trial-`).
+
+### Redoing the install (FORCE_REINSTALL)
+
+`docker/entrypoint.sh` has a gated one-time reinstall path: set
+`FORCE_REINSTALL=1` plus `BLESTA_DOMAIN` / `BLESTA_ADMIN_PASSWORD` in
+Dokploy's compose env and redeploy — it drops and recreates the `blesta`
+database, clears `config/blesta.php`, and re-runs the CLI installer
+end to end (DB creds → domain → license key → admin account, all
+non-interactive). **This destroys all existing Blesta data** — only use
+it for a genuinely fresh start. Set `FORCE_REINSTALL` back to `0`
+immediately after (a Dokploy env change + redeploy, not a code change) so
+a later unrelated redeploy can never accidentally wipe the DB again.
 
 ## Remaining one-time manual setup
 
@@ -44,10 +56,6 @@ committed here) — change the password on first login.
    put its username/API key into `middleware`'s `BLESTA_API_URL` /
    `BLESTA_API_USER` / `BLESTA_API_KEY` (set on the `middleware` service in
    Dokploy's compose env).
-4. The license request during install needs Blesta's licensing servers to
-   be reachable from the container at install time — confirm under
-   **Settings -> Company -> License** that a trial (or real) license is
-   actually active; if it shows unlicensed, re-request it from there.
 
 ## Extending with custom modules/plugins
 
