@@ -223,12 +223,12 @@ export class OpenstackProvisioner implements Provisioner {
   }
 
   async listVolumes(): Promise<Volume[]> {
-    const data = await this.request<{ volumes: any[] }>('block-storage', '/volumes/detail');
+    const data = await this.request<{ volumes: any[] }>('volumev3', '/volumes/detail');
     return data.volumes.map((v) => this.mapVolume(v));
   }
 
   async createVolume(input: CreateVolumeInput): Promise<Volume> {
-    const data = await this.request<{ volume: any }>('block-storage', '/volumes', {
+    const data = await this.request<{ volume: any }>('volumev3', '/volumes', {
       method: 'POST',
       body: JSON.stringify({ volume: { name: input.nom, size: input.tailleGo } }),
     });
@@ -236,6 +236,6 @@ export class OpenstackProvisioner implements Provisioner {
   }
 
   async deleteVolume(id: string): Promise<void> {
-    await this.request('block-storage', `/volumes/${id}`, { method: 'DELETE' });
+    await this.request('volumev3', `/volumes/${id}`, { method: 'DELETE' });
   }
 }
