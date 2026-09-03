@@ -1,0 +1,36 @@
+name: synelia-blesta
+
+services:
+  blesta:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      BLESTA_ADDRESS: ${BLESTA_ADDRESS:?Missing BLESTA_ADDRESS}
+      BLESTA_HOST: ${BLESTA_HOST:?Missing BLESTA_HOST}
+    networks:
+      - dokploy-network
+    volumes:
+      - blesta-data:/opt/blesta/data
+    depends_on:
+      - mariadb
+
+  mariadb:
+    image: docker.io/library/mariadb:11
+    environment:
+      MARIADB_DATABASE: blesta
+      MARIADB_USER: blesta
+      MARIADB_PASSWORD: ${MARIADB_BLESTA_PASSWORD:?Missing MARIADB_BLESTA_PASSWORD}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Missing MARIADB_ROOT_PASSWORD}
+    networks:
+      - dokploy-network
+    volumes:
+      - mariadb-data:/var/lib/mysql
+
+volumes:
+  blesta-data: {}
+  mariadb-data: {}
+
+networks:
+  dokploy-network:
+    external: true
