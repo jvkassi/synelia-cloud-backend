@@ -18,6 +18,16 @@ fi
 
 chown -R nobody:nobody /opt/blesta/data
 
+# Temporary diagnostic: no log access to this host via the Dokploy API, so
+# write php-fpm's config test + php -v to a static file servable over HTTP.
+# Remove once the 502 is root-caused.
+{
+  echo "--- php -v ---"; php -v
+  echo "--- php-fpm -t ---"; php-fpm -t
+  echo "--- ls /opt/ioncube ---"; ls -la /opt/ioncube
+} > /opt/blesta/blesta/diag 2>&1 || true
+chmod 644 /opt/blesta/blesta/diag || true
+
 trap 'kill -TERM ${PHPFPM_PID:-} ${NGINX_PID:-} 2>/dev/null || true; wait' TERM INT
 
 php-fpm -F &
