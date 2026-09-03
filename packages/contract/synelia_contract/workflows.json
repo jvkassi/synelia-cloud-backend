@@ -1,0 +1,1071 @@
+[
+  {
+    "id": "espace.create",
+    "portee": "client",
+    "libelle": "Création de l’Espace Cloud {cible}",
+    "lancement": "Le quota est réservé et la plage réseau allouée.",
+    "fin": "L’espace est prêt : vous pouvez y créer des machines.",
+    "href": "/app/espaces",
+    "etapes": [
+      {
+        "nom": "Réserver le quota sur le backend",
+        "dureeS": 22
+      },
+      {
+        "nom": "Créer le projet d’isolation",
+        "dureeS": 41
+      },
+      {
+        "nom": "Allouer la plage réseau privée",
+        "dureeS": 18
+      },
+      {
+        "nom": "Ouvrir la passerelle et le pare-feu par défaut",
+        "dureeS": 34
+      },
+      {
+        "nom": "Enregistrer l’espace dans la facturation",
+        "dureeS": 7
+      }
+    ]
+  },
+  {
+    "id": "espace.extend",
+    "portee": "client",
+    "libelle": "Extension de capacité de {cible}",
+    "lancement": "Le devis est accepté ; l’extension prend effet à la fin du job.",
+    "fin": "Le nouveau quota est disponible et facturé au prorata.",
+    "href": "/app/espaces",
+    "etapes": [
+      {
+        "nom": "Valider le devis",
+        "dureeS": 6
+      },
+      {
+        "nom": "Étendre le quota",
+        "dureeS": 28
+      },
+      {
+        "nom": "Rééquilibrer le placement",
+        "dureeS": 142
+      }
+    ]
+  },
+  {
+    "id": "vm.create",
+    "portee": "client",
+    "libelle": "Création de {cible}",
+    "lancement": "Le quota est réservé pendant toute la durée du job.",
+    "fin": "Les machines répondent au SSH et sont supervisées.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Réserver le quota",
+        "dureeS": 5
+      },
+      {
+        "nom": "Copier l’image système",
+        "dureeS": 74
+      },
+      {
+        "nom": "Créer les disques",
+        "dureeS": 41
+      },
+      {
+        "nom": "Attacher les cartes réseau",
+        "dureeS": 12
+      },
+      {
+        "nom": "Démarrer et injecter la clé SSH",
+        "dureeS": 38
+      },
+      {
+        "nom": "Enregistrer les sondes de supervision",
+        "dureeS": 16
+      }
+    ]
+  },
+  {
+    "id": "vm.compose",
+    "portee": "client",
+    "libelle": "Déploiement composé · {cible}",
+    "lancement": "Les machines sont créées par lots, dans l’ordre du plan.",
+    "fin": "Toutes les machines du plan sont démarrées.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Vérifier le quota de l’espace",
+        "dureeS": 8
+      },
+      {
+        "nom": "Créer les réseaux manquants",
+        "dureeS": 22
+      },
+      {
+        "nom": "Provisionner le lot 1",
+        "dureeS": 168
+      },
+      {
+        "nom": "Provisionner le lot 2",
+        "dureeS": 154
+      },
+      {
+        "nom": "Appliquer les groupes de sécurité",
+        "dureeS": 19
+      },
+      {
+        "nom": "Enregistrer les sondes de supervision",
+        "dureeS": 24
+      }
+    ]
+  },
+  {
+    "id": "vm.power.start",
+    "portee": "client",
+    "libelle": "Démarrage de {cible}",
+    "lancement": "L’ordre est passé à l’hyperviseur.",
+    "fin": "Les machines sont en ligne.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Passer l’ordre à l’hyperviseur",
+        "dureeS": 4
+      },
+      {
+        "nom": "Attendre le démarrage du système",
+        "dureeS": 32
+      },
+      {
+        "nom": "Vérifier les sondes",
+        "dureeS": 11
+      }
+    ]
+  },
+  {
+    "id": "vm.power.stop",
+    "portee": "client",
+    "libelle": "Arrêt de {cible}",
+    "lancement": "Extinction propre demandée au système invité.",
+    "fin": "Les machines sont arrêtées. Le stockage reste facturé.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Demander l’extinction au système invité",
+        "dureeS": 24
+      },
+      {
+        "nom": "Libérer les ressources de calcul",
+        "dureeS": 8
+      }
+    ]
+  },
+  {
+    "id": "vm.power.reboot",
+    "portee": "client",
+    "libelle": "Redémarrage de {cible}",
+    "lancement": "La machine sera de nouveau disponible dans environ 40 secondes.",
+    "fin": "La machine a redémarré et répond aux sondes.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Demander l’arrêt au système invité",
+        "dureeS": 14
+      },
+      {
+        "nom": "Relancer la machine",
+        "dureeS": 21
+      },
+      {
+        "nom": "Vérifier les sondes",
+        "dureeS": 9
+      }
+    ]
+  },
+  {
+    "id": "vm.resize",
+    "portee": "client",
+    "libelle": "Redimensionnement de {cible}",
+    "lancement": "Le nouveau gabarit sera facturé au prorata dès la fin du job.",
+    "fin": "La machine tourne sur son nouveau gabarit.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Vérifier le quota disponible",
+        "dureeS": 6
+      },
+      {
+        "nom": "Arrêter la machine",
+        "dureeS": 22
+      },
+      {
+        "nom": "Appliquer le nouveau gabarit",
+        "dureeS": 15
+      },
+      {
+        "nom": "Redémarrer et vérifier",
+        "dureeS": 34
+      }
+    ]
+  },
+  {
+    "id": "vm.snapshot",
+    "portee": "client",
+    "libelle": "Snapshot de {cible}",
+    "lancement": "Le snapshot vit sur le même stockage que la machine : ce n’est pas une sauvegarde.",
+    "fin": "Le snapshot est disponible. Pensez à le purger : il est facturé au volume.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Suspendre les écritures disque",
+        "dureeS": 3
+      },
+      {
+        "nom": "Figer l’état de la machine",
+        "dureeS": 22
+      },
+      {
+        "nom": "Reprendre les écritures",
+        "dureeS": 2
+      }
+    ]
+  },
+  {
+    "id": "vm.migrate",
+    "portee": "client",
+    "libelle": "Migration de {cible} vers un autre hôte",
+    "lancement": "Migration à chaud : la machine ne s’arrête pas.",
+    "fin": "La machine tourne sur son nouvel hôte, sans coupure constatée.",
+    "href": "/app/vms",
+    "etapes": [
+      {
+        "nom": "Choisir un hôte compatible",
+        "dureeS": 8
+      },
+      {
+        "nom": "Transférer la mémoire vive",
+        "dureeS": 164
+      },
+      {
+        "nom": "Basculer l’exécution",
+        "dureeS": 4
+      },
+      {
+        "nom": "Libérer l’hôte source",
+        "dureeS": 6
+      }
+    ]
+  },
+  {
+    "id": "lb.create",
+    "portee": "client",
+    "libelle": "Création du load balancer {cible}",
+    "lancement": "La VIP est réservée ; les health checks démarrent à la fin du job.",
+    "fin": "Le load balancer distribue le trafic sur les membres sains.",
+    "href": "/app/reseau/lb",
+    "etapes": [
+      {
+        "nom": "Réserver l’adresse virtuelle",
+        "dureeS": 9
+      },
+      {
+        "nom": "Déployer la paire de nœuds",
+        "dureeS": 96
+      },
+      {
+        "nom": "Déclarer les écouteurs et le pool",
+        "dureeS": 14
+      },
+      {
+        "nom": "Démarrer les sondes de santé",
+        "dureeS": 42
+      }
+    ]
+  },
+  {
+    "id": "backup.restore",
+    "portee": "client",
+    "libelle": "Restauration de {cible}",
+    "lancement": "La cible est isolée du réseau le temps de la restauration.",
+    "fin": "La restauration est terminée ; vérifiez les données avant de remettre en service.",
+    "href": "/app/sauvegarde",
+    "etapes": [
+      {
+        "nom": "Vérifier le point de restauration",
+        "dureeS": 28
+      },
+      {
+        "nom": "Préparer la cible",
+        "dureeS": 46
+      },
+      {
+        "nom": "Restaurer les données",
+        "dureeS": 486
+      },
+      {
+        "nom": "Remonter les services",
+        "dureeS": 72
+      },
+      {
+        "nom": "Contrôler la cohérence",
+        "dureeS": 38
+      }
+    ]
+  },
+  {
+    "id": "dr.failover.test",
+    "portee": "client",
+    "libelle": "Bascule de test · {cible}",
+    "lancement": "Réseau isolé : aucun impact sur la production.",
+    "fin": "Le test est concluant. Le RTO constaté est enregistré dans le plan.",
+    "href": "/app/pra",
+    "etapes": [
+      {
+        "nom": "Créer le réseau isolé de test",
+        "dureeS": 34
+      },
+      {
+        "nom": "Démarrer le groupe 1 — bases de données",
+        "dureeS": 168
+      },
+      {
+        "nom": "Démarrer le groupe 2 — applications",
+        "dureeS": 124
+      },
+      {
+        "nom": "Démarrer le groupe 3 — frontaux",
+        "dureeS": 62
+      },
+      {
+        "nom": "Exécuter les contrôles applicatifs",
+        "dureeS": 96
+      },
+      {
+        "nom": "Détruire l’environnement de test",
+        "dureeS": 48
+      }
+    ]
+  },
+  {
+    "id": "dr.failover.real",
+    "portee": "client",
+    "libelle": "Bascule réelle · {cible}",
+    "lancement": "La production bascule sur le site de secours. Le retour arrière est une opération distincte.",
+    "fin": "La production tourne sur le site de secours.",
+    "href": "/app/pra",
+    "etapes": [
+      {
+        "nom": "Geler les écritures sur le site principal",
+        "dureeS": 22
+      },
+      {
+        "nom": "Terminer la réplication en cours",
+        "dureeS": 148
+      },
+      {
+        "nom": "Démarrer le groupe 1 — bases de données",
+        "dureeS": 186
+      },
+      {
+        "nom": "Démarrer le groupe 2 — applications",
+        "dureeS": 132
+      },
+      {
+        "nom": "Démarrer le groupe 3 — frontaux",
+        "dureeS": 68
+      },
+      {
+        "nom": "Basculer les entrées DNS",
+        "dureeS": 42
+      }
+    ]
+  },
+  {
+    "id": "projet.create",
+    "portee": "client",
+    "libelle": "Création du projet {cible}",
+    "lancement": "Build, analyse DevSecOps, provisioning puis déploiement.",
+    "fin": "Le projet est déployé et son URL de production répond.",
+    "href": "/app/applications/projets",
+    "etapes": [
+      {
+        "nom": "Cloner le dépôt et détecter la pile",
+        "dureeS": 24
+      },
+      {
+        "nom": "Construire l’image",
+        "dureeS": 214
+      },
+      {
+        "nom": "Analyser l’image — dépendances et secrets",
+        "dureeS": 86
+      },
+      {
+        "nom": "Provisionner l’environnement",
+        "dureeS": 112
+      },
+      {
+        "nom": "Déployer et attendre les sondes",
+        "dureeS": 74
+      },
+      {
+        "nom": "Router le domaine et émettre le certificat",
+        "dureeS": 58
+      }
+    ]
+  },
+  {
+    "id": "app.deploy",
+    "portee": "client",
+    "libelle": "Déploiement de {cible}",
+    "lancement": "Le trafic reste sur la version en place jusqu’aux sondes vertes.",
+    "fin": "La nouvelle version reçoit tout le trafic.",
+    "href": "/app/applications/deploiements",
+    "etapes": [
+      {
+        "nom": "Construire l’image",
+        "dureeS": 168
+      },
+      {
+        "nom": "Analyser l’image",
+        "dureeS": 62
+      },
+      {
+        "nom": "Déployer en parallèle de la version en place",
+        "dureeS": 84
+      },
+      {
+        "nom": "Attendre les sondes de disponibilité",
+        "dureeS": 46
+      },
+      {
+        "nom": "Basculer le trafic",
+        "dureeS": 12
+      }
+    ]
+  },
+  {
+    "id": "app.rollback",
+    "portee": "client",
+    "libelle": "Retour arrière de {cible}",
+    "lancement": "L’artefact précédent est repromu : aucun rebuild.",
+    "fin": "La version précédente reçoit tout le trafic.",
+    "href": "/app/applications/deploiements",
+    "etapes": [
+      {
+        "nom": "Repromouvoir l’artefact précédent",
+        "dureeS": 8
+      },
+      {
+        "nom": "Redémarrer les instances",
+        "dureeS": 34
+      },
+      {
+        "nom": "Basculer le trafic",
+        "dureeS": 9
+      }
+    ]
+  },
+  {
+    "id": "component.restart",
+    "portee": "client",
+    "libelle": "Redémarrage de {cible}",
+    "lancement": "Redémarrage progressif, une instance après l’autre.",
+    "fin": "Toutes les instances sont reparties.",
+    "href": "/app/applications/projets",
+    "etapes": [
+      {
+        "nom": "Retirer la première instance du service",
+        "dureeS": 6
+      },
+      {
+        "nom": "Redémarrer les instances une à une",
+        "dureeS": 54
+      },
+      {
+        "nom": "Vérifier les sondes",
+        "dureeS": 14
+      }
+    ]
+  },
+  {
+    "id": "service.start",
+    "portee": "client",
+    "libelle": "Démarrage du service {cible}",
+    "lancement": "Les ressources de calcul sont réattribuées au service.",
+    "fin": "Le service répond de nouveau.",
+    "href": "/app/applications/projets",
+    "etapes": [
+      {
+        "nom": "Réattribuer processeur et mémoire",
+        "dureeS": 8
+      },
+      {
+        "nom": "Démarrer les instances",
+        "dureeS": 42
+      },
+      {
+        "nom": "Vérifier les sondes",
+        "dureeS": 16
+      }
+    ]
+  },
+  {
+    "id": "service.update",
+    "portee": "client",
+    "libelle": "Mise à jour de {cible}",
+    "lancement": "Snapshot pris avant la mise à jour ; application à la prochaine fenêtre.",
+    "fin": "Le service tourne sur la version qualifiée.",
+    "href": "/app/applications/projets",
+    "etapes": [
+      {
+        "nom": "Snapshot pré-mise à jour",
+        "dureeS": 96
+      },
+      {
+        "nom": "Appliquer la nouvelle version",
+        "dureeS": 168
+      },
+      {
+        "nom": "Vérifier les services",
+        "dureeS": 42
+      }
+    ]
+  },
+  {
+    "id": "domaine.verify",
+    "portee": "client",
+    "libelle": "Vérification de {cible}",
+    "lancement": "Interrogation directe des serveurs de noms du domaine.",
+    "fin": "Le domaine est vérifié : le certificat peut être émis.",
+    "href": "/app/applications/routage",
+    "etapes": [
+      {
+        "nom": "Interroger les serveurs de noms",
+        "dureeS": 12
+      },
+      {
+        "nom": "Comparer l’enregistrement attendu",
+        "dureeS": 3
+      },
+      {
+        "nom": "Marquer le domaine vérifié",
+        "dureeS": 2
+      }
+    ]
+  },
+  {
+    "id": "k8s.create",
+    "portee": "client",
+    "libelle": "Création du cluster {cible}",
+    "lancement": "Le control plane est provisionné avant les pools de workers.",
+    "fin": "Le cluster répond ; le kubeconfig est disponible.",
+    "href": "/app/kubernetes",
+    "etapes": [
+      {
+        "nom": "Provisionner le control plane",
+        "dureeS": 246
+      },
+      {
+        "nom": "Déployer le réseau de pods",
+        "dureeS": 68
+      },
+      {
+        "nom": "Créer les pools de workers",
+        "dureeS": 312
+      },
+      {
+        "nom": "Installer les modules retenus",
+        "dureeS": 124
+      },
+      {
+        "nom": "Publier le kubeconfig",
+        "dureeS": 8
+      }
+    ]
+  },
+  {
+    "id": "k8s.pool.roll",
+    "portee": "client",
+    "libelle": "Mise à jour progressive du pool {cible}",
+    "lancement": "Un nœud à la fois : les charges sont drainées avant remplacement.",
+    "fin": "Tous les nœuds du pool tournent sur la nouvelle image.",
+    "href": "/app/kubernetes",
+    "etapes": [
+      {
+        "nom": "Drainer le premier nœud",
+        "dureeS": 62
+      },
+      {
+        "nom": "Remplacer les nœuds un à un",
+        "dureeS": 486
+      },
+      {
+        "nom": "Vérifier la répartition des pods",
+        "dureeS": 34
+      }
+    ]
+  },
+  {
+    "id": "k8s.upgrade",
+    "portee": "client",
+    "libelle": "Montée de version de {cible}",
+    "lancement": "etcd est sauvegardé avant toute modification.",
+    "fin": "Le cluster tourne sur la nouvelle version, modules compris.",
+    "href": "/app/kubernetes",
+    "etapes": [
+      {
+        "nom": "Sauvegarder etcd",
+        "dureeS": 64
+      },
+      {
+        "nom": "Mettre à jour le control plane",
+        "dureeS": 412
+      },
+      {
+        "nom": "Mettre à jour les pools de workers",
+        "dureeS": 684
+      },
+      {
+        "nom": "Vérifier les modules",
+        "dureeS": 72
+      }
+    ]
+  },
+  {
+    "id": "web.app.install",
+    "portee": "client",
+    "libelle": "Installation de {cible}",
+    "lancement": "Base de données créée, puis application déployée.",
+    "fin": "L’application répond ; son administration est accessible.",
+    "href": "/app/web/applications",
+    "etapes": [
+      {
+        "nom": "Créer la base de données",
+        "dureeS": 12
+      },
+      {
+        "nom": "Déposer les fichiers",
+        "dureeS": 86
+      },
+      {
+        "nom": "Exécuter l’installation",
+        "dureeS": 42
+      },
+      {
+        "nom": "Émettre le certificat",
+        "dureeS": 34
+      }
+    ]
+  },
+  {
+    "id": "web.app.update",
+    "portee": "client",
+    "libelle": "Mise à jour de {cible}",
+    "lancement": "Une sauvegarde est prise avant toute écriture.",
+    "fin": "L’application est à jour ; la sauvegarde de pré-mise à jour reste sept jours.",
+    "href": "/app/web/applications",
+    "etapes": [
+      {
+        "nom": "Sauvegarder les fichiers et la base",
+        "dureeS": 96
+      },
+      {
+        "nom": "Appliquer la mise à jour du cœur",
+        "dureeS": 64
+      },
+      {
+        "nom": "Mettre à jour les extensions",
+        "dureeS": 78
+      },
+      {
+        "nom": "Vérifier que le site répond",
+        "dureeS": 18
+      }
+    ]
+  },
+  {
+    "id": "web.db.enable",
+    "portee": "client",
+    "libelle": "Activation du moteur sur {cible}",
+    "lancement": "Le moteur est installé sur le serveur d’hébergement.",
+    "fin": "Le moteur est en écoute sur le réseau interne du serveur.",
+    "href": "/app/web/bases",
+    "etapes": [
+      {
+        "nom": "Installer les paquets du moteur",
+        "dureeS": 128
+      },
+      {
+        "nom": "Initialiser l’instance",
+        "dureeS": 46
+      },
+      {
+        "nom": "Restreindre l’écoute au réseau interne",
+        "dureeS": 8
+      },
+      {
+        "nom": "Enregistrer la sauvegarde quotidienne",
+        "dureeS": 12
+      }
+    ]
+  },
+  {
+    "id": "web.db.restore",
+    "portee": "client",
+    "libelle": "Restauration de la base {cible}",
+    "lancement": "La base est mise hors ligne le temps de la restauration.",
+    "fin": "La base est restaurée et de nouveau accessible.",
+    "href": "/app/web/bases",
+    "etapes": [
+      {
+        "nom": "Mettre la base hors ligne",
+        "dureeS": 6
+      },
+      {
+        "nom": "Restaurer le dump",
+        "dureeS": 164
+      },
+      {
+        "nom": "Reconstruire les index",
+        "dureeS": 82
+      },
+      {
+        "nom": "Remettre la base en ligne",
+        "dureeS": 8
+      }
+    ]
+  },
+  {
+    "id": "web.email.activate",
+    "portee": "client",
+    "libelle": "Activation de la messagerie sur {cible}",
+    "lancement": "Les enregistrements MX, SPF, DKIM et DMARC sont posés dans la zone du domaine.",
+    "fin": "La messagerie est active : vous pouvez créer les boîtes.",
+    "href": "/app/web/emails",
+    "etapes": [
+      {
+        "nom": "Provisionner le domaine sur le serveur de messagerie",
+        "dureeS": 46
+      },
+      {
+        "nom": "Poser MX, SPF, DKIM et DMARC",
+        "dureeS": 18
+      },
+      {
+        "nom": "Déclarer le client SSO",
+        "dureeS": 12
+      },
+      {
+        "nom": "Attendre la propagation des MX",
+        "dureeS": 124
+      }
+    ]
+  },
+  {
+    "id": "web.ssl.renew",
+    "portee": "client",
+    "libelle": "Renouvellement du certificat de {cible}",
+    "lancement": "Validation par enregistrement DNS, puis émission.",
+    "fin": "Le nouveau certificat est installé et Apache rechargé.",
+    "href": "/app/web/ssl",
+    "etapes": [
+      {
+        "nom": "Publier l’enregistrement de validation",
+        "dureeS": 12
+      },
+      {
+        "nom": "Attendre la validation de l’autorité",
+        "dureeS": 96
+      },
+      {
+        "nom": "Émettre le certificat",
+        "dureeS": 22
+      },
+      {
+        "nom": "Installer et recharger Apache",
+        "dureeS": 8
+      }
+    ],
+    "echec": {
+      "etape": 2,
+      "message": "L'autorité de certification n'a pas vu l'enregistrement de validation dans le délai de 90 secondes : la zone du domaine est déléguée à des serveurs de noms externes, qui servent encore l'ancienne réponse.",
+      "suggestion": "Vérifiez que les serveurs de noms du domaine sont bien les nôtres, ou attendez l’expiration du TTL de la zone externe (3 600 s) avant de relancer. Le renouvellement se relance sans nouvelle saisie.",
+      "rollback": true
+    }
+  },
+  {
+    "id": "web.drive.activate",
+    "portee": "client",
+    "libelle": "Activation du drive sur {cible}",
+    "lancement": "L’instance est créée, le certificat posé et le client SSO déclaré.",
+    "fin": "Le drive est actif : vous pouvez attribuer les sièges.",
+    "href": "/app/web/drive",
+    "etapes": [
+      {
+        "nom": "Provisionner l’instance",
+        "dureeS": 168
+      },
+      {
+        "nom": "Émettre le certificat",
+        "dureeS": 42
+      },
+      {
+        "nom": "Déclarer le client SSO",
+        "dureeS": 12
+      },
+      {
+        "nom": "Appliquer le plan de sauvegarde",
+        "dureeS": 24
+      }
+    ]
+  },
+  {
+    "id": "web.backup.run",
+    "portee": "client",
+    "libelle": "Sauvegarde hors planning · {cible}",
+    "lancement": "Exécution immédiate sur le serveur d’hébergement.",
+    "fin": "La sauvegarde est terminée et vérifiée.",
+    "href": "/app/web/backup",
+    "etapes": [
+      {
+        "nom": "Archiver les fichiers du site",
+        "dureeS": 142
+      },
+      {
+        "nom": "Exporter les bases de données",
+        "dureeS": 68
+      },
+      {
+        "nom": "Transférer vers le dépôt hors site",
+        "dureeS": 186
+      },
+      {
+        "nom": "Vérifier l’archive",
+        "dureeS": 32
+      }
+    ]
+  },
+  {
+    "id": "web.backup.restore",
+    "portee": "client",
+    "libelle": "Restauration de {cible}",
+    "lancement": "Le site passe en page de maintenance le temps de la restauration.",
+    "fin": "La restauration est terminée ; le site est de nouveau servi.",
+    "href": "/app/web/backup",
+    "etapes": [
+      {
+        "nom": "Activer la page de maintenance",
+        "dureeS": 4
+      },
+      {
+        "nom": "Restaurer les fichiers",
+        "dureeS": 214
+      },
+      {
+        "nom": "Restaurer les bases de données",
+        "dureeS": 128
+      },
+      {
+        "nom": "Retirer la page de maintenance",
+        "dureeS": 4
+      }
+    ]
+  },
+  {
+    "id": "smtp.verify",
+    "portee": "client",
+    "libelle": "Vérification du domaine d’envoi {cible}",
+    "lancement": "Contrôle des enregistrements SPF, DKIM et DMARC.",
+    "fin": "Le domaine est vérifié : les envois ne sont plus limités.",
+    "href": "/app/smtp",
+    "etapes": [
+      {
+        "nom": "Interroger les serveurs de noms",
+        "dureeS": 14
+      },
+      {
+        "nom": "Contrôler SPF, DKIM et DMARC",
+        "dureeS": 9
+      },
+      {
+        "nom": "Lever la limite de débit d’essai",
+        "dureeS": 3
+      }
+    ]
+  },
+  {
+    "id": "export.donnees",
+    "portee": "client",
+    "libelle": "Export · {cible}",
+    "lancement": "Le lien de téléchargement arrivera par courriel, valable 24 heures.",
+    "fin": "L’export est prêt : le lien vient d’être envoyé.",
+    "etapes": [
+      {
+        "nom": "Rassembler les enregistrements",
+        "dureeS": 46
+      },
+      {
+        "nom": "Générer l’archive",
+        "dureeS": 62
+      },
+      {
+        "nom": "Chiffrer et publier le lien",
+        "dureeS": 18
+      }
+    ]
+  },
+  {
+    "id": "devis.accept",
+    "portee": "client",
+    "libelle": "Acceptation du devis {cible}",
+    "lancement": "Les souscriptions correspondantes sont créées, puis provisionnées.",
+    "fin": "Les souscriptions sont actives ; la première facture arrive au prochain cycle.",
+    "href": "/app/facturation",
+    "etapes": [
+      {
+        "nom": "Signer et archiver le devis",
+        "dureeS": 6
+      },
+      {
+        "nom": "Créer les souscriptions",
+        "dureeS": 12
+      },
+      {
+        "nom": "Lancer le provisionnement des ressources",
+        "dureeS": 268
+      }
+    ]
+  },
+  {
+    "id": "compte.cloture",
+    "portee": "client",
+    "libelle": "Demande de clôture · {cible}",
+    "lancement": "Rien n’est supprimé aujourd’hui : 30 jours pour récupérer vos données, autant pour annuler.",
+    "fin": "La demande est enregistrée. La suppression effective est planifiée dans 30 jours.",
+    "href": "/app/parametres",
+    "etapes": [
+      {
+        "nom": "Enregistrer la demande",
+        "dureeS": 4
+      },
+      {
+        "nom": "Préparer l’export complet des données",
+        "dureeS": 186
+      },
+      {
+        "nom": "Planifier la suppression à 30 jours",
+        "dureeS": 6
+      }
+    ]
+  },
+  {
+    "id": "capacite.rebalance",
+    "portee": "fournisseur",
+    "libelle": "Rééquilibrage du placement de {cible}",
+    "lancement": "Les migrations à chaud démarrent maintenant ; les autres attendent la fenêtre du client.",
+    "fin": "Le placement cible est atteint.",
+    "href": "/admin/capacite",
+    "etapes": [
+      {
+        "nom": "Calculer le plan de migration",
+        "dureeS": 22
+      },
+      {
+        "nom": "Migrer à chaud ce qui le permet",
+        "dureeS": 624
+      },
+      {
+        "nom": "Planifier le reste en fenêtre de maintenance",
+        "dureeS": 12
+      },
+      {
+        "nom": "Mettre à jour la table de placement",
+        "dureeS": 8
+      }
+    ]
+  },
+  {
+    "id": "migration.lot",
+    "portee": "fournisseur",
+    "libelle": "Migration inter-backend · {cible}",
+    "lancement": "Les machines sont migrées lot par lot, avec bascule réseau en fin de lot.",
+    "fin": "Le lot est migré et les ressources source retirées.",
+    "href": "/admin/migration",
+    "etapes": [
+      {
+        "nom": "Inventaire des ressources",
+        "dureeS": 24
+      },
+      {
+        "nom": "Convertir et transférer les disques",
+        "dureeS": 986
+      },
+      {
+        "nom": "Démarrer sur le backend cible",
+        "dureeS": 184
+      },
+      {
+        "nom": "Basculer le réseau",
+        "dureeS": 46
+      },
+      {
+        "nom": "Retirer les ressources source",
+        "dureeS": 62
+      }
+    ],
+    "echec": {
+      "etape": 2,
+      "message": "La conversion du disque VHDX en QCOW2 s'est arrêtée sur un secteur illisible (offset 0x1F4A00). Le disque source est intact : rien n'a été écrit sur le backend cible.",
+      "suggestion": "Lancez une réparation du disque depuis l’hyperviseur source, ou restaurez la machine depuis son dernier point de sauvegarde vérifié, puis relancez le lot.",
+      "rollback": true
+    }
+  },
+  {
+    "id": "org.create",
+    "portee": "fournisseur",
+    "libelle": "Création de l’organisation {cible}",
+    "lancement": "Le royaume d’identité est provisionné, puis l’administrateur est invité.",
+    "fin": "L’organisation est active et son administrateur invité.",
+    "href": "/admin/organisations",
+    "etapes": [
+      {
+        "nom": "Créer le royaume d’identité",
+        "dureeS": 34
+      },
+      {
+        "nom": "Appliquer le catalogue et les remises",
+        "dureeS": 8
+      },
+      {
+        "nom": "Créer le compte de facturation",
+        "dureeS": 12
+      },
+      {
+        "nom": "Envoyer l’invitation de l’administrateur",
+        "dureeS": 4
+      }
+    ]
+  },
+  {
+    "id": "export.plateforme",
+    "portee": "fournisseur",
+    "libelle": "Export · {cible}",
+    "lancement": "Le lien de téléchargement arrivera par courriel, valable 24 heures.",
+    "fin": "L’export est prêt : le lien vient d’être envoyé.",
+    "href": "/admin/audit",
+    "etapes": [
+      {
+        "nom": "Rassembler les enregistrements",
+        "dureeS": 86
+      },
+      {
+        "nom": "Calculer l’empreinte de chaînage",
+        "dureeS": 42
+      },
+      {
+        "nom": "Chiffrer et publier le lien",
+        "dureeS": 18
+      }
+    ]
+  }
+]

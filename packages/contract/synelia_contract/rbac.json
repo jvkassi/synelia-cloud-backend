@@ -1,0 +1,662 @@
+{
+  "roles": [
+    "super_admin",
+    "platform_operator",
+    "org_admin",
+    "espace_admin",
+    "project_owner",
+    "operator",
+    "service_admin",
+    "billing_manager",
+    "compliance",
+    "read_only"
+  ],
+  "actions": [
+    {
+      "id": "org.dashboard.view",
+      "libelle": "Voir le tableau de bord org",
+      "groupe": "Organisation",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "read",
+        "operator": "read",
+        "service_admin": "read",
+        "billing_manager": "read",
+        "compliance": "read",
+        "read_only": "read"
+      }
+    },
+    {
+      "id": "espace.create",
+      "libelle": "Créer un Espace Cloud",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "espace.quota.update",
+      "libelle": "Modifier le quota d'un espace",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "read",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "vm.create_delete",
+      "libelle": "Créer / supprimer une VM",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "vm.power",
+      "libelle": "Démarrer / arrêter une VM",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "full",
+        "service_admin": "full",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "vm.hardware.update",
+      "libelle": "Modifier le matériel virtuel",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "network.manage",
+      "libelle": "Gérer réseau, IP, pare-feu",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "lb.create",
+      "libelle": "Créer un load balancer",
+      "groupe": "Infrastructure",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "backup.plan.write",
+      "libelle": "Créer / modifier un plan de sauvegarde",
+      "groupe": "Protection",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "read"
+      }
+    },
+    {
+      "id": "backup.restore",
+      "libelle": "Lancer une restauration",
+      "groupe": "Protection",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "dr.failover.real",
+      "libelle": "Déclencher une bascule PRA réelle",
+      "groupe": "Protection",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "dr.failover.test",
+      "libelle": "Déclencher une bascule PRA de test",
+      "groupe": "Protection",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "read",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "app.deploy",
+      "libelle": "Déployer une application",
+      "groupe": "Plateforme applicative",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "full",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "app.rollback",
+      "libelle": "Rollback d'un déploiement",
+      "groupe": "Plateforme applicative",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "full",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "component.restart",
+      "libelle": "Redémarrer un composant",
+      "groupe": "Plateforme applicative",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "full",
+        "service_admin": "full",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "secrets.update",
+      "libelle": "Modifier variables et secrets",
+      "groupe": "Plateforme applicative",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "full",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "marketplace.subscribe",
+      "libelle": "Souscrire un service du marketplace",
+      "groupe": "Services",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "seat.assign",
+      "libelle": "Attribuer / retirer un siège",
+      "groupe": "Services",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "service.open",
+      "libelle": "Ouvrir un service managé (SSO)",
+      "groupe": "Services",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "full",
+        "service_admin": "full",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "full"
+      }
+    },
+    {
+      "id": "service.admin",
+      "libelle": "Administrer un service managé",
+      "groupe": "Services",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.agent.write",
+      "libelle": "Créer / modifier un agent",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.agent.publish",
+      "libelle": "Publier un agent ou revenir à une version",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.flow.write",
+      "libelle": "Modifier un flux d'orchestration",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.tool.register",
+      "libelle": "Déclarer un outil ou un canal",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.key.manage",
+      "libelle": "Créer / révoquer une clé d'accès IA",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.routing.update",
+      "libelle": "Modifier le routage et les garde-fous",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.endpoint.deploy",
+      "libelle": "Déployer un point d'inférence dédié",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.knowledge.write",
+      "libelle": "Créer / réindexer une base de connaissances",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "full",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "ia.budget.update",
+      "libelle": "Modifier le plafond de dépense IA",
+      "groupe": "Intelligence artificielle",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "none",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "member.invite",
+      "libelle": "Inviter un membre / changer un rôle",
+      "groupe": "Organisation",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "read",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "sso.configure",
+      "libelle": "Configurer la fédération SSO",
+      "groupe": "Organisation",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "invoice.view",
+      "libelle": "Voir les factures",
+      "groupe": "Finance",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "read",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "payment.update",
+      "libelle": "Modifier les moyens de paiement",
+      "groupe": "Finance",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "full",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "audit.view",
+      "libelle": "Voir le journal d'audit de l'org",
+      "groupe": "Conformité",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "read",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "full",
+        "read_only": "read"
+      }
+    },
+    {
+      "id": "compliance.export",
+      "libelle": "Exporter un rapport de conformité",
+      "groupe": "Conformité",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "full",
+        "espace_admin": "full",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "full",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "capacity.manage",
+      "libelle": "Gérer la capacité et les backends",
+      "groupe": "Plateforme",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "full",
+        "org_admin": "none",
+        "espace_admin": "none",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "catalog.edit",
+      "libelle": "Éditer le catalogue et les tarifs",
+      "groupe": "Plateforme",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "none",
+        "espace_admin": "none",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    },
+    {
+      "id": "org.manage",
+      "libelle": "Créer / suspendre une organisation cliente",
+      "groupe": "Plateforme",
+      "perms": {
+        "super_admin": "full",
+        "platform_operator": "none",
+        "org_admin": "none",
+        "espace_admin": "none",
+        "project_owner": "none",
+        "operator": "none",
+        "service_admin": "none",
+        "billing_manager": "none",
+        "compliance": "none",
+        "read_only": "none"
+      }
+    }
+  ]
+}

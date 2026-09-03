@@ -1,0 +1,49 @@
+[project]
+name = "synelia"
+version = "0.1.0"
+description = "Application Synelia Cloud : api | worker | scheduler"
+requires-python = ">=3.12"
+dependencies = [
+  "synelia-kernel",
+  "synelia-contract",
+  "synelia-db",
+  "synelia-catalogue",
+  "synelia-openstack",
+  "fastapi>=0.115",
+  "uvicorn[standard]>=0.32",
+  "pydantic>=2.9",
+  "pydantic-settings>=2.6",
+  "orjson>=3.10",
+  "argon2-cffi>=23.1",
+  "joserfc>=1.0",
+  "pyotp>=2.9",
+  "httpx>=0.28",
+  "structlog>=24",
+  "typer>=0.15",
+  "jinja2>=3.1",
+  "email-validator>=2.2",
+  "python-multipart>=0.0.20",
+]
+
+[project.optional-dependencies]
+temporal = ["temporalio>=1.8"]
+openstack = ["openstacksdk>=4.0"]
+pdf = ["weasyprint>=63"]
+paiements = ["stripe>=11"]
+
+[project.scripts]
+synelia = "synelia.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["synelia"]
+
+[tool.uv.sources]
+synelia-kernel = { workspace = true }
+synelia-contract = { workspace = true }
+synelia-db = { workspace = true }
+synelia-catalogue = { workspace = true }
+synelia-openstack = { workspace = true }

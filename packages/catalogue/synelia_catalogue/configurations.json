@@ -1,0 +1,2307 @@
+[
+  {
+    "slug": "drive-pro",
+    "solution": "Nextcloud",
+    "intro": "Le portail règle qui peut partager quoi, avec qui, et pour combien de temps. L’arborescence, les fichiers et les commentaires vivent dans Nextcloud.",
+    "horsPerimetre": [
+      {
+        "quoi": "Parcourir, déposer ou éditer des fichiers",
+        "ou": "dans Nextcloud, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Créer des dossiers de groupe et leurs droits fins",
+        "ou": "dans l’administration Nextcloud"
+      },
+      {
+        "quoi": "Restaurer un fichier précis",
+        "ou": "onglet Sauvegarde de ce service"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Partage externe",
+        "phrase": "Le partage par lien est la première cause de fuite documentaire. Ces règles s’appliquent à tous les sièges, sans exception possible côté utilisateur.",
+        "champs": [
+          {
+            "cle": "partageExterne",
+            "type": "choix",
+            "libelle": "Partage vers l’extérieur",
+            "aide": "Détermine si un utilisateur peut créer un lien accessible hors de l’organisation.",
+            "valeur": "groupes_autorises",
+            "effet": "prochaine_connexion",
+            "options": [
+              {
+                "valeur": "interdit",
+                "libelle": "Interdit",
+                "detail": "Aucun lien externe, aucune exception"
+              },
+              {
+                "valeur": "groupes_autorises",
+                "libelle": "Réservé à certains groupes",
+                "detail": "Seuls les groupes listés ci-dessous peuvent partager"
+              },
+              {
+                "valeur": "autorise",
+                "libelle": "Autorisé à tous",
+                "detail": "Chaque siège peut créer des liens"
+              }
+            ]
+          },
+          {
+            "cle": "groupesAutorises",
+            "type": "liste",
+            "libelle": "Groupes autorisés à partager",
+            "aide": "Groupes de l’annuaire, hérités de la fédération d’identité.",
+            "valeurs": [
+              "direction",
+              "commerce",
+              "projets"
+            ],
+            "placeholder": "nom du groupe"
+          },
+          {
+            "cle": "motDePasseObligatoire",
+            "type": "bascule",
+            "libelle": "Mot de passe obligatoire sur les liens",
+            "aide": "Un lien sans mot de passe est indexable et transférable sans trace. Nous recommandons de laisser cette règle active.",
+            "valeur": true
+          },
+          {
+            "cle": "expirationLiensJours",
+            "type": "nombre",
+            "libelle": "Expiration par défaut des liens",
+            "aide": "Au-delà de ce délai, le lien cesse de fonctionner. L’utilisateur peut raccourcir la durée, jamais l’allonger.",
+            "valeur": 30,
+            "unite": "jours",
+            "min": 1,
+            "max": 365
+          },
+          {
+            "cle": "televersementAnonyme",
+            "type": "bascule",
+            "libelle": "Autoriser le dépôt anonyme",
+            "aide": "Utile pour recevoir des pièces d’un tiers sans lui créer de compte. À n’ouvrir que sur des dossiers dédiés.",
+            "valeur": false
+          }
+        ]
+      },
+      {
+        "titre": "Quotas et rétention",
+        "phrase": "Ce que chaque siège peut stocker, et combien de temps ce qui est supprimé reste récupérable.",
+        "champs": [
+          {
+            "cle": "quotaParUtilisateurGo",
+            "type": "nombre",
+            "libelle": "Quota par utilisateur",
+            "aide": "Un dépassement bloque le dépôt sans rien supprimer, et déclenche une alerte.",
+            "valeur": 500,
+            "unite": "Go",
+            "min": 10,
+            "max": 2000,
+            "impactFacture": "Le palier Business plafonne à 500 Go par siège ; au-delà, passage en Entreprise."
+          },
+          {
+            "cle": "retentionCorbeilleJours",
+            "type": "nombre",
+            "libelle": "Rétention de la corbeille",
+            "aide": "Durée pendant laquelle un utilisateur récupère seul un fichier supprimé, sans passer par le support.",
+            "valeur": 30,
+            "unite": "jours",
+            "min": 7,
+            "max": 180
+          },
+          {
+            "cle": "versionsConservees",
+            "type": "nombre",
+            "libelle": "Versions conservées par fichier",
+            "aide": "Le versioning protège d’une écriture malheureuse ou d’un chiffrement par rançongiciel.",
+            "valeur": 90,
+            "unite": "jours",
+            "min": 7,
+            "max": 365
+          }
+        ]
+      },
+      {
+        "titre": "Sécurité du poste et des accès",
+        "phrase": "Ce qui s’applique aux clients bureau et mobiles, sur lesquels les fichiers sont recopiés.",
+        "champs": [
+          {
+            "cle": "chiffrementBoutEnBout",
+            "type": "bascule",
+            "libelle": "Chiffrement de bout en bout par dossier",
+            "aide": "Les fichiers d’un dossier chiffré ne sont lisibles que par les clients autorisés. Nous ne pouvons alors ni les indexer, ni les restaurer sans la clé.",
+            "valeur": false,
+            "verrouille": "Disponible à partir du palier Entreprise."
+          },
+          {
+            "cle": "antivirusDepot",
+            "type": "bascule",
+            "libelle": "Analyse antivirale au dépôt",
+            "aide": "Chaque fichier déposé est analysé avant d’être mis à disposition des autres sièges.",
+            "valeur": true
+          },
+          {
+            "cle": "blocageExtensions",
+            "type": "liste",
+            "libelle": "Extensions refusées",
+            "aide": "Refusées au dépôt comme à la synchronisation, dans les deux sens.",
+            "valeurs": [
+              ".exe",
+              ".scr",
+              ".bat",
+              ".js"
+            ],
+            "placeholder": ".ext"
+          },
+          {
+            "cle": "verrouillageAppareil",
+            "type": "choix",
+            "libelle": "Appareils autorisés à synchroniser",
+            "aide": "Restreindre la synchronisation limite le nombre de copies des fichiers hors de nos murs.",
+            "valeur": "tous",
+            "options": [
+              {
+                "valeur": "tous",
+                "libelle": "Tous les appareils"
+              },
+              {
+                "valeur": "declares",
+                "libelle": "Appareils déclarés seulement"
+              },
+              {
+                "valeur": "web",
+                "libelle": "Accès web uniquement",
+                "detail": "Aucune copie locale"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "email-pro",
+    "solution": "Grommunio",
+    "intro": "Le portail gouverne les domaines gérés, l’authentification d’expédition, les quotas de boîte et les règles de rétention. Les messages, eux, ne sont jamais lus ni affichés ici.",
+    "horsPerimetre": [
+      {
+        "quoi": "Lire, écrire ou classer des messages",
+        "ou": "dans le webmail, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Créer une règle de tri personnelle",
+        "ou": "dans les préférences de chaque utilisateur"
+      },
+      {
+        "quoi": "Restaurer une boîte ou un message",
+        "ou": "onglet Sauvegarde de ce service"
+      },
+      {
+        "quoi": "Acheter ou transférer un domaine",
+        "ou": "Web Cloud › Domaines & DNS"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Domaines gérés",
+        "phrase": "Un domaine n’accepte le courrier qu’une fois ses enregistrements DNS en place. Le portail vérifie, il ne suppose pas.",
+        "champs": [
+          {
+            "cle": "domainesGeres",
+            "type": "liste",
+            "libelle": "Domaines de messagerie",
+            "aide": "Chaque domaine ajouté doit être vérifié avant de recevoir du courrier.",
+            "valeurs": [
+              "dba.africa",
+              "digitalbusinessafrica.ci"
+            ],
+            "placeholder": "exemple.ci"
+          },
+          {
+            "cle": "spf",
+            "type": "etat",
+            "libelle": "SPF",
+            "aide": "Déclare quels serveurs ont le droit d’expédier pour votre domaine. Sans SPF valide, une partie des messages part en indésirable.",
+            "etat": "ok",
+            "detail": "v=spf1 include:_spf.synelia.cloud -all — publié et aligné sur les deux domaines.",
+            "action": "Vérifier à nouveau"
+          },
+          {
+            "cle": "dkim",
+            "type": "etat",
+            "libelle": "DKIM",
+            "aide": "Signe chaque message sortant. La clé est générée par domaine et tournée une fois par an.",
+            "etat": "ok",
+            "detail": "Sélecteur syn2026 · clé 2048 bits · rotation prévue le 14 février 2027.",
+            "action": "Forcer une rotation"
+          },
+          {
+            "cle": "dmarc",
+            "type": "etat",
+            "libelle": "DMARC",
+            "aide": "Indique aux destinataires quoi faire d’un message qui échoue SPF et DKIM. Le passage en reject se fait par étapes, jamais d’un coup.",
+            "etat": "attention",
+            "detail": "p=quarantine sur dba.africa, p=none sur digitalbusinessafrica.ci. Les rapports agrégés ne montrent plus d’échec légitime depuis 21 jours : le passage en reject est envisageable.",
+            "action": "Passer en reject"
+          },
+          {
+            "cle": "catchAll",
+            "type": "choix",
+            "libelle": "Adresse fourre-tout",
+            "aide": "Reçoit le courrier adressé à une boîte inexistante. Pratique, mais elle attire aussi tout le spam de dictionnaire.",
+            "valeur": "refus",
+            "options": [
+              {
+                "valeur": "refus",
+                "libelle": "Refuser",
+                "detail": "Le message est rejeté à l’entrée, l’expéditeur est prévenu"
+              },
+              {
+                "valeur": "boite",
+                "libelle": "Rediriger vers une boîte"
+              },
+              {
+                "valeur": "silence",
+                "libelle": "Accepter puis jeter",
+                "detail": "Déconseillé : l’expéditeur croit avoir été lu"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "titre": "Boîtes, alias et distribution",
+        "phrase": "Ce que reçoit chaque siège, et comment le courrier collectif est routé.",
+        "champs": [
+          {
+            "cle": "quotaBoiteGo",
+            "type": "nombre",
+            "libelle": "Quota par boîte",
+            "aide": "À 90 % du quota, l’utilisateur est averti. À 100 %, la réception est refusée avec un message clair à l’expéditeur.",
+            "valeur": 50,
+            "unite": "Go",
+            "min": 5,
+            "max": 200,
+            "impactFacture": "Le palier Business plafonne à 50 Go par boîte."
+          },
+          {
+            "cle": "alias",
+            "type": "liste",
+            "libelle": "Alias déclarés",
+            "aide": "Un alias ne consomme pas de siège : il redirige vers une boîte existante.",
+            "valeurs": [
+              "contact@dba.africa",
+              "facturation@dba.africa",
+              "support@dba.africa"
+            ],
+            "placeholder": "alias@domaine.ci"
+          },
+          {
+            "cle": "groupesDistribution",
+            "type": "liste",
+            "libelle": "Groupes de distribution",
+            "aide": "Une adresse unique qui distribue à plusieurs boîtes. Les membres se gèrent depuis l’annuaire.",
+            "valeurs": [
+              "direction@dba.africa",
+              "equipe-projet@dba.africa"
+            ],
+            "placeholder": "groupe@domaine.ci"
+          },
+          {
+            "cle": "tailleMaxPieceJointeMo",
+            "type": "nombre",
+            "libelle": "Taille maximale des pièces jointes",
+            "aide": "Au-delà, le portail propose à l’utilisateur un lien Drive plutôt qu’un rejet sec.",
+            "valeur": 25,
+            "unite": "Mo",
+            "min": 5,
+            "max": 150
+          }
+        ]
+      },
+      {
+        "titre": "Anti-spam et protection",
+        "phrase": "Le filtrage entrant, et ce qui est fait des messages douteux.",
+        "champs": [
+          {
+            "cle": "antiSpam",
+            "type": "choix",
+            "libelle": "Agressivité du filtrage",
+            "aide": "Plus le filtre est strict, plus il écarte de courrier légitime. Le niveau standard convient à la grande majorité des organisations.",
+            "valeur": "standard",
+            "options": [
+              {
+                "valeur": "permissif",
+                "libelle": "Permissif",
+                "detail": "Peu de faux positifs, plus de spam en boîte"
+              },
+              {
+                "valeur": "standard",
+                "libelle": "Standard",
+                "detail": "Réglage recommandé"
+              },
+              {
+                "valeur": "strict",
+                "libelle": "Strict",
+                "detail": "À surveiller : des messages légitimes seront écartés"
+              }
+            ]
+          },
+          {
+            "cle": "quarantaine",
+            "type": "choix",
+            "libelle": "Destination des messages douteux",
+            "aide": "La quarantaine centralisée évite que chaque utilisateur juge seul un message d’hameçonnage.",
+            "valeur": "quarantaine_centrale",
+            "options": [
+              {
+                "valeur": "dossier_indesirable",
+                "libelle": "Dossier Indésirables de l’utilisateur"
+              },
+              {
+                "valeur": "quarantaine_centrale",
+                "libelle": "Quarantaine centralisée",
+                "detail": "Revue par un administrateur"
+              },
+              {
+                "valeur": "rejet",
+                "libelle": "Rejet à l’entrée"
+              }
+            ]
+          },
+          {
+            "cle": "reecritureLiens",
+            "type": "bascule",
+            "libelle": "Réécriture des liens entrants",
+            "aide": "Les liens sont analysés au moment du clic, et non à la réception : un site piégé après l’envoi est tout de même bloqué.",
+            "valeur": true
+          },
+          {
+            "cle": "blocageExterneVersInterne",
+            "type": "bascule",
+            "libelle": "Refuser l’usurpation de vos adresses",
+            "aide": "Rejette un message venant d’Internet qui se présente avec une de vos adresses comme expéditeur. Sans cela, un faux ordre de virement passe facilement.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Rétention et archivage",
+        "phrase": "Combien de temps le courrier est conservé, et sous quelle forme.",
+        "champs": [
+          {
+            "cle": "retentionArchivageMois",
+            "type": "nombre",
+            "libelle": "Archivage légal",
+            "aide": "Copie immuable de tout le courrier entrant et sortant, y compris ce qu’un utilisateur supprime.",
+            "valeur": 12,
+            "unite": "mois",
+            "min": 0,
+            "max": 120,
+            "impactFacture": "Facturé au volume archivé, au-delà de 12 mois inclus."
+          },
+          {
+            "cle": "suppressionDefinitiveJours",
+            "type": "nombre",
+            "libelle": "Purge des éléments supprimés",
+            "aide": "Délai après lequel un message supprimé par l’utilisateur devient irrécupérable, hors archivage légal.",
+            "valeur": 30,
+            "unite": "jours",
+            "min": 7,
+            "max": 90
+          },
+          {
+            "cle": "exportBoite",
+            "type": "bascule",
+            "libelle": "Autoriser l’export d’une boîte par son titulaire",
+            "aide": "Un export au format standard facilite le départ d’un collaborateur, et facilite aussi l’exfiltration. À trancher selon votre politique.",
+            "valeur": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "visio",
+    "solution": "Jitsi Meet · Rocket.Chat",
+    "intro": "Le portail règle qui entre dans une salle, ce qui est enregistré et combien de temps l’enregistrement survit. Il n’ouvre aucune réunion et ne lit aucune conversation.",
+    "horsPerimetre": [
+      {
+        "quoi": "Rejoindre une réunion ou discuter",
+        "ou": "dans Jitsi ou Rocket.Chat, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Créer un canal et inviter ses membres",
+        "ou": "dans Rocket.Chat"
+      },
+      {
+        "quoi": "Consulter un enregistrement",
+        "ou": "dans le Drive, dossier Enregistrements"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Accès aux salles",
+        "phrase": "Une salle dont l’URL est devinable est une salle publique. Ces réglages décident du niveau de friction à l’entrée.",
+        "champs": [
+          {
+            "cle": "participantsMax",
+            "type": "nombre",
+            "libelle": "Participants maximum par salle",
+            "aide": "Au-delà, les nouveaux arrivants sont refusés avec un message explicite plutôt qu’une salle qui se dégrade pour tous.",
+            "valeur": 100,
+            "unite": "participants",
+            "min": 5,
+            "max": 300,
+            "impactFacture": "Le palier Business plafonne à 100 ; au-delà, passage en Entreprise."
+          },
+          {
+            "cle": "salleAttente",
+            "type": "bascule",
+            "libelle": "Salle d’attente obligatoire",
+            "aide": "Personne n’entre avant qu’un organisateur ne l’admette. C’est la seule protection réelle contre l’intrusion dans une réunion sensible.",
+            "valeur": true
+          },
+          {
+            "cle": "motDePasseObligatoire",
+            "type": "bascule",
+            "libelle": "Mot de passe obligatoire",
+            "aide": "S’ajoute à la salle d’attente. Utile quand le lien circule par courriel vers des externes.",
+            "valeur": false
+          },
+          {
+            "cle": "invitesExternes",
+            "type": "choix",
+            "libelle": "Participants externes",
+            "aide": "Un externe n’a pas de siège : il rejoint par lien, sans compte.",
+            "valeur": "autorise_avec_admission",
+            "options": [
+              {
+                "valeur": "interdit",
+                "libelle": "Interdits",
+                "detail": "Réunions internes uniquement"
+              },
+              {
+                "valeur": "autorise_avec_admission",
+                "libelle": "Admis un par un",
+                "detail": "Passage obligatoire par la salle d’attente"
+              },
+              {
+                "valeur": "autorise",
+                "libelle": "Entrée libre"
+              }
+            ]
+          },
+          {
+            "cle": "appelTelephonique",
+            "type": "bascule",
+            "libelle": "Accès par téléphone",
+            "aide": "Un numéro ivoirien permet de rejoindre sans connexion Internet. Le code d’accès est alors la seule barrière.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Enregistrements",
+        "phrase": "Un enregistrement est une donnée personnelle : il faut savoir où il va et quand il disparaît.",
+        "champs": [
+          {
+            "cle": "enregistrementAutorise",
+            "type": "choix",
+            "libelle": "Qui peut enregistrer",
+            "aide": "Tous les participants sont prévenus par une mention visible dès le début de l’enregistrement.",
+            "valeur": "organisateur",
+            "options": [
+              {
+                "valeur": "personne",
+                "libelle": "Personne"
+              },
+              {
+                "valeur": "organisateur",
+                "libelle": "L’organisateur seulement"
+              },
+              {
+                "valeur": "tous",
+                "libelle": "Tous les participants"
+              }
+            ]
+          },
+          {
+            "cle": "destinationEnregistrements",
+            "type": "choix",
+            "libelle": "Destination",
+            "aide": "Le Drive garde l’enregistrement dans votre périmètre et sous vos règles de partage.",
+            "valeur": "drive",
+            "options": [
+              {
+                "valeur": "drive",
+                "libelle": "Drive Pro",
+                "detail": "Dossier Enregistrements du service"
+              },
+              {
+                "valeur": "bucket",
+                "libelle": "Compartiment objet S3",
+                "detail": "bkt-enregistrements"
+              }
+            ]
+          },
+          {
+            "cle": "retentionEnregistrementsJours",
+            "type": "nombre",
+            "libelle": "Rétention des enregistrements",
+            "aide": "Passé ce délai, l’enregistrement est supprimé automatiquement. Conserver sans limite est un risque, pas une précaution.",
+            "valeur": 90,
+            "unite": "jours",
+            "min": 7,
+            "max": 730
+          },
+          {
+            "cle": "transcription",
+            "type": "bascule",
+            "libelle": "Transcription automatique",
+            "aide": "Génère un texte horodaté à côté de l’enregistrement. La transcription suit la même rétention.",
+            "valeur": false,
+            "verrouille": "Disponible à partir du palier Entreprise."
+          }
+        ]
+      },
+      {
+        "titre": "Messagerie instantanée",
+        "phrase": "Le chat persistant conserve les échanges : il faut décider combien de temps.",
+        "champs": [
+          {
+            "cle": "retentionMessagesJours",
+            "type": "nombre",
+            "libelle": "Rétention des messages",
+            "aide": "S’applique aux canaux comme aux messages directs. Zéro signifie conservation sans limite.",
+            "valeur": 365,
+            "unite": "jours",
+            "min": 0,
+            "max": 3650
+          },
+          {
+            "cle": "partageFichiersChat",
+            "type": "bascule",
+            "libelle": "Autoriser les fichiers dans le chat",
+            "aide": "Désactiver pousse les échanges de documents vers le Drive, où les règles de partage s’appliquent.",
+            "valeur": true
+          },
+          {
+            "cle": "editionMessage",
+            "type": "nombre",
+            "libelle": "Délai de modification d’un message",
+            "aide": "Au-delà, un message ne se modifie plus. Utile quand les échanges peuvent être produits en justice.",
+            "valeur": 5,
+            "unite": "minutes",
+            "min": 0,
+            "max": 1440
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "ged",
+    "solution": "Mayan EDMS",
+    "intro": "Le portail règle l’indexation, les durées de conservation et les circuits de validation. La consultation et le classement des documents se font dans Mayan.",
+    "horsPerimetre": [
+      {
+        "quoi": "Consulter, annoter ou classer un document",
+        "ou": "dans Mayan EDMS, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Définir un type de document et ses métadonnées",
+        "ou": "dans l’administration Mayan"
+      },
+      {
+        "quoi": "Restaurer un document supprimé",
+        "ou": "onglet Sauvegarde de ce service"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Indexation et reconnaissance de texte",
+        "phrase": "Un document non reconnu est un document introuvable. L’OCR est ce qui distingue une GED d’un dossier partagé.",
+        "champs": [
+          {
+            "cle": "ocrLangues",
+            "type": "liste",
+            "libelle": "Langues reconnues",
+            "aide": "Chaque langue ajoutée allonge légèrement le traitement. Le français couvre la majorité des cas ivoiriens.",
+            "valeurs": [
+              "français",
+              "anglais"
+            ],
+            "placeholder": "langue"
+          },
+          {
+            "cle": "ocrAutomatique",
+            "type": "bascule",
+            "libelle": "Reconnaissance dès le dépôt",
+            "aide": "Le document est indexé avant d’être proposé à la recherche. Un dépôt massif peut alors prendre plusieurs minutes.",
+            "valeur": true
+          },
+          {
+            "cle": "metadonneesObligatoires",
+            "type": "liste",
+            "libelle": "Métadonnées obligatoires",
+            "aide": "Un document sans ces champs reste en brouillon et n’entre pas dans le circuit de validation.",
+            "valeurs": [
+              "type de pièce",
+              "date",
+              "tiers concerné"
+            ],
+            "placeholder": "métadonnée"
+          },
+          {
+            "cle": "formatsAcceptes",
+            "type": "liste",
+            "libelle": "Formats acceptés",
+            "aide": "Les formats propriétaires sont convertis en PDF/A à l’archivage, pour rester lisibles dans dix ans.",
+            "valeurs": [
+              "PDF",
+              "PDF/A",
+              "JPEG",
+              "TIFF",
+              "DOCX",
+              "XLSX"
+            ],
+            "placeholder": "format"
+          }
+        ]
+      },
+      {
+        "titre": "Conservation réglementaire",
+        "phrase": "La durée légale prime sur toute demande de suppression : c’est ce que garantit le coffre WORM.",
+        "champs": [
+          {
+            "cle": "dureeConservationAns",
+            "type": "nombre",
+            "libelle": "Durée de conservation par défaut",
+            "aide": "Applicable aux pièces comptables et contractuelles. Un type de document peut porter sa propre durée, plus longue.",
+            "valeur": 10,
+            "unite": "ans",
+            "min": 1,
+            "max": 30
+          },
+          {
+            "cle": "coffreWorm",
+            "type": "bascule",
+            "libelle": "Coffre WORM",
+            "aide": "Une fois écrit, un document du coffre ne peut plus être modifié ni supprimé, même par un administrateur, même par nous.",
+            "valeur": true,
+            "effet": "immediat"
+          },
+          {
+            "cle": "suppressionAvantEcheance",
+            "type": "choix",
+            "libelle": "Suppression avant l’échéance légale",
+            "aide": "Le cas se présente sur une demande d’effacement. Il faut décider à l’avance qui tranche.",
+            "valeur": "validation_double",
+            "options": [
+              {
+                "valeur": "interdite",
+                "libelle": "Interdite"
+              },
+              {
+                "valeur": "validation_double",
+                "libelle": "Double validation",
+                "detail": "Deux administrateurs distincts"
+              },
+              {
+                "valeur": "admin",
+                "libelle": "Un administrateur suffit"
+              }
+            ]
+          },
+          {
+            "cle": "signatureElectronique",
+            "type": "bascule",
+            "libelle": "Signature électronique",
+            "aide": "Signature au format PAdES, vérifiable hors de la plateforme. L’horodatage est fourni par un tiers de confiance.",
+            "valeur": false,
+            "verrouille": "Disponible à partir du palier Entreprise."
+          }
+        ]
+      },
+      {
+        "titre": "Circuits de validation",
+        "phrase": "Qui valide quoi, dans quel ordre, et ce qui se passe en cas de silence.",
+        "champs": [
+          {
+            "cle": "circuits",
+            "type": "liste",
+            "libelle": "Circuits actifs",
+            "aide": "Chaque circuit enchaîne des étapes de validation par groupe de l’annuaire.",
+            "valeurs": [
+              "Facture fournisseur",
+              "Contrat client",
+              "Note de frais"
+            ],
+            "placeholder": "nom du circuit"
+          },
+          {
+            "cle": "delaiValidationJours",
+            "type": "nombre",
+            "libelle": "Délai avant relance",
+            "aide": "Un valideur silencieux est relancé, puis son supérieur est informé. Sans cela, les circuits s’arrêtent en silence.",
+            "valeur": 3,
+            "unite": "jours",
+            "min": 1,
+            "max": 30
+          },
+          {
+            "cle": "delegationAbsence",
+            "type": "bascule",
+            "libelle": "Délégation automatique en cas d’absence",
+            "aide": "S’appuie sur l’absence déclarée dans l’agenda. Évite le blocage d’un circuit pendant les congés.",
+            "valeur": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "erp",
+    "solution": "Odoo Community",
+    "intro": "Le portail règle les modules ouverts, le cadre comptable et fiscal, les environnements de test et les moyens de paiement raccordés. La saisie comptable et commerciale se fait dans Odoo.",
+    "horsPerimetre": [
+      {
+        "quoi": "Saisir une facture, un devis, une écriture",
+        "ou": "dans Odoo, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Créer un article, un client, un fournisseur",
+        "ou": "dans Odoo"
+      },
+      {
+        "quoi": "Éditer un état comptable",
+        "ou": "dans Odoo, module Comptabilité"
+      },
+      {
+        "quoi": "Restaurer une base à une date",
+        "ou": "onglet Sauvegarde de ce service"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Périmètre fonctionnel",
+        "phrase": "Chaque module ouvert ajoute des écrans, des droits et des données. Ouvrir large complique la reprise ; ouvrir juste facilite l’adoption.",
+        "champs": [
+          {
+            "cle": "modulesActives",
+            "type": "liste",
+            "libelle": "Modules activés",
+            "aide": "Désactiver un module ne supprime pas ses données : elles redeviennent visibles à la réactivation.",
+            "valeurs": [
+              "Ventes",
+              "Achats",
+              "Stock",
+              "Comptabilité",
+              "Facturation",
+              "Projets",
+              "RH"
+            ],
+            "placeholder": "module",
+            "impactFacture": "Le palier Business plafonne à 12 modules."
+          },
+          {
+            "cle": "multiSociete",
+            "type": "bascule",
+            "libelle": "Multi-société",
+            "aide": "Permet de tenir plusieurs entités juridiques dans la même base, avec cloisonnement des écritures.",
+            "valeur": false,
+            "verrouille": "Disponible à partir du palier Entreprise."
+          },
+          {
+            "cle": "languesInterface",
+            "type": "liste",
+            "libelle": "Langues de l’interface",
+            "aide": "Chaque utilisateur choisit ensuite la sienne parmi cette liste.",
+            "valeurs": [
+              "français",
+              "anglais"
+            ],
+            "placeholder": "langue"
+          }
+        ]
+      },
+      {
+        "titre": "Cadre comptable et fiscal",
+        "phrase": "Ces choix se figent à la première écriture : les changer ensuite demande une reprise, pas un réglage.",
+        "champs": [
+          {
+            "cle": "planComptable",
+            "type": "choix",
+            "libelle": "Plan comptable",
+            "aide": "Le référentiel applicable en Côte d’Ivoire est le SYSCOHADA révisé.",
+            "valeur": "syscohada",
+            "effet": "fenetre_maintenance",
+            "options": [
+              {
+                "valeur": "syscohada",
+                "libelle": "SYSCOHADA révisé",
+                "detail": "Zone UEMOA · recommandé"
+              },
+              {
+                "valeur": "pcg",
+                "libelle": "Plan comptable général français"
+              },
+              {
+                "valeur": "ifrs",
+                "libelle": "IFRS"
+              }
+            ]
+          },
+          {
+            "cle": "deviseSociete",
+            "type": "choix",
+            "libelle": "Devise de tenue",
+            "aide": "Devise dans laquelle les comptes sont tenus. Les devises secondaires restent utilisables en facturation.",
+            "valeur": "XOF",
+            "options": [
+              {
+                "valeur": "XOF",
+                "libelle": "Franc CFA (XOF)"
+              },
+              {
+                "valeur": "EUR",
+                "libelle": "Euro (EUR)"
+              },
+              {
+                "valeur": "USD",
+                "libelle": "Dollar américain (USD)"
+              }
+            ]
+          },
+          {
+            "cle": "tvaParDefaut",
+            "type": "nombre",
+            "libelle": "TVA par défaut",
+            "aide": "Taux appliqué aux nouvelles lignes de vente, modifiable ligne par ligne.",
+            "valeur": 18,
+            "unite": "%",
+            "min": 0,
+            "max": 30
+          },
+          {
+            "cle": "debutExercice",
+            "type": "choix",
+            "libelle": "Début de l’exercice",
+            "aide": "Détermine les périodes de clôture et les états réglementaires.",
+            "valeur": "01-01",
+            "options": [
+              {
+                "valeur": "01-01",
+                "libelle": "1er janvier"
+              },
+              {
+                "valeur": "04-01",
+                "libelle": "1er avril"
+              },
+              {
+                "valeur": "07-01",
+                "libelle": "1er juillet"
+              },
+              {
+                "valeur": "10-01",
+                "libelle": "1er octobre"
+              }
+            ]
+          },
+          {
+            "cle": "verrouillagePeriode",
+            "type": "bascule",
+            "libelle": "Verrouiller les périodes clôturées",
+            "aide": "Interdit toute écriture antérieure à la dernière clôture. Indispensable si vos comptes sont audités.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Encaissements",
+        "phrase": "Les moyens de paiement raccordés à la facturation, avec leurs frais.",
+        "champs": [
+          {
+            "cle": "moyensPaiement",
+            "type": "liste",
+            "libelle": "Moyens raccordés",
+            "aide": "Le rapprochement bancaire consomme ces raccordements. Chaque opérateur applique sa propre commission.",
+            "valeurs": [
+              "Orange Money",
+              "MTN MoMo",
+              "Wave",
+              "Virement bancaire"
+            ],
+            "placeholder": "moyen"
+          },
+          {
+            "cle": "rapprochementAuto",
+            "type": "bascule",
+            "libelle": "Rapprochement automatique",
+            "aide": "Associe les encaissements aux factures par référence. Les écarts restent à traiter à la main.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Environnements de test",
+        "phrase": "Essayer une configuration sur la base de production est la façon la plus rapide de perdre une comptabilité.",
+        "champs": [
+          {
+            "cle": "bacASable",
+            "type": "bascule",
+            "libelle": "Environnement bac à sable",
+            "aide": "Copie de la production, remise à neuf sur demande, sans aucun lien avec les données réelles ensuite.",
+            "valeur": true,
+            "impactFacture": "Facturé comme un environnement supplémentaire, à 40 % du tarif."
+          },
+          {
+            "cle": "jeuDemoActif",
+            "type": "bascule",
+            "libelle": "Jeu de données de démonstration",
+            "aide": "Ne doit jamais rester actif en production : les données de démonstration polluent les états.",
+            "valeur": false
+          },
+          {
+            "cle": "copieProductionJours",
+            "type": "nombre",
+            "libelle": "Rafraîchissement du bac à sable",
+            "aide": "Recopie la production dans le bac à sable à cette fréquence, en anonymisant les tiers.",
+            "valeur": 30,
+            "unite": "jours",
+            "min": 0,
+            "max": 180
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "crm",
+    "solution": "EspoCRM",
+    "intro": "Le portail règle le pipeline, l’attribution des pistes, les limites d’envoi et le traitement du consentement. Les fiches et les affaires se travaillent dans EspoCRM.",
+    "horsPerimetre": [
+      {
+        "quoi": "Créer ou modifier une fiche, une affaire",
+        "ou": "dans EspoCRM, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Rédiger et envoyer une campagne",
+        "ou": "dans EspoCRM, module Campagnes"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Pipeline commercial",
+        "phrase": "Les étapes du cycle de vente, communes à toute l’équipe.",
+        "champs": [
+          {
+            "cle": "etapes",
+            "type": "liste",
+            "libelle": "Étapes du pipeline",
+            "aide": "Renommer une étape conserve l’historique ; en supprimer une force à reclasser les affaires ouvertes.",
+            "valeurs": [
+              "Qualification",
+              "Proposition",
+              "Négociation",
+              "Gagnée",
+              "Perdue"
+            ],
+            "placeholder": "étape"
+          },
+          {
+            "cle": "attributionPistes",
+            "type": "choix",
+            "libelle": "Attribution des nouvelles pistes",
+            "aide": "Une piste non attribuée n’est traitée par personne. Le tour de rôle évite l’oubli.",
+            "valeur": "tour_de_role",
+            "options": [
+              {
+                "valeur": "manuelle",
+                "libelle": "Manuelle"
+              },
+              {
+                "valeur": "tour_de_role",
+                "libelle": "Tour de rôle"
+              },
+              {
+                "valeur": "territoire",
+                "libelle": "Par territoire"
+              }
+            ]
+          },
+          {
+            "cle": "delaiPremierContactHeures",
+            "type": "nombre",
+            "libelle": "Délai de premier contact",
+            "aide": "Au-delà, la piste remonte en alerte au responsable commercial.",
+            "valeur": 24,
+            "unite": "heures",
+            "min": 1,
+            "max": 168
+          },
+          {
+            "cle": "detectionDoublons",
+            "type": "bascule",
+            "libelle": "Détection des doublons",
+            "aide": "Compare le courriel, le téléphone et la raison sociale avant création. Deux fiches pour un même client faussent tous les chiffres.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Prospection et consentement",
+        "phrase": "Envoyer sans consentement expose à une sanction et brûle la réputation d’expédition du domaine.",
+        "champs": [
+          {
+            "cle": "consentementObligatoire",
+            "type": "bascule",
+            "libelle": "Consentement obligatoire avant envoi",
+            "aide": "Une fiche sans consentement daté est exclue de toute campagne, sans exception possible.",
+            "valeur": true
+          },
+          {
+            "cle": "limiteEnvoiJour",
+            "type": "nombre",
+            "libelle": "Limite d’envoi par jour",
+            "aide": "Protège la réputation du domaine. Un envoi massif soudain est le signal le plus sûr pour être classé indésirable.",
+            "valeur": 2000,
+            "unite": "messages",
+            "min": 100,
+            "max": 50000
+          },
+          {
+            "cle": "desabonnementUnClic",
+            "type": "bascule",
+            "libelle": "Désabonnement en un clic",
+            "aide": "Exigé par les principaux fournisseurs de messagerie depuis 2024. Le lien est ajouté automatiquement.",
+            "valeur": true,
+            "verrouille": "Imposé par la politique d’expédition Synelia."
+          },
+          {
+            "cle": "retentionPisteAns",
+            "type": "nombre",
+            "libelle": "Conservation des pistes non converties",
+            "aide": "Au-delà, la fiche est anonymisée. Conserver indéfiniment une piste morte n’a aucune valeur commerciale et augmente le risque.",
+            "valeur": 3,
+            "unite": "ans",
+            "min": 1,
+            "max": 10
+          }
+        ]
+      },
+      {
+        "titre": "Accès et portail",
+        "phrase": "Qui voit quoi, à l’intérieur comme à l’extérieur.",
+        "champs": [
+          {
+            "cle": "visibiliteFiches",
+            "type": "choix",
+            "libelle": "Visibilité des fiches",
+            "aide": "Le cloisonnement par équipe limite la fuite lors d’un départ, mais complique l’entraide.",
+            "valeur": "equipe",
+            "options": [
+              {
+                "valeur": "globale",
+                "libelle": "Toute l’organisation"
+              },
+              {
+                "valeur": "equipe",
+                "libelle": "Par équipe"
+              },
+              {
+                "valeur": "proprietaire",
+                "libelle": "Propriétaire uniquement"
+              }
+            ]
+          },
+          {
+            "cle": "portailClient",
+            "type": "bascule",
+            "libelle": "Portail client",
+            "aide": "Donne au client un accès en lecture à ses tickets et devis. Publie donc une partie du CRM sur Internet.",
+            "valeur": false
+          },
+          {
+            "cle": "exportCsv",
+            "type": "choix",
+            "libelle": "Export CSV",
+            "aide": "L’export est le vecteur classique d’exfiltration d’un fichier de prospects.",
+            "valeur": "responsables",
+            "options": [
+              {
+                "valeur": "interdit",
+                "libelle": "Interdit"
+              },
+              {
+                "valeur": "responsables",
+                "libelle": "Responsables seulement",
+                "detail": "Journalisé dans l’audit"
+              },
+              {
+                "valeur": "tous",
+                "libelle": "Tous les utilisateurs"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "wordpress",
+    "solution": "WordPress",
+    "intro": "Le portail règle les mises à jour, le cache, le pare-feu applicatif et la préproduction. Les pages, les articles et les médias s’éditent dans WordPress.",
+    "horsPerimetre": [
+      {
+        "quoi": "Écrire une page ou un article",
+        "ou": "dans WordPress, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Installer un thème ou une extension",
+        "ou": "dans l’administration WordPress"
+      },
+      {
+        "quoi": "Gérer les comptes rédacteurs",
+        "ou": "dans WordPress, ou par la fédération d’identité"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Mises à jour",
+        "phrase": "Une extension non mise à jour est la première porte d’entrée sur un WordPress. Une mise à jour non testée est la première cause de site cassé.",
+        "champs": [
+          {
+            "cle": "majCoeur",
+            "type": "choix",
+            "libelle": "Mises à jour du cœur",
+            "aide": "Les correctifs de sécurité sont appliqués sous 24 h quel que soit ce réglage.",
+            "valeur": "auto_apres_sauvegarde",
+            "options": [
+              {
+                "valeur": "auto_apres_sauvegarde",
+                "libelle": "Automatiques après sauvegarde",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "validation",
+                "libelle": "Soumises à validation",
+                "detail": "Avec rapport de ce qui change"
+              },
+              {
+                "valeur": "manuelle",
+                "libelle": "Manuelles"
+              }
+            ]
+          },
+          {
+            "cle": "majExtensions",
+            "type": "choix",
+            "libelle": "Mises à jour des extensions",
+            "aide": "Tester en préproduction avant d’appliquer en production évite la page blanche du lundi matin.",
+            "valeur": "preprod_puis_prod",
+            "options": [
+              {
+                "valeur": "auto",
+                "libelle": "Automatiques"
+              },
+              {
+                "valeur": "preprod_puis_prod",
+                "libelle": "Préproduction puis production",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "manuelle",
+                "libelle": "Manuelles"
+              }
+            ]
+          },
+          {
+            "cle": "versionPhp",
+            "type": "choix",
+            "libelle": "Version de PHP",
+            "aide": "Une version en fin de vie ne reçoit plus de correctif de sécurité.",
+            "valeur": "8.3",
+            "effet": "redemarrage",
+            "options": [
+              {
+                "valeur": "8.4",
+                "libelle": "PHP 8.4"
+              },
+              {
+                "valeur": "8.3",
+                "libelle": "PHP 8.3",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "8.2",
+                "libelle": "PHP 8.2"
+              },
+              {
+                "valeur": "8.1",
+                "libelle": "PHP 8.1",
+                "detail": "Fin de support en novembre 2026"
+              }
+            ]
+          },
+          {
+            "cle": "retourArriereJours",
+            "type": "nombre",
+            "libelle": "Fenêtre de retour arrière",
+            "aide": "Durée pendant laquelle un retour à l’état d’avant mise à jour reste possible en un clic.",
+            "valeur": 7,
+            "unite": "jours",
+            "min": 1,
+            "max": 30
+          }
+        ]
+      },
+      {
+        "titre": "Performance",
+        "phrase": "Le cache décide de la tenue du site sous charge, et de la fraîcheur de ce qui est servi.",
+        "champs": [
+          {
+            "cle": "cachePage",
+            "type": "bascule",
+            "libelle": "Cache de page",
+            "aide": "Sert une copie prête à l’emploi. La purge est automatique à chaque publication.",
+            "valeur": true
+          },
+          {
+            "cle": "cacheDureeMinutes",
+            "type": "nombre",
+            "libelle": "Durée de vie du cache",
+            "aide": "Plus la durée est longue, moins le site travaille — et plus une modification tarde à apparaître.",
+            "valeur": 60,
+            "unite": "minutes",
+            "min": 1,
+            "max": 1440
+          },
+          {
+            "cle": "cdn",
+            "type": "bascule",
+            "libelle": "Diffusion par le réseau de bordure",
+            "aide": "Sert les images et les fichiers statiques au plus près du visiteur.",
+            "valeur": true
+          },
+          {
+            "cle": "conversionWebp",
+            "type": "bascule",
+            "libelle": "Conversion automatique des images",
+            "aide": "Les images sont converties et redimensionnées à la volée, sans toucher aux originaux.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Sécurité",
+        "phrase": "Ce qui est bloqué avant d’atteindre PHP.",
+        "champs": [
+          {
+            "cle": "wafRegles",
+            "type": "choix",
+            "libelle": "Jeu de règles du pare-feu",
+            "aide": "Le mode détection journalise sans bloquer : c’est par là qu’on commence, pour repérer les faux positifs.",
+            "valeur": "owasp_wordpress",
+            "options": [
+              {
+                "valeur": "detection",
+                "libelle": "Détection seule"
+              },
+              {
+                "valeur": "owasp_base",
+                "libelle": "OWASP standard"
+              },
+              {
+                "valeur": "owasp_wordpress",
+                "libelle": "OWASP + règles WordPress",
+                "detail": "Recommandé"
+              }
+            ]
+          },
+          {
+            "cle": "antiForceBrute",
+            "type": "bascule",
+            "libelle": "Anti-force brute sur la connexion",
+            "aide": "Bloque une adresse après plusieurs échecs sur wp-login et XML-RPC.",
+            "valeur": true
+          },
+          {
+            "cle": "xmlrpc",
+            "type": "bascule",
+            "libelle": "Laisser XML-RPC ouvert",
+            "aide": "Nécessaire à quelques applications mobiles anciennes, et cible privilégiée d’attaques par amplification.",
+            "valeur": false
+          },
+          {
+            "cle": "scanMalware",
+            "type": "bascule",
+            "libelle": "Scan de malware quotidien",
+            "aide": "Compare les fichiers du cœur et des extensions à leur empreinte officielle, et met en quarantaine ce qui diffère.",
+            "valeur": true
+          },
+          {
+            "cle": "coeurLectureSeule",
+            "type": "bascule",
+            "libelle": "Cœur en lecture seule",
+            "aide": "Interdit l’écriture dans les fichiers du cœur hors fenêtre de mise à jour. Bloque net la plupart des infections.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Préproduction",
+        "phrase": "Un site de test qui ne doit jamais être indexé ni confondu avec la production.",
+        "champs": [
+          {
+            "cle": "preprodActive",
+            "type": "bascule",
+            "libelle": "Environnement de préproduction",
+            "aide": "Clone du site et de sa base, publiable vers la production après comparaison.",
+            "valeur": true
+          },
+          {
+            "cle": "preprodMotDePasse",
+            "type": "bascule",
+            "libelle": "Protéger la préproduction par mot de passe",
+            "aide": "Empêche l’indexation et la consultation accidentelle par un client.",
+            "valeur": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "prestashop",
+    "solution": "PrestaShop",
+    "intro": "Le portail règle les moyens de paiement raccordés, la politique de stock, la fiscalité et la préproduction. Le catalogue et les commandes se gèrent dans PrestaShop.",
+    "horsPerimetre": [
+      {
+        "quoi": "Créer un produit, traiter une commande",
+        "ou": "dans PrestaShop, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Éditer le thème de la boutique",
+        "ou": "dans PrestaShop"
+      },
+      {
+        "quoi": "Répondre à un client",
+        "ou": "dans le service client de PrestaShop"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Paiement",
+        "phrase": "Chaque opérateur applique sa commission et son délai de reversement. Le rapprochement dépend de ces raccordements.",
+        "champs": [
+          {
+            "cle": "moyensPaiement",
+            "type": "liste",
+            "libelle": "Moyens raccordés",
+            "aide": "Le mobile money représente l’essentiel des paiements en Côte d’Ivoire ; la carte reste utile pour la diaspora.",
+            "valeurs": [
+              "Orange Money",
+              "MTN MoMo",
+              "Wave",
+              "Carte bancaire",
+              "Paiement à la livraison"
+            ],
+            "placeholder": "moyen"
+          },
+          {
+            "cle": "modeTest",
+            "type": "bascule",
+            "libelle": "Paiements en mode test",
+            "aide": "Aucun débit réel. Laisser ce mode actif en production signifie que vous ne serez jamais payé.",
+            "valeur": false
+          },
+          {
+            "cle": "delaiAnnulationMinutes",
+            "type": "nombre",
+            "libelle": "Délai d’abandon d’un panier en attente de paiement",
+            "aide": "Passé ce délai, le stock réservé est relibéré. Trop court, le client perd sa commande pendant la saisie du code.",
+            "valeur": 30,
+            "unite": "minutes",
+            "min": 5,
+            "max": 240
+          },
+          {
+            "cle": "protectionDoubleCommande",
+            "type": "bascule",
+            "libelle": "Protection contre la double commande",
+            "aide": "Un rechargement de page après paiement ne crée pas une seconde commande. Sans cela, les doublons sont fréquents sur réseau mobile instable.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Stock et livraison",
+        "phrase": "Ce que la boutique fait quand il n’y a plus rien à vendre.",
+        "champs": [
+          {
+            "cle": "ventesSansStock",
+            "type": "choix",
+            "libelle": "Commande hors stock",
+            "aide": "Vendre sans stock améliore le chiffre et dégrade la satisfaction. À choisir produit par produit si possible.",
+            "valeur": "refus",
+            "options": [
+              {
+                "valeur": "refus",
+                "libelle": "Refuser"
+              },
+              {
+                "valeur": "precommande",
+                "libelle": "Accepter en précommande",
+                "detail": "Avec délai affiché"
+              },
+              {
+                "valeur": "libre",
+                "libelle": "Accepter sans mention"
+              }
+            ]
+          },
+          {
+            "cle": "seuilAlerteStock",
+            "type": "nombre",
+            "libelle": "Seuil d’alerte de stock",
+            "aide": "Déclenche une notification au gestionnaire, pas un blocage.",
+            "valeur": 5,
+            "unite": "unités",
+            "min": 0,
+            "max": 100
+          },
+          {
+            "cle": "zonesLivraison",
+            "type": "liste",
+            "libelle": "Zones de livraison",
+            "aide": "Une zone non déclarée n’apparaît pas au tunnel de commande.",
+            "valeurs": [
+              "Abidjan",
+              "Intérieur Côte d’Ivoire",
+              "UEMOA",
+              "International"
+            ],
+            "placeholder": "zone"
+          }
+        ]
+      },
+      {
+        "titre": "Fiscalité et documents",
+        "phrase": "Ce qui figure sur la facture, et ce qui est conservé.",
+        "champs": [
+          {
+            "cle": "tvaBoutique",
+            "type": "nombre",
+            "libelle": "TVA par défaut",
+            "aide": "Appliquée aux produits sans règle propre.",
+            "valeur": 18,
+            "unite": "%",
+            "min": 0,
+            "max": 30
+          },
+          {
+            "cle": "prixAffichesTtc",
+            "type": "bascule",
+            "libelle": "Afficher les prix toutes taxes comprises",
+            "aide": "Attendu en vente au particulier ; le hors taxes convient au professionnel.",
+            "valeur": true
+          },
+          {
+            "cle": "conservationFacturesAns",
+            "type": "nombre",
+            "libelle": "Conservation des factures",
+            "aide": "Les factures sont archivées en PDF immuable, indépendamment de la base de la boutique.",
+            "valeur": 10,
+            "unite": "ans",
+            "min": 5,
+            "max": 30
+          }
+        ]
+      },
+      {
+        "titre": "Exploitation",
+        "phrase": "Mises à jour et bascule, sur un site qui encaisse de l’argent.",
+        "champs": [
+          {
+            "cle": "preprodActive",
+            "type": "bascule",
+            "libelle": "Environnement de préproduction",
+            "aide": "Indispensable sur une boutique : une mise à jour ratée en production, c’est du chiffre perdu à la minute.",
+            "valeur": true
+          },
+          {
+            "cle": "maintenanceIpAutorisees",
+            "type": "liste",
+            "libelle": "Adresses autorisées en mode maintenance",
+            "aide": "Pendant une maintenance, seules ces adresses voient la boutique.",
+            "valeurs": [
+              "102.176.20.0/24"
+            ],
+            "placeholder": "plage CIDR"
+          },
+          {
+            "cle": "fenetreMaintenance",
+            "type": "choix",
+            "libelle": "Fenêtre de maintenance",
+            "aide": "Choisie hors des heures de commande. Le trafic de votre boutique culmine en soirée.",
+            "valeur": "nuit_semaine",
+            "options": [
+              {
+                "valeur": "nuit_semaine",
+                "libelle": "Nuit, du lundi au jeudi",
+                "detail": "01:00 – 04:00"
+              },
+              {
+                "valeur": "dimanche_matin",
+                "libelle": "Dimanche matin"
+              },
+              {
+                "valeur": "sur_demande",
+                "libelle": "Sur demande uniquement"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "bi",
+    "solution": "Metabase",
+    "intro": "Le portail règle les sources connectées, les permissions de lecture, les limites de requête et le partage. Les questions et les tableaux de bord se construisent dans Metabase.",
+    "horsPerimetre": [
+      {
+        "quoi": "Construire une question ou un tableau de bord",
+        "ou": "dans Metabase, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Écrire du SQL",
+        "ou": "dans Metabase, éditeur natif"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Sources de données",
+        "phrase": "Une source ajoutée est une source interrogeable par tous ceux qui y ont droit. Le choix de la réplique évite d’interroger la production.",
+        "champs": [
+          {
+            "cle": "sources",
+            "type": "liste",
+            "libelle": "Connexions déclarées",
+            "aide": "Chaque connexion utilise un compte en lecture seule, créé par nos soins.",
+            "valeurs": [
+              "entrepot (ClickHouse)",
+              "app_metier — réplique de lecture",
+              "facturation (PostgreSQL)"
+            ],
+            "placeholder": "source"
+          },
+          {
+            "cle": "lectureSeule",
+            "type": "bascule",
+            "libelle": "Comptes en lecture seule uniquement",
+            "aide": "Interdit toute écriture depuis l’outil décisionnel. À laisser actif : un rapport n’a pas à modifier des données.",
+            "valeur": true,
+            "verrouille": "Imposé par la politique d’exploitation Synelia."
+          },
+          {
+            "cle": "timeoutRequeteS",
+            "type": "nombre",
+            "libelle": "Délai maximal d’une requête",
+            "aide": "Au-delà, la requête est interrompue. Protège la base d’un tableau de bord mal écrit.",
+            "valeur": 60,
+            "unite": "secondes",
+            "min": 10,
+            "max": 600
+          },
+          {
+            "cle": "cacheResultatsMinutes",
+            "type": "nombre",
+            "libelle": "Cache des résultats",
+            "aide": "Un tableau de bord consulté par vingt personnes ne doit pas déclencher vingt requêtes.",
+            "valeur": 30,
+            "unite": "minutes",
+            "min": 0,
+            "max": 1440
+          }
+        ]
+      },
+      {
+        "titre": "Permissions",
+        "phrase": "Qui voit quelles lignes, et qui peut écrire du SQL libre.",
+        "champs": [
+          {
+            "cle": "permissionsParLigne",
+            "type": "bascule",
+            "libelle": "Filtrage par ligne",
+            "aide": "Chaque utilisateur ne voit que les lignes de son périmètre, selon un attribut de l’annuaire.",
+            "valeur": true
+          },
+          {
+            "cle": "sqlNatif",
+            "type": "choix",
+            "libelle": "Accès au SQL natif",
+            "aide": "Le SQL libre contourne les filtres par ligne : à réserver à ceux qui ont déjà accès à tout.",
+            "valeur": "groupe_data",
+            "options": [
+              {
+                "valeur": "personne",
+                "libelle": "Personne"
+              },
+              {
+                "valeur": "groupe_data",
+                "libelle": "Groupe data seulement"
+              },
+              {
+                "valeur": "tous",
+                "libelle": "Tous les utilisateurs"
+              }
+            ]
+          },
+          {
+            "cle": "telechargementLignesMax",
+            "type": "nombre",
+            "libelle": "Lignes exportables",
+            "aide": "Plafonne l’export CSV. Un export d’un million de lignes est une copie de base, pas un rapport.",
+            "valeur": 10000,
+            "unite": "lignes",
+            "min": 100,
+            "max": 1000000
+          }
+        ]
+      },
+      {
+        "titre": "Partage et diffusion",
+        "phrase": "La façon la plus simple de publier des chiffres internes sur Internet.",
+        "champs": [
+          {
+            "cle": "partagePublic",
+            "type": "bascule",
+            "libelle": "Autoriser les liens publics",
+            "aide": "Un lien public est accessible sans authentification, à quiconque le connaît. Nous le laissons fermé par défaut.",
+            "valeur": false
+          },
+          {
+            "cle": "envoisPlanifies",
+            "type": "bascule",
+            "libelle": "Envois planifiés par courriel",
+            "aide": "Envoie un tableau de bord à heure fixe. Les destinataires externes doivent être déclarés explicitement.",
+            "valeur": true
+          },
+          {
+            "cle": "destinatairesExternes",
+            "type": "liste",
+            "libelle": "Destinataires externes autorisés",
+            "aide": "Seules ces adresses hors organisation peuvent recevoir un envoi planifié.",
+            "valeurs": [],
+            "placeholder": "adresse@externe.ci"
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "forge",
+    "solution": "GitLab CE",
+    "intro": "Le portail règle la visibilité des dépôts, la protection des branches, les runners d’intégration continue et la rétention du registre. Le code, les tickets et les demandes de fusion vivent dans GitLab.",
+    "horsPerimetre": [
+      {
+        "quoi": "Lire ou pousser du code, ouvrir une demande de fusion",
+        "ou": "dans GitLab, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Écrire un pipeline .gitlab-ci.yml",
+        "ou": "dans le dépôt lui-même"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Visibilité et accès",
+        "phrase": "Un dépôt public par défaut est une fuite de code qui attend son heure.",
+        "champs": [
+          {
+            "cle": "visibiliteDefaut",
+            "type": "choix",
+            "libelle": "Visibilité par défaut d’un nouveau dépôt",
+            "aide": "Le créateur peut ensuite ouvrir davantage, jamais par accident.",
+            "valeur": "privee",
+            "options": [
+              {
+                "valeur": "privee",
+                "libelle": "Privée",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "interne",
+                "libelle": "Interne à l’organisation"
+              },
+              {
+                "valeur": "publique",
+                "libelle": "Publique"
+              }
+            ]
+          },
+          {
+            "cle": "mfaObligatoire",
+            "type": "bascule",
+            "libelle": "Double authentification obligatoire",
+            "aide": "Un accès au code source vaut un accès à la production. Sans second facteur, un mot de passe volé suffit.",
+            "valeur": true
+          },
+          {
+            "cle": "clesSshExpirationJours",
+            "type": "nombre",
+            "libelle": "Expiration des clés SSH",
+            "aide": "Une clé sans expiration reste valide après le départ de son propriétaire.",
+            "valeur": 365,
+            "unite": "jours",
+            "min": 0,
+            "max": 1095
+          },
+          {
+            "cle": "branchesProtegees",
+            "type": "liste",
+            "libelle": "Branches protégées",
+            "aide": "Interdit la poussée directe et la réécriture d’historique. Une revue devient obligatoire.",
+            "valeurs": [
+              "main",
+              "release/*"
+            ],
+            "placeholder": "nom ou motif"
+          }
+        ]
+      },
+      {
+        "titre": "Intégration continue",
+        "phrase": "Ce que les pipelines ont le droit de faire, et avec quels secrets.",
+        "champs": [
+          {
+            "cle": "runners",
+            "type": "choix",
+            "libelle": "Runners utilisés",
+            "aide": "Un runner partagé est mutualisé entre organisations : le code y passe, jamais les secrets de production.",
+            "valeur": "dedies",
+            "options": [
+              {
+                "valeur": "partages",
+                "libelle": "Runners partagés"
+              },
+              {
+                "valeur": "dedies",
+                "libelle": "Runners dédiés",
+                "detail": "Recommandé pour la production"
+              }
+            ],
+            "impactFacture": "Les runners dédiés sont facturés à la machine, non à la minute."
+          },
+          {
+            "cle": "secretsBranchesProtegees",
+            "type": "bascule",
+            "libelle": "Secrets réservés aux branches protégées",
+            "aide": "Empêche qu’une branche de test créée par n’importe qui lise les identifiants de production.",
+            "valeur": true
+          },
+          {
+            "cle": "detectionSecrets",
+            "type": "bascule",
+            "libelle": "Détection de secrets à la poussée",
+            "aide": "Refuse un commit qui contient une clé ou un mot de passe. Un secret poussé est un secret à révoquer.",
+            "valeur": true
+          },
+          {
+            "cle": "minutesCiMois",
+            "type": "nombre",
+            "libelle": "Minutes d’exécution par mois",
+            "aide": "Au-delà, les pipelines sont mis en file plutôt que refusés.",
+            "valeur": 5000,
+            "unite": "minutes",
+            "min": 500,
+            "max": 100000
+          }
+        ]
+      },
+      {
+        "titre": "Registre et rétention",
+        "phrase": "Les images produites s’accumulent vite et coûtent du stockage.",
+        "champs": [
+          {
+            "cle": "retentionImagesJours",
+            "type": "nombre",
+            "libelle": "Rétention des images non étiquetées",
+            "aide": "Les images portant une étiquette de version sont conservées ; les intermédiaires sont purgées.",
+            "valeur": 30,
+            "unite": "jours",
+            "min": 7,
+            "max": 365
+          },
+          {
+            "cle": "analyseVulnerabilites",
+            "type": "bascule",
+            "libelle": "Analyse des images au push",
+            "aide": "Chaque image poussée est comparée aux bases de vulnérabilités connues. Le résultat apparaît dans le registre.",
+            "valeur": true
+          },
+          {
+            "cle": "blocageCritiques",
+            "type": "bascule",
+            "libelle": "Refuser le déploiement d’une image critique",
+            "aide": "Bloque la mise en production d’une image portant une vulnérabilité critique corrigée en amont.",
+            "valeur": false
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "coffre",
+    "solution": "Vaultwarden",
+    "intro": "Le portail règle la robustesse exigée des mots de passe, le second facteur, le partage et l’accès d’urgence. Les entrées du coffre restent chiffrées de bout en bout : nous ne pouvons pas les lire.",
+    "horsPerimetre": [
+      {
+        "quoi": "Consulter ou créer une entrée",
+        "ou": "dans les clients Bitwarden, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Récupérer un mot de passe oublié",
+        "ou": "impossible — le chiffrement est de bout en bout"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Robustesse exigée",
+        "phrase": "Ces règles s’appliquent au mot de passe maître, celui qui protège tout le reste.",
+        "champs": [
+          {
+            "cle": "longueurMinimale",
+            "type": "nombre",
+            "libelle": "Longueur minimale du mot de passe maître",
+            "aide": "La longueur protège mieux que la complexité. Une phrase de passe de quatre mots vaut mieux qu’un mot tordu.",
+            "valeur": 14,
+            "unite": "caractères",
+            "min": 8,
+            "max": 64
+          },
+          {
+            "cle": "complexiteMinimale",
+            "type": "choix",
+            "libelle": "Complexité exigée",
+            "aide": "Trop d’exigences poussent à écrire le mot de passe sur un papier.",
+            "valeur": "phrase_ou_mixte",
+            "options": [
+              {
+                "valeur": "aucune",
+                "libelle": "Aucune, longueur seule"
+              },
+              {
+                "valeur": "phrase_ou_mixte",
+                "libelle": "Phrase de passe ou casse mixte",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "stricte",
+                "libelle": "Majuscule, chiffre et symbole"
+              }
+            ]
+          },
+          {
+            "cle": "mfaObligatoire",
+            "type": "bascule",
+            "libelle": "Second facteur obligatoire",
+            "aide": "Sans second facteur, le vol du mot de passe maître donne accès à tous les secrets de l’organisation.",
+            "valeur": true
+          },
+          {
+            "cle": "methodesMfa",
+            "type": "liste",
+            "libelle": "Méthodes acceptées",
+            "aide": "Les clés matérielles résistent à l’hameçonnage ; les codes par courriel non.",
+            "valeurs": [
+              "Clé matérielle (WebAuthn)",
+              "Application TOTP"
+            ],
+            "placeholder": "méthode"
+          }
+        ]
+      },
+      {
+        "titre": "Partage et sortie",
+        "phrase": "Comment un secret circule dans l’organisation, et comment il en sort.",
+        "champs": [
+          {
+            "cle": "collectionsPartagees",
+            "type": "bascule",
+            "libelle": "Collections partagées par équipe",
+            "aide": "Un secret partagé dans une collection reste accessible après le départ de celui qui l’a créé.",
+            "valeur": true
+          },
+          {
+            "cle": "exportPersonnelInterdit",
+            "type": "bascule",
+            "libelle": "Interdire l’export du coffre",
+            "aide": "Un export en clair d’un coffre annule tout l’intérêt du chiffrement. Interdire ferme le principal vecteur d’exfiltration.",
+            "valeur": true
+          },
+          {
+            "cle": "envoiSecuriseJours",
+            "type": "nombre",
+            "libelle": "Durée de vie d’un envoi sécurisé",
+            "aide": "Transmet un secret à un tiers par lien à usage limité, plutôt que par courriel.",
+            "valeur": 7,
+            "unite": "jours",
+            "min": 1,
+            "max": 31
+          },
+          {
+            "cle": "accesUrgence",
+            "type": "bascule",
+            "libelle": "Accès d’urgence",
+            "aide": "Permet à un contact désigné d’obtenir l’accès après un délai d’attente, si le titulaire ne répond pas. Sans cela, un départ brutal emporte les secrets.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Sessions et journalisation",
+        "phrase": "Ce qui se passe sur un poste laissé sans surveillance.",
+        "champs": [
+          {
+            "cle": "verrouillageMinutes",
+            "type": "nombre",
+            "libelle": "Verrouillage automatique",
+            "aide": "Après ce délai d’inactivité, le coffre se reverrouille et redemande le mot de passe maître.",
+            "valeur": 15,
+            "unite": "minutes",
+            "min": 1,
+            "max": 240
+          },
+          {
+            "cle": "journalAcces",
+            "type": "bascule",
+            "libelle": "Journal des accès",
+            "aide": "Enregistre qui a consulté quelle entrée, et quand. Le contenu reste illisible pour nous.",
+            "valeur": true
+          },
+          {
+            "cle": "alerteFuite",
+            "type": "bascule",
+            "libelle": "Alerte sur mot de passe compromis",
+            "aide": "Compare les empreintes à celles des fuites publiques connues, sans transmettre le mot de passe.",
+            "valeur": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "automatisation",
+    "solution": "n8n",
+    "intro": "Le portail règle ce que les scénarios ont le droit d’appeler, combien de temps leurs exécutions sont conservées et qui accède aux identifiants enregistrés. Les scénarios eux-mêmes se construisent dans n8n.",
+    "horsPerimetre": [
+      {
+        "quoi": "Créer ou modifier un scénario",
+        "ou": "dans n8n, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Rejouer une exécution",
+        "ou": "dans n8n, historique des exécutions"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Sorties autorisées",
+        "phrase": "Un moteur d’automatisation qui peut appeler n’importe quelle adresse peut aussi exfiltrer n’importe quoi.",
+        "champs": [
+          {
+            "cle": "sortieReseau",
+            "type": "choix",
+            "libelle": "Appels sortants",
+            "aide": "La liste blanche demande un peu d’administration et supprime la classe entière des exfiltrations discrètes.",
+            "valeur": "liste_blanche",
+            "options": [
+              {
+                "valeur": "liste_blanche",
+                "libelle": "Liste blanche de domaines",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "tout",
+                "libelle": "Tout Internet"
+              },
+              {
+                "valeur": "interne",
+                "libelle": "Réseau interne uniquement"
+              }
+            ]
+          },
+          {
+            "cle": "domainesAutorises",
+            "type": "liste",
+            "libelle": "Domaines autorisés",
+            "aide": "Appliqué à chaque appel HTTP sortant, y compris ceux d’un nœud de code.",
+            "valeurs": [
+              "api.dba.africa",
+              "api.orange.ci",
+              "hooks.slack.com"
+            ],
+            "placeholder": "domaine"
+          },
+          {
+            "cle": "noeudCodeAutorise",
+            "type": "bascule",
+            "libelle": "Autoriser les nœuds de code",
+            "aide": "Un nœud de code exécute du JavaScript arbitraire. Puissant, et impossible à auditer par une liste de domaines seule.",
+            "valeur": false
+          },
+          {
+            "cle": "authWebhooks",
+            "type": "choix",
+            "libelle": "Authentification des webhooks entrants",
+            "aide": "Un webhook sans authentification est déclenchable par quiconque connaît son URL.",
+            "valeur": "signature",
+            "options": [
+              {
+                "valeur": "aucune",
+                "libelle": "Aucune"
+              },
+              {
+                "valeur": "entete",
+                "libelle": "En-tête secret"
+              },
+              {
+                "valeur": "signature",
+                "libelle": "Signature HMAC",
+                "detail": "Recommandé"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "titre": "Identifiants",
+        "phrase": "Les identifiants enregistrés dans n8n ouvrent les portes de vos autres systèmes.",
+        "champs": [
+          {
+            "cle": "partageIdentifiants",
+            "type": "choix",
+            "libelle": "Partage des identifiants",
+            "aide": "Un identifiant partagé largement finit utilisé dans un scénario que personne ne surveille.",
+            "valeur": "proprietaire_et_admins",
+            "options": [
+              {
+                "valeur": "proprietaire",
+                "libelle": "Propriétaire seulement"
+              },
+              {
+                "valeur": "proprietaire_et_admins",
+                "libelle": "Propriétaire et administrateurs"
+              },
+              {
+                "valeur": "tous",
+                "libelle": "Tous les utilisateurs"
+              }
+            ]
+          },
+          {
+            "cle": "coffreExterne",
+            "type": "bascule",
+            "libelle": "Lire les secrets depuis le coffre",
+            "aide": "Les identifiants sont lus à l’exécution depuis votre coffre de mots de passe, plutôt que recopiés dans n8n.",
+            "valeur": true
+          }
+        ]
+      },
+      {
+        "titre": "Exécutions",
+        "phrase": "Les exécutions conservent les données qui ont traversé le scénario : c’est utile au diagnostic et lourd de conséquences.",
+        "champs": [
+          {
+            "cle": "retentionExecutionsJours",
+            "type": "nombre",
+            "libelle": "Rétention des exécutions",
+            "aide": "Une exécution conservée garde en clair les données transportées. Court est plus sûr.",
+            "valeur": 14,
+            "unite": "jours",
+            "min": 1,
+            "max": 365
+          },
+          {
+            "cle": "donneesEnErreurSeulement",
+            "type": "bascule",
+            "libelle": "Ne conserver les données qu’en cas d’erreur",
+            "aide": "Bon compromis : on garde ce qui sert à corriger, on jette le reste.",
+            "valeur": true
+          },
+          {
+            "cle": "concurrenceMax",
+            "type": "nombre",
+            "libelle": "Exécutions simultanées",
+            "aide": "Au-delà, les déclenchements sont mis en file. Protège les systèmes appelés d’une rafale.",
+            "valeur": 5,
+            "unite": "exécutions",
+            "min": 1,
+            "max": 50
+          },
+          {
+            "cle": "alerteEchec",
+            "type": "bascule",
+            "libelle": "Alerter à l’échec d’un scénario",
+            "aide": "Un scénario en échec silencieux donne l’illusion que le travail se fait.",
+            "valeur": true
+          }
+        ]
+      }
+    ]
+  },
+  {
+    "slug": "analytics-web",
+    "solution": "Matomo",
+    "intro": "Le portail règle ce qui est collecté, comment les visiteurs sont anonymisés et combien de temps les données sont gardées. Les rapports se consultent dans Matomo.",
+    "horsPerimetre": [
+      {
+        "quoi": "Consulter les rapports de fréquentation",
+        "ou": "dans Matomo, via le bouton Ouvrir"
+      },
+      {
+        "quoi": "Créer un objectif ou un segment",
+        "ou": "dans Matomo"
+      }
+    ],
+    "sections": [
+      {
+        "titre": "Collecte et consentement",
+        "phrase": "Mesurer sans cookie évite la bannière de consentement, au prix d’une précision moindre sur le visiteur unique.",
+        "champs": [
+          {
+            "cle": "modeSuivi",
+            "type": "choix",
+            "libelle": "Mode de suivi",
+            "aide": "Le suivi sans cookie est exempté de consentement dans la plupart des cadres, y compris ivoirien.",
+            "valeur": "sans_cookie",
+            "options": [
+              {
+                "valeur": "sans_cookie",
+                "libelle": "Sans cookie",
+                "detail": "Aucune bannière requise"
+              },
+              {
+                "valeur": "cookie_apres_consentement",
+                "libelle": "Cookie après consentement"
+              },
+              {
+                "valeur": "cookie",
+                "libelle": "Cookie systématique",
+                "detail": "Bannière obligatoire"
+              }
+            ]
+          },
+          {
+            "cle": "anonymisationIp",
+            "type": "choix",
+            "libelle": "Anonymisation des adresses IP",
+            "aide": "Masquer deux octets suffit à conserver le pays et la ville tout en cassant l’identification.",
+            "valeur": "deux_octets",
+            "options": [
+              {
+                "valeur": "aucune",
+                "libelle": "Aucune"
+              },
+              {
+                "valeur": "un_octet",
+                "libelle": "Un octet masqué"
+              },
+              {
+                "valeur": "deux_octets",
+                "libelle": "Deux octets masqués",
+                "detail": "Recommandé"
+              },
+              {
+                "valeur": "complete",
+                "libelle": "Adresse non conservée"
+              }
+            ]
+          },
+          {
+            "cle": "respectDoNotTrack",
+            "type": "bascule",
+            "libelle": "Respecter le signal « ne pas me suivre »",
+            "aide": "Les visiteurs qui ont exprimé ce refus dans leur navigateur ne sont pas comptés.",
+            "valeur": true
+          },
+          {
+            "cle": "exclusions",
+            "type": "liste",
+            "libelle": "Adresses exclues de la mesure",
+            "aide": "Sans cela, la navigation de vos propres équipes gonfle les statistiques.",
+            "valeurs": [
+              "102.176.20.0/24"
+            ],
+            "placeholder": "plage CIDR"
+          }
+        ]
+      },
+      {
+        "titre": "Sites mesurés",
+        "phrase": "Chaque site déclaré consomme du quota d’événements.",
+        "champs": [
+          {
+            "cle": "sites",
+            "type": "liste",
+            "libelle": "Sites déclarés",
+            "aide": "Un site non déclaré n’est pas mesuré, même si le marqueur est présent dans ses pages.",
+            "valeurs": [
+              "www.dba.africa",
+              "boutique.dba.africa"
+            ],
+            "placeholder": "domaine"
+          },
+          {
+            "cle": "quotaEvenementsMois",
+            "type": "nombre",
+            "libelle": "Quota d’événements par mois",
+            "aide": "Au-delà, la collecte est échantillonnée plutôt qu’interrompue.",
+            "valeur": 1000000,
+            "unite": "événements",
+            "min": 10000,
+            "max": 50000000,
+            "impactFacture": "Facturé par tranche de 500 000 événements au-delà du palier."
+          }
+        ]
+      },
+      {
+        "titre": "Conservation",
+        "phrase": "Les données brutes de navigation vieillissent mal et pèsent lourd.",
+        "champs": [
+          {
+            "cle": "retentionBrutMois",
+            "type": "nombre",
+            "libelle": "Conservation des données brutes",
+            "aide": "Les visites détaillées, visiteur par visiteur. C’est la partie sensible.",
+            "valeur": 6,
+            "unite": "mois",
+            "min": 1,
+            "max": 36
+          },
+          {
+            "cle": "retentionAgregatMois",
+            "type": "nombre",
+            "libelle": "Conservation des agrégats",
+            "aide": "Les totaux par jour, semaine et mois. Ils ne permettent plus d’identifier personne et peuvent être gardés longtemps.",
+            "valeur": 60,
+            "unite": "mois",
+            "min": 12,
+            "max": 240
+          },
+          {
+            "cle": "suppressionSurDemande",
+            "type": "bascule",
+            "libelle": "Traiter les demandes d’effacement",
+            "aide": "Permet de supprimer les données d’un visiteur identifié qui en fait la demande.",
+            "valeur": true
+          }
+        ]
+      }
+    ]
+  }
+]

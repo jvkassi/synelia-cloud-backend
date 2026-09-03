@@ -1,0 +1,58 @@
+{
+  "tachesProvisioning": [
+    "Allouer la capacité",
+    "Déployer l'instance",
+    "Configurer le domaine et le TLS",
+    "Déclarer le client OIDC dans Keycloak",
+    "Appliquer la politique de sauvegarde",
+    "Enregistrer les sondes de supervision",
+    "Créer la souscription facturable"
+  ],
+  "contratIntegration": [
+    {
+      "num": 1,
+      "capacite": "Provisioning dédié ou mutualisé, choix du site",
+      "ecran": "Assistant de souscription"
+    },
+    {
+      "num": 2,
+      "capacite": "Dimensionnement : palier, sièges, quotas, extension à chaud",
+      "ecran": "Onglet Dimensionnement"
+    },
+    {
+      "num": 3,
+      "capacite": "Domaine et TLS (sous-domaine Synelia ou domaine client)",
+      "ecran": "Onglet Domaine"
+    },
+    {
+      "num": 4,
+      "capacite": "SSO Keycloak, provisioning JIT, mapping groupes → rôles applicatifs",
+      "ecran": "Onglet SSO"
+    },
+    {
+      "num": 5,
+      "capacite": "Sièges et licences, vue « qui consomme quoi »",
+      "ecran": "Onglet Sièges"
+    },
+    {
+      "num": 6,
+      "capacite": "Sauvegarde avec restauration granulaire et tests",
+      "ecran": "Onglet Sauvegarde"
+    },
+    {
+      "num": 7,
+      "capacite": "Supervision et SLA par service",
+      "ecran": "Onglet Supervision"
+    },
+    {
+      "num": 8,
+      "capacite": "Cycle de vie : versions, fenêtre de mise à jour, changelog, rollback",
+      "ecran": "Onglet Versions"
+    },
+    {
+      "num": 9,
+      "capacite": "Réversibilité : export dans un format standard, documenté et testé",
+      "ecran": "Onglet Réversibilité"
+    }
+  ]
+}

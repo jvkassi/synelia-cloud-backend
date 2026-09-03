@@ -1,0 +1,18 @@
+[project]
+name = "synelia-openstack"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+  "synelia-kernel",
+  "httpx>=0.28",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["synelia_openstack"]
+
+[tool.uv.sources]
+synelia-kernel = { workspace = true }

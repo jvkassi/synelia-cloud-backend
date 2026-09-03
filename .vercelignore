@@ -1,0 +1,8 @@
+.venv
+.git
+docs
+tests
+**/tests/**
+uv.lock
+.agents
+.claude

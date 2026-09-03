@@ -1,0 +1,66 @@
+[project]
+name = "synelia-cloud-backend"
+version = "0.1.0"
+description = "Backend de Synelia Cloud : les 514 opérations du contrat openapi.json, sur OpenStack."
+requires-python = ">=3.12"
+dependencies = [
+  "synelia",
+  "synelia-kernel",
+  "synelia-contract",
+  "synelia-db",
+  "synelia-catalogue",
+  "synelia-openstack",
+  "synelia-testing",
+]
+
+[dependency-groups]
+dev = [
+  "ruff>=0.14",
+  "pyright>=1.1.400",
+  "pytest>=8.3",
+  "pytest-asyncio>=0.25",
+  "httpx>=0.28",
+  "datamodel-code-generator>=0.30",
+  "schemathesis>=4.0",
+  "hypothesis>=6",
+  "polyfactory>=2.18",
+  "respx>=0.22",
+]
+
+[tool.uv.workspace]
+members = ["apps/synelia", "packages/*"]
+
+[tool.uv.sources]
+synelia = { workspace = true }
+synelia-kernel = { workspace = true }
+synelia-contract = { workspace = true }
+synelia-db = { workspace = true }
+synelia-catalogue = { workspace = true }
+synelia-openstack = { workspace = true }
+synelia-testing = { workspace = true }
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["packages/contract/synelia_contract/modeles.py", "packages/contract/synelia_contract/operations.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "PL", "RUF"]
+ignore = ["PLR0913", "PLR2004", "S101", "S105", "S106", "RUF001", "RUF002", "RUF003", "PLR0911", "PLR0912", "PLR0915", "E501", "B008", "PLW0603", "S311", "S104", "RUF012", "PLC0415", "ASYNC110", "S603", "S607", "RUF100"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S", "PL", "B"]
+"tools/**" = ["S", "PL"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "basic"
+venvPath = "."
+venv = ".venv"
+exclude = ["**/node_modules", "**/__pycache__", ".venv", "packages/contract/synelia_contract/modeles.py"]
+reportMissingImports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["apps", "packages"]
+filterwarnings = ["ignore::DeprecationWarning"]

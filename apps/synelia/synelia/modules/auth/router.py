@@ -1,0 +1,217 @@
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import APIRouter, Body, status
+from sqlalchemy import select
+from synelia_contract import modeles as m
+from synelia_db.modeles import Invitation, Membership, Organisation, SessionAuth, Utilisateur
+from synelia_kernel import erreurs
+from synelia_kernel.chiffrement import dechiffrer
+from synelia_kernel.dates import dans, maintenant
+from synelia_kernel.ids import jeton_opaque
+
+from synelia.audit import journaliser
+from synelia.deps import CtxPublic
+from synelia.deps.contexte import Contexte, Ctx
+from synelia.modules.auth import service
+from synelia.securite import (
+    emettre_acces,
+    hacher_jeton,
+    hacher_mot_de_passe,
+    verifier_mot_de_passe,
+    verifier_totp,
+)
+
+router = APIRouter(prefix="/auth", tags=["Authentification"])
+
+
+async def _utilisateur_par_email(ctx: Contexte, email: str) -> Utilisateur | None:
+    return (await ctx.session.execute(select(Utilisateur).where(Utilisateur.email == email.lower()))).scalar_one_or_none()
+
+
+@router.post("/connexion", response_model=m.Session, response_model_exclude_none=True)
+async def se_connecter(ctx: CtxPublic, corps: m.DemandeConnexion) -> Any:
+    u = await _utilisateur_par_email(ctx, str(corps.email))
+    if u is None or not verifier_mot_de_passe(corps.motDePasse.get_secret_value(), u.mot_de_passe_hash):
+        raise erreurs.non_authentifie("Identifiants incorrects.")
+    if u.statut == "suspendu":
+        raise erreurs.interdit("Compte suspendu.", code="compte_suspendu")
+    org = u.org_active_id
+    mfa = await service.mfa_exigee(ctx.session, u, org)
+    rep = await service.ouvrir_session(ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent"), org_id=org, mfa_validee=not mfa)
+    await journaliser(ctx, action="auth.connexion", cible_type="utilisateur", cible_id=u.id, cible=u.email, org_id=org, details={"mfaRequis": mfa})
+    return rep
+
+
+@router.post("/mfa", response_model=m.Session, response_model_exclude_none=True)
+async def valider_mfa(ctx: CtxPublic, corps: m.AuthMfaPostRequest) -> Any:
+    s = await service.valider_defi(ctx.session, corps.defiMfa)
+    if s is None or s.expire_le < maintenant():
+        raise erreurs.non_authentifie("Défi MFA inconnu ou expiré.")
+    u = await ctx.session.get(Utilisateur, s.utilisateur_id)
+    assert u is not None
+    secret = dechiffrer(u.mfa_secret_chiffre) if u.mfa_secret_chiffre else None
+    if secret is None or not verifier_totp(secret, corps.code):
+        raise erreurs.validation("Code invalide.", {"code": "Le code à six chiffres ne correspond pas."})
+    s.mfa_validee = True
+    s.mfa_defi = None
+    await ctx.session.flush()
+    acces = emettre_acces({"sub": u.id, "org": s.org_id, "role": s.role, "sid": s.id})
+    return {
+        "accessToken": acces,
+        "refreshToken": jeton_opaque(),  # la rotation réelle passe par /auth/rafraichir
+        "expiresIn": ctx.reglages.acces_duree_s,
+        "utilisateur": service.utilisateur_contrat(u),
+        "organisations": await service.appartenances(ctx.session, u),
+        "organisationActive": s.org_id,
+        "roleActif": s.role,
+        "mfaRequis": False,
+    }
+
+
+@router.post("/rafraichir", response_model=m.Session, response_model_exclude_none=True)
+async def rafraichir_session(ctx: CtxPublic, corps: m.AuthRafraichirPostRequest) -> Any:
+    s = (await ctx.session.execute(select(SessionAuth).where(SessionAuth.rafraichissement_hash == hacher_jeton(corps.refreshToken)))).scalar_one_or_none()
+    if s is None or s.expire_le < maintenant():
+        raise erreurs.non_authentifie("Jeton de rafraîchissement inconnu ou expiré.")
+    if s.revoquee_le is not None:
+        # réutilisation d'un jeton déjà tourné : on révoque toute la famille
+        for autre in (await ctx.session.execute(select(SessionAuth).where(SessionAuth.famille == s.famille))).scalars():
+            autre.revoquee_le = maintenant()
+        raise erreurs.non_authentifie("Réutilisation détectée : sessions révoquées.")
+    u = await ctx.session.get(Utilisateur, s.utilisateur_id)
+    assert u is not None
+    s.revoquee_le = maintenant()
+    return await service.ouvrir_session(ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent"), org_id=s.org_id, famille=s.famille, emprunt=s.emprunt)
+
+
+@router.post("/deconnexion", response_model=m.AuthDeconnexionPostResponse)
+async def se_deconnecter(ctx: Ctx) -> Any:
+    p = ctx.principal
+    assert p is not None
+    if p.session_id:
+        s = await ctx.session.get(SessionAuth, p.session_id)
+        if s:
+            s.revoquee_le = maintenant()
+    await journaliser(ctx, action="auth.deconnexion", cible_type="session", cible_id=p.session_id)
+    return {"ferme": True}
+
+
+@router.post("/inscription", response_model=m.Session, status_code=status.HTTP_201_CREATED, response_model_exclude_none=True)
+async def s_inscrire(ctx: CtxPublic, corps: m.Inscription) -> Any:
+    if not corps.accepteConditions:
+        raise erreurs.validation("Les conditions doivent être acceptées.", {"accepteConditions": "requis"})
+    if await _utilisateur_par_email(ctx, str(corps.email)):
+        raise erreurs.conflit("Un compte existe déjà avec cet email.", code="email_deja_utilise")
+    mdp = corps.motDePasse.get_secret_value()
+    if len(mdp) < 8:
+        raise erreurs.validation("Mot de passe trop court.", {"motDePasse": "8 caractères minimum"})
+    u = Utilisateur(email=str(corps.email).lower(), nom=corps.nom, mot_de_passe_hash=hacher_mot_de_passe(mdp), idp_source="local", statut="actif")
+    ctx.session.add(u)
+    await ctx.session.flush()
+    org_id = None
+    if corps.organisation:
+        o = corps.organisation
+        if (await ctx.session.execute(select(Organisation).where(Organisation.nom == o.nom))).scalar_one_or_none():
+            raise erreurs.nom_deja_pris(o.nom)
+        org = Organisation(nom=o.nom, pays=o.pays, secteur=o.secteur, tva=o.tva, tenant_plan=o.tenantPlan, statut="active")
+        ctx.session.add(org)
+        await ctx.session.flush()
+        ctx.session.add(Membership(utilisateur_id=u.id, org_id=org.id, role="org_admin", scope_type="org"))
+        u.org_active_id = org.id
+        org_id = org.id
+    await ctx.session.flush()
+    rep = await service.ouvrir_session(ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent"), org_id=org_id)
+    await journaliser(ctx, action="auth.inscription", cible_type="utilisateur", cible_id=u.id, cible=u.email, org_id=org_id)
+    return rep
+
+
+def _invitation_contrat(i: Invitation, org_nom: str | None) -> dict[str, Any]:
+    statut = i.statut
+    if statut == "en_attente" and i.expire_le < maintenant():
+        statut = "expiree"
+    return {"id": i.id, "email": i.email, "orgId": i.org_id, "orgNom": org_nom, "role": i.role, "scopeType": i.scope_type, "scopeId": i.scope_id, "invitePar": i.invite_par, "expire": i.expire_le, "statut": statut}
+
+
+async def _invitation(ctx: Contexte, jeton: str) -> tuple[Invitation, Organisation | None]:
+    i = (await ctx.session.execute(select(Invitation).where(Invitation.jeton_hash == hacher_jeton(jeton)))).scalar_one_or_none()
+    if i is None:
+        raise erreurs.introuvable("Invitation")
+    return i, await ctx.session.get(Organisation, i.org_id)
+
+
+@router.get("/invitations/{jeton}", response_model=m.Invitation, response_model_exclude_none=True)
+async def obtenir_invitation(ctx: CtxPublic, jeton: str) -> Any:
+    i, o = await _invitation(ctx, jeton)
+    return _invitation_contrat(i, o.nom if o else None)
+
+
+@router.post("/invitations/{jeton}", response_model=m.Session, response_model_exclude_none=True)
+async def accepter_invitation(ctx: CtxPublic, jeton: str, corps: m.AuthInvitationsJetonPostRequest = Body(default=m.AuthInvitationsJetonPostRequest())) -> Any:
+    i, _ = await _invitation(ctx, jeton)
+    if i.statut != "en_attente":
+        raise erreurs.conflit("Invitation déjà utilisée ou révoquée.", code="invitation_close")
+    if i.expire_le < maintenant():
+        raise erreurs.conflit("Invitation expirée.", code="invitation_expiree")
+    u = await _utilisateur_par_email(ctx, i.email)
+    if u is None:
+        if not corps.nom or not corps.motDePasse:
+            raise erreurs.validation("Nom et mot de passe requis pour créer le compte.", {"nom": "requis", "motDePasse": "requis"})
+        u = Utilisateur(email=i.email.lower(), nom=corps.nom, mot_de_passe_hash=hacher_mot_de_passe(corps.motDePasse.get_secret_value()), statut="actif")
+        ctx.session.add(u)
+        await ctx.session.flush()
+    ctx.session.add(Membership(utilisateur_id=u.id, org_id=i.org_id, role=i.role, scope_type=i.scope_type, scope_id=i.scope_id))
+    i.statut = "acceptee"
+    u.org_active_id = u.org_active_id or i.org_id
+    await ctx.session.flush()
+    rep = await service.ouvrir_session(ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent"), org_id=i.org_id)
+    await journaliser(ctx, action="invitation.acceptee", cible_type="invitation", cible_id=i.id, cible=i.email, org_id=i.org_id)
+    return rep
+
+
+@router.post("/mot-de-passe/oubli", response_model=m.AccuseReception, response_model_exclude_none=True)
+async def demander_reinitialisation(ctx: CtxPublic, corps: m.AuthMotDePasseOubliPostRequest) -> Any:
+    u = await _utilisateur_par_email(ctx, str(corps.email))
+    if u is not None:
+        brut = jeton_opaque()
+        u.reinit_jeton_hash = hacher_jeton(brut)
+        u.reinit_expire_le = dans(3600)
+        # ponytail: pas d'envoi de courriel encore — le jeton est journalisé côté serveur (dev)
+        await journaliser(ctx, action="auth.reinitialisation_demandee", cible_type="utilisateur", cible_id=u.id, details={"jeton_dev": brut if ctx.reglages.env != "production" else "***"})
+    return {"reference": ctx.correlation_id, "message": "Si un compte existe, un lien de réinitialisation a été envoyé.", "delaiReponseHeures": 1}
+
+
+@router.post("/mot-de-passe/reinitialiser", response_model=m.Session, response_model_exclude_none=True)
+async def reinitialiser_mot_de_passe(ctx: CtxPublic, corps: m.AuthMotDePasseReinitialiserPostRequest) -> Any:
+    u = (await ctx.session.execute(select(Utilisateur).where(Utilisateur.reinit_jeton_hash == hacher_jeton(corps.jeton)))).scalar_one_or_none()
+    if u is None or not u.reinit_expire_le or u.reinit_expire_le < maintenant():
+        raise erreurs.validation("Jeton de réinitialisation invalide ou expiré.", {"jeton": "invalide"})
+    u.mot_de_passe_hash = hacher_mot_de_passe(corps.motDePasse.get_secret_value())
+    u.reinit_jeton_hash = None
+    for s in (await ctx.session.execute(select(SessionAuth).where(SessionAuth.utilisateur_id == u.id, SessionAuth.revoquee_le.is_(None)))).scalars():
+        s.revoquee_le = maintenant()
+    return await service.ouvrir_session(ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent"))
+
+
+@router.get("/sso/decouverte", response_model=m.DecouverteSso, response_model_exclude_none=True)
+async def decouvrir_sso(ctx: CtxPublic, email: str) -> Any:
+    domaine = email.rsplit("@", 1)[-1].lower() if "@" in email else email.lower()
+    o = (await ctx.session.execute(select(Organisation).where(Organisation.domaine == domaine))).scalar_one_or_none()
+    sso = (o.sso or {}) if o else {}
+    if not o or not sso.get("actif"):
+        return {"federationDisponible": False}
+    return {
+        "federationDisponible": True,
+        "orgId": o.id,
+        "orgNom": o.nom,
+        "protocole": sso.get("protocole", "oidc"),
+        "urlDemarrage": f"{ctx.reglages.url_publique}{ctx.reglages.prefixe_api}/auth/sso/demarrage?org={o.id}",
+        "libelleBouton": f"Continuer avec {o.nom}",
+    }
+
+
+@router.post("/sso/callback", response_model=m.Session, response_model_exclude_none=True)
+async def terminer_sso(ctx: CtxPublic, corps: m.AuthSsoCallbackPostRequest) -> Any:
+    # ponytail: l'échange de code OIDC (Authlib) arrive avec la fédération réelle ; refus explicite d'ici là
+    raise erreurs.non_porte("La fédération SSO n'est pas encore activée sur cette plateforme.")

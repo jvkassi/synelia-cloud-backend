@@ -1,60 +1,60 @@
 name: synelia-cloud-backend
 
 services:
-  blesta:
-    build:
-      context: ./blesta
-      dockerfile: Dockerfile
+  postgres:
+    image: postgres:18
     environment:
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Missing MARIADB_ROOT_PASSWORD}
-      MARIADB_BLESTA_PASSWORD: ${MARIADB_BLESTA_PASSWORD:?Missing MARIADB_BLESTA_PASSWORD}
-      BLESTA_DOMAIN: ${BLESTA_DOMAIN:-}
-      BLESTA_ADMIN_PASSWORD: ${BLESTA_ADMIN_PASSWORD:-}
-      FORCE_REINSTALL: ${FORCE_REINSTALL:-0}
-    networks:
-      - dokploy-network
-    volumes:
-      - blesta-data:/opt/blesta/data
-    depends_on:
-      - mariadb
+      POSTGRES_USER: synelia
+      POSTGRES_PASSWORD: synelia
+      POSTGRES_DB: synelia
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synelia"]
+      interval: 5s
+      retries: 20
 
-  mariadb:
-    image: docker.io/library/mariadb:11
-    environment:
-      MARIADB_DATABASE: blesta
-      MARIADB_USER: blesta
-      MARIADB_PASSWORD: ${MARIADB_BLESTA_PASSWORD:?Missing MARIADB_BLESTA_PASSWORD}
-      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Missing MARIADB_ROOT_PASSWORD}
-    networks:
-      - dokploy-network
-    volumes:
-      - mariadb-data:/var/lib/mysql
+  valkey:
+    image: valkey/valkey:8
+    ports: ["6379:6379"]
 
-  middleware:
-    build:
-      context: ./middleware
-      dockerfile: Dockerfile
+  temporal:
+    image: temporalio/auto-setup:1.28
+    depends_on: { postgres: { condition: service_healthy } }
     environment:
-      PORT: 4000
-      BLESTA_API_URL: ${BLESTA_API_URL:-}
-      BLESTA_API_USER: ${BLESTA_API_USER:-}
-      BLESTA_API_KEY: ${BLESTA_API_KEY:-}
-      OS_AUTH_URL: ${OS_AUTH_URL:-}
-      OS_USERNAME: ${OS_USERNAME:-}
-      OS_PASSWORD: ${OS_PASSWORD:-}
-      OS_PROJECT_NAME: ${OS_PROJECT_NAME:-admin}
-      OS_USER_DOMAIN_NAME: ${OS_USER_DOMAIN_NAME:-Default}
-      OS_PROJECT_DOMAIN_NAME: ${OS_PROJECT_DOMAIN_NAME:-Default}
-      OS_REGION_NAME: ${OS_REGION_NAME:-RegionOne}
-    networks:
-      - dokploy-network
-    depends_on:
-      - blesta
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: synelia
+      POSTGRES_PWD: synelia
+      POSTGRES_SEEDS: postgres
+    ports: ["7233:7233"]
+
+  temporal-ui:
+    image: temporalio/ui:2.34.0
+    environment: { TEMPORAL_ADDRESS: temporal:7233 }
+    ports: ["8233:8080"]
+
+  mailpit:
+    image: axllent/mailpit
+    ports: ["8025:8025", "1025:1025"]
+
+  api:
+    build: .
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      SYNELIA_ENV: local
+      SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:synelia@postgres:5432/synelia
+      SYNELIA_TEMPORAL_ADRESSE: temporal:7233
+      SYNELIA_VALKEY_URL: redis://valkey:6379/0
+    ports: ["4000:4000"]
+
+  worker:
+    build: .
+    command: ["worker"]
+    depends_on: [api, temporal]
+    environment:
+      SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:synelia@postgres:5432/synelia
+      SYNELIA_TEMPORAL_ADRESSE: temporal:7233
 
 volumes:
-  blesta-data: {}
-  mariadb-data: {}
-
-networks:
-  dokploy-network:
-    external: true
+  pgdata: {}
