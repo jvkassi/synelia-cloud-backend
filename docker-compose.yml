@@ -11,6 +11,7 @@ services:
       BLESTA_DOMAIN: ${BLESTA_DOMAIN:-}
       BLESTA_ADMIN_PASSWORD: ${BLESTA_ADMIN_PASSWORD:-}
       FORCE_REINSTALL: ${FORCE_REINSTALL:-0}
+      LOOKUP_LICENSE: ${LOOKUP_LICENSE:-0}
     networks:
       - dokploy-network
     volumes:
