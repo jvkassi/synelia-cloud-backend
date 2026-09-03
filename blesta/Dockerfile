@@ -87,7 +87,7 @@ COPY docker/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 RUN mkdir -p /run/nginx \
-    && chown -R nobody:nobody /opt/blesta/blesta /opt/blesta/data /run/nginx /var/lib/nginx /var/log/nginx
+    && chown -R nobody:nobody /opt/blesta/blesta /run/nginx /var/lib/nginx /var/log/nginx
 
 VOLUME ["/opt/blesta/data"]
 EXPOSE 8080
