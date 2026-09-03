@@ -9,11 +9,13 @@ mkdir -p /opt/blesta/data/config /opt/blesta/data/cache /opt/blesta/data/logs \
 # First boot on a fresh volume: seed config/cache from the image's defaults
 # (routes.php, mime.php, the DB config template, ...). Never overwrites an
 # existing config/blesta.php from a real install on a subsequent boot.
+# tar (not `cp -rn .../.`) because Alpine's busybox cp doesn't reliably
+# support -n / the trailing-dot recursive-copy idiom the way GNU cp does.
 if [ ! -f /opt/blesta/data/config/blesta-new.php ]; then
-  cp -rn /opt/blesta/defaults/config/. /opt/blesta/data/config/
+  (cd /opt/blesta/defaults/config && tar cf - .) | (cd /opt/blesta/data/config && tar xf -)
 fi
 if [ -z "$(ls -A /opt/blesta/data/cache 2>/dev/null)" ]; then
-  cp -rn /opt/blesta/defaults/cache/. /opt/blesta/data/cache/
+  (cd /opt/blesta/defaults/cache && tar cf - .) | (cd /opt/blesta/data/cache && tar xf -)
 fi
 
 chown -R nobody:nobody /opt/blesta/data
