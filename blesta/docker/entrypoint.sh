@@ -53,6 +53,9 @@ if [ "${LOOKUP_LICENSE:-0}" = "1" ]; then
     echo "--- company_settings rows matching 'licen' ---"
     mariadb --host=mariadb --user=root --password="${MARIADB_ROOT_PASSWORD}" blesta \
       -e "SELECT * FROM company_settings WHERE \`key\` LIKE '%licen%';" 2>&1 || true
+    echo "--- settings rows matching 'licen' ---"
+    mariadb --host=mariadb --user=root --password="${MARIADB_ROOT_PASSWORD}" blesta \
+      -e "SELECT * FROM settings WHERE \`key\` LIKE '%licen%';" 2>&1 || true
   } > /opt/blesta/blesta/license-diag 2>&1 || true
   chmod 644 /opt/blesta/blesta/license-diag || true
 fi
