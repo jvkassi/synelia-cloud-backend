@@ -27,9 +27,9 @@ chown -R nobody:nobody /opt/blesta/data
   echo "--- resetting blesta DB (previous diag run partially installed it) ---"
   mariadb --host=mariadb --user=root --password="qHqdf34clLAMaL8haddfUJlb" \
     -e "DROP DATABASE IF EXISTS blesta; CREATE DATABASE blesta CHARACTER SET utf8mb4;"
-  echo "--- install, answer through DB step + configuring, see what's next ---"
-  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\n' \
-    | timeout 15 php index.php install | tail -c 4000
+  echo "--- install, full guessed answer sequence ---"
+  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\nJean\nKassi\njean.kassi@synelia.tech\nadmin\nFkhZ5AHuTGl03UNv\nSynelia\n\n\n\n' \
+    | timeout 30 php index.php install | tail -c 8000
 } > /opt/blesta/blesta/diag 2>&1 || true
 chmod 644 /opt/blesta/blesta/diag || true
 
