@@ -126,7 +126,7 @@ export class OpenstackProvisioner implements Provisioner {
 
   private mapServer(server: any): VM {
     const ips: VM['ips'] = [];
-    for (const [networkName, addresses] of Object.entries<any[]>(server.addresses ?? {})) {
+    for (const addresses of Object.values<any[]>(server.addresses ?? {})) {
       for (const addr of addresses) {
         ips.push({
           adresse: addr.addr,
@@ -141,7 +141,7 @@ export class OpenstackProvisioner implements Provisioner {
       id: server.id,
       espaceId: server.tenant_id ?? '',
       nom: server.name,
-      os: server.image?.id ? 'unknown' : 'unknown', // Glance lookup not wired up yet
+      os: 'unknown', // Glance lookup not wired up yet -- server.image.id -> image name needs a Glance call
       vcpu: flavor.vcpus ?? 0,
       ramGo: flavor.ram ? Math.round(flavor.ram / 1024) : 0,
       diskGo: flavor.disk ?? 0,
