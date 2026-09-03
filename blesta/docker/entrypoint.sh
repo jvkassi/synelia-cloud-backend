@@ -20,6 +20,17 @@ fi
 
 chown -R nobody:nobody /opt/blesta/data
 
+# Temporary diagnostic: inspect the CLI installer's interface (help text,
+# and what it prompts for when given empty stdin) to script it. Remove
+# once the install flow is scripted for real.
+{
+  echo "--- install --help ---"
+  cd /opt/blesta/blesta && timeout 5 php index.php install --help
+  echo "--- install with empty stdin (first prompt) ---"
+  cd /opt/blesta/blesta && printf '' | timeout 5 php index.php install
+} > /opt/blesta/blesta/diag 2>&1 || true
+chmod 644 /opt/blesta/blesta/diag || true
+
 trap 'kill -TERM ${PHPFPM_PID:-} ${NGINX_PID:-} 2>/dev/null || true; wait' TERM INT
 
 php-fpm -F &
