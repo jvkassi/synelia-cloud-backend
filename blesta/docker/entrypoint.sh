@@ -29,7 +29,7 @@ chown -R nobody:nobody /opt/blesta/data
     -e "DROP DATABASE IF EXISTS blesta; CREATE DATABASE blesta CHARACTER SET utf8mb4;"
   rm -f /opt/blesta/data/config/blesta.php
   echo "--- install, full guessed answer sequence ---"
-  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\nJean\nKassi\njean.kassi@synelia.tech\nadmin\nFkhZ5AHuTGl03UNv\nSynelia\n\n\n\n' \
+  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\nJean\nKassi\njean.kassi@synelia.tech\nadmin\nFkhZ5AHuTGl03UNv\nFkhZ5AHuTGl03UNv\nSynelia\n\n\n\n' \
     | timeout 40 php index.php install | tail -c 8000
 } > /opt/blesta/blesta/diag 2>&1 || true
 chmod 644 /opt/blesta/blesta/diag || true
