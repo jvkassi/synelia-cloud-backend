@@ -29,12 +29,12 @@ chown -R nobody:nobody /opt/blesta/data
     -e "DROP DATABASE IF EXISTS blesta; CREATE DATABASE blesta CHARACTER SET utf8mb4;"
   rm -f /opt/blesta/data/config/blesta.php
   echo "--- install, full guessed answer sequence ---"
-  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\nJean\nKassi\njean.kassi@synelia.tech\nadmin\nFkhZ5AHuTGl03UNv\nFkhZ5AHuTGl03UNv\nSynelia\n\n\n\n' \
-    | timeout 8 php index.php install > /tmp/install_full.log 2>&1
+  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\n\nJean\nKassi\njean.kassi@synelia.tech\nadmin\nFkhZ5AHuTGl03UNv\nFkhZ5AHuTGl03UNv\nSynelia\n\n\n\n' \
+    | timeout 10 php index.php install > /tmp/install_full.log 2>&1
   echo "--- last 2000 bytes ---"
   tail -c 2000 /tmp/install_full.log
-  echo "--- around the FIRST 'First Name' occurrence (context) ---"
-  grep -n -m1 -A20 "First Name" /tmp/install_full.log
+  echo "--- around the FIRST 'License Key' occurrence (context) ---"
+  grep -n -m1 -A25 "License Key" /tmp/install_full.log
   echo "--- total bytes: $(wc -c < /tmp/install_full.log) ---"
 } > /opt/blesta/blesta/diag 2>&1 || true
 chmod 644 /opt/blesta/blesta/diag || true
