@@ -23,8 +23,10 @@ chown -R nobody:nobody /opt/blesta/data
 # Remove once the 502 is root-caused.
 {
   echo "--- php -v ---"; php -v
-  echo "--- php-fpm -t ---"; php-fpm -t
-  echo "--- ls /opt/ioncube ---"; ls -la /opt/ioncube
+  echo "--- ls data/config ---"; ls -la /opt/blesta/data/config
+  echo "--- CLI run of index.php ---"
+  cd /opt/blesta/blesta && REQUEST_URI=/ SCRIPT_NAME=/index.php php index.php
+  echo "--- end CLI run (exit $?) ---"
 } > /opt/blesta/blesta/diag 2>&1 || true
 chmod 644 /opt/blesta/blesta/diag || true
 
