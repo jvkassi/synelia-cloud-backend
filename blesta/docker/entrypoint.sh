@@ -24,10 +24,8 @@ chown -R nobody:nobody /opt/blesta/data
 # and what it prompts for when given empty stdin) to script it. Remove
 # once the install flow is scripted for real.
 {
-  echo "--- install --help ---"
-  cd /opt/blesta/blesta && timeout 5 php index.php install --help
-  echo "--- install with empty stdin (first prompt) ---"
-  cd /opt/blesta/blesta && printf '' | timeout 5 php index.php install
+  echo "--- install, answer Y to terms only ---"
+  cd /opt/blesta/blesta && printf 'Y\n' | timeout 3 php index.php install | head -c 4000
 } > /opt/blesta/blesta/diag 2>&1 || true
 chmod 644 /opt/blesta/blesta/diag || true
 
