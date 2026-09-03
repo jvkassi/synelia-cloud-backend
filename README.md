@@ -1,7 +1,15 @@
 # synelia-cloud-backend
 
 Real backend stack for [synelia-cloud](https://github.com/jvkassi/synelia-cloud) (currently a mock-only
-Next.js frontend). Target architecture:
+Next.js frontend).
+
+**Live:** Blesta's install wizard is up at
+https://synelia-blesta-94b350-51-68-240-164.sslip.io/ (a Dokploy-generated
+sslip.io domain — a real custom domain can replace it any time via
+`domain.create` / the Dokploy dashboard). Finishing the install (admin
+account, license) is a manual step — see `blesta/README.md`.
+
+Target architecture:
 
 ```
 synelia-cloud (frontend) -> middleware/ (this repo) -> Blesta (billing/provisioning) -> OpenStack (infra)

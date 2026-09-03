@@ -23,11 +23,15 @@ problem to work around:
 
 ## One-time manual setup (you have to do this — it's an interactive web wizard)
 
-1. Once deployed, visit the app's URL and complete Blesta's install wizard:
-   database step should show already-connected (host `mariadb`, the
-   `blesta`/`MARIADB_BLESTA_PASSWORD` credentials), then create the admin
-   account. Choosing **"Start a 30-day free trial"** when asked for a
-   license key requires no account or card.
+1. Once deployed, visit the app's URL and complete Blesta's install wizard.
+   The database step is **not** pre-filled — enter:
+   - Host: `mariadb`, Port: `3306`, Database: `blesta`, Username: `blesta`
+   - Password: the `MARIADB_BLESTA_PASSWORD` value set in Dokploy's
+     compose env (ask whoever provisioned it, or check the Dokploy
+     dashboard — it isn't in this repo).
+
+   Then create the admin account. Choosing **"Start a 30-day free trial"**
+   when asked for a license key requires no account or card.
 2. Log in as admin, go to **Settings -> System -> General -> Basic Setup**
    and set:
    - **Uploads Directory** -> `/opt/blesta/data/uploads/`
