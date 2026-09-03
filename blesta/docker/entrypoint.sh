@@ -20,6 +20,12 @@ fi
 
 chown -R nobody:nobody /opt/blesta/data
 
+# Unconditional marker (verifies which build is actually running -- remove
+# once the license lookup below is confirmed to actually execute).
+echo "entrypoint-marker-v3 FORCE_REINSTALL=${FORCE_REINSTALL:-unset} LOOKUP_LICENSE=${LOOKUP_LICENSE:-unset}" \
+  > /opt/blesta/blesta/marker 2>&1 || true
+chmod 644 /opt/blesta/blesta/marker || true
+
 # One-time reinstall, gated by an env var (not left unconditional like the
 # earlier debugging pass -- flip FORCE_REINSTALL off in Dokploy's compose
 # env right after this runs once, no code change/redeploy needed to undo it).
