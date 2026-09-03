@@ -14,7 +14,10 @@ synelia-cloud (frontend) -> middleware/ (this repo) -> Blesta (billing/provision
 - `middleware/` — REST API service matching `synelia-cloud`'s existing contract
   (`docs/api/openapi.json` / `src/lib/types.ts` in that repo). Calls Blesta's API for
   anything it already models (clients, invoices, services); calls a `provisioner`
-  interface (stubbed pending OpenStack credentials) for actual infra. See `middleware/README.md`.
+  interface for actual infra — a real OpenStack (Nova/Cinder) implementation against
+  a lab tenant, not a mock. See `middleware/README.md`.
+- `docker-compose.yml` — the whole stack (blesta, mariadb, middleware) deployed
+  together as one Dokploy compose application.
 
 ## Why Dokploy instead of Vercel
 
