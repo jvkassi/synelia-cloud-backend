@@ -20,29 +20,6 @@ fi
 
 chown -R nobody:nobody /opt/blesta/data
 
-# Temporary diagnostic: inspect the CLI installer's interface (help text,
-# and what it prompts for when given empty stdin) to script it. Remove
-# once the install flow is scripted for real.
-{
-  echo "--- resetting blesta DB and config (prior attempt left config pointing at an empty DB) ---"
-  mariadb --host=mariadb --user=root --password="qHqdf34clLAMaL8haddfUJlb" \
-    -e "DROP DATABASE IF EXISTS blesta; CREATE DATABASE blesta CHARACTER SET utf8mb4;"
-  rm -f /opt/blesta/data/config/blesta.php
-  echo "--- install, full guessed answer sequence ---"
-  # Exact sequence read from app/controllers/install.php's CLI flow:
-  # agree -> db host/port/name/user/pass -> (config write + postInstall,
-  # no prompts) -> domain (blank=default hostname) -> license key
-  # (blank=auto trial) -> first/last/email/username/password. No confirm
-  # password or company/timezone prompts exist (recovery_email and
-  # confirm_password are set programmatically from the same values).
-  cd /opt/blesta/blesta && printf 'Y\nmariadb\n3306\nblesta\nblesta\nGIZbCU8XDCkexdj8IzeUfBhP\n\n\nJean\nKassi\njean.kassi@synelia.tech\nadmin\nFkhZ5AHuTGl03UNv\n' \
-    | timeout 30 php index.php install > /tmp/install_full.log 2>&1
-  echo "--- full output ---"
-  cat /tmp/install_full.log
-  echo "--- total bytes: $(wc -c < /tmp/install_full.log) ---"
-} > /opt/blesta/blesta/diag 2>&1 || true
-chmod 644 /opt/blesta/blesta/diag || true
-
 trap 'kill -TERM ${PHPFPM_PID:-} ${NGINX_PID:-} 2>/dev/null || true; wait' TERM INT
 
 php-fpm -F &
