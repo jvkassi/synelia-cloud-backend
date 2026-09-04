@@ -78,8 +78,9 @@ class ExecuteurEspaceCreate(Executeur):
             a.poser_quotas(c["projet_id"], e.quota.vcpu, e.quota.ramGo, e.quota.stockageTo)
         elif index == 2:
             c.update(a.creer_reseau(c["projet_id"], f"{e.code}-net", e.cidr))
+            await depot.definir_secrets(ctx, e.id, {"projet_id": c["projet_id"], "reseau_id": c["reseau_id"]})
         elif index == 3:
-            ac = a.creer_application_credential(c["projet_id"])
+            ac = a.creer_application_credential(c["projet_id"], c.get("domaine_id"))
             await depot.definir_secrets(
                 ctx,
                 e.id,

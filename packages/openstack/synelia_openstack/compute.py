@@ -215,29 +215,27 @@ class ComputeOpenStack(ComputeSimule):
         return out
 
     def creer_serveur(self, **kw: Any) -> dict[str, Any]:
-        c = self._c()
-        s = c.compute.create_server(
-            name=kw["nom"],
-            image_id=kw["image_id"],
-            flavor_id=kw["gabarit_id"],
-            networks=[{"uuid": kw["reseau_id"]}] if kw.get("reseau_id") else "auto",
-            key_name=kw.get("cle_ssh"),
-            user_data=kw.get("cloud_init"),
-            metadata={
-                "synelia_org": kw.get("org_id", ""),
-                "synelia_espace": kw.get("espace_id", ""),
-            },
-        )
+        ident = kw.get("identifiants") or {}
+        if ident.get("application_credential_id"):
+            from synelia_openstack.fabrique import connexion_avec
+
+            c = connexion_avec(ident["application_credential_id"], ident["application_credential_secret"])
+        else:
+            c = self._c()
+        params: dict[str, Any] = {
+            "name": kw["nom"],
+            "image_id": kw["image_id"],
+            "flavor_id": kw["gabarit_id"],
+            "networks": [{"uuid": kw["reseau_id"]}] if kw.get("reseau_id") else "auto",
+            "metadata": {"synelia_org": str(kw.get("org_id") or ""), "synelia_espace": str(kw.get("espace_id") or "")},
+        }
+        if kw.get("cle_ssh"):
+            params["key_name"] = kw["cle_ssh"]
+        if kw.get("cloud_init"):
+            params["user_data"] = kw["cloud_init"]
+        s = c.compute.create_server(**params)
         s = c.compute.wait_for_server(s, wait=600)
-        ip = next(
-            (
-                a["addr"]
-                for nets in (s.addresses or {}).values()
-                for a in nets
-                if a.get("version") == 4
-            ),
-            None,
-        )
+        ip = next((a["addr"] for nets in (s.addresses or {}).values() for a in nets if a.get("version") == 4), None)
         return {"id": s.id, "statut": s.status, "ip_privee": ip}
 
     def action(self, serveur_id: str, action: str) -> None:

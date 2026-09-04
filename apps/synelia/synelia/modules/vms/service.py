@@ -38,11 +38,17 @@ class ExecuteurVmCreate(Executeur):
         if index == 1:
             vm = await depot.obtenir(ctx, travail.cible_id or "")
             entre = travail.entree or {}
+            from synelia.modules.espaces.service import depot as depot_espaces
+
+            secrets_espace = await depot_espaces.secrets(ctx, vm.espaceId)
             srv = amont().creer_serveur(
                 nom=vm.nom,
                 image_id=entre.get("imageId"),
                 gabarit_id=entre.get("gabarit"),
-                reseau_id=entre.get("reseauId"),
+                reseau_id=entre.get("reseauId") or secrets_espace.get("reseau_id"),
+                identifiants=secrets_espace,
+                org_id=ctx.org_id_ou_none,
+                espace_id=vm.espaceId,
                 cle_ssh=entre.get("cleSsh"),
                 cloud_init=entre.get("cloudInit"),
             )

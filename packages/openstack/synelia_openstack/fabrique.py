@@ -44,3 +44,20 @@ def connexion(region: str | None = None) -> Any:
     for service, url in r.os_endpoint_overrides.items():
         conn.config.config[f"{service}_endpoint_override"] = url
     return conn
+
+
+def connexion_avec(application_credential_id: str, secret: str, region: str | None = None) -> Any:
+    """Connexion scellée au projet d'un Espace Cloud, par son *application credential*."""
+    import openstack  # type: ignore[import-not-found]
+
+    r = reglages()
+    conn = openstack.connect(
+        auth_type="v3applicationcredential",
+        auth_url=r.os_auth_url,
+        application_credential_id=application_credential_id,
+        application_credential_secret=secret,
+        region_name=region or r.os_region,
+    )
+    for service, url in r.os_endpoint_overrides.items():
+        conn.config.config[f"{service}_endpoint_override"] = url
+    return conn

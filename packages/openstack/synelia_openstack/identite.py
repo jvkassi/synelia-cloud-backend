@@ -28,7 +28,7 @@ class IdentiteSimule:
             "routeur_id": f"rtr-{nouvel_id()[:8]}",
         }
 
-    def creer_application_credential(self, projet_id: str) -> dict[str, str]:
+    def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         return {"id": f"ac-{nouvel_id()[:8]}", "secret": jeton_opaque(24)}
 
     def supprimer_projet(self, projet_id: str) -> None:
@@ -75,12 +75,37 @@ class IdentiteOpenStack(IdentiteSimule):
         c.network.add_interface_to_router(rtr, subnet_id=sub.id)
         return {"reseau_id": net.id, "sous_reseau_id": sub.id, "routeur_id": rtr.id}
 
-    def creer_application_credential(self, projet_id: str) -> dict[str, str]:
+    def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
+        """Un utilisateur de service par projet (jamais d'humain dans Keystone), rôle `member`,
+        puis une *application credential* scellée au projet : c'est elle que le backend utilisera."""
+        import openstack  # type: ignore[import-not-found]
+
+        from synelia_kernel.config import reglages
+
         c = self._conn()
-        ac = c.identity.create_application_credential(
-            user=c.current_user_id, name=f"synelia-{projet_id[:8]}", roles=[{"name": "member"}]
+        projet = c.identity.get_project(projet_id)
+        dom = domaine_id or projet.domain_id
+        nom = f"svc-{projet_id[:8]}"
+        mdp = jeton_opaque(24)
+        user = c.identity.find_user(nom, domain_id=dom)
+        if user is None:
+            user = c.identity.create_user(name=nom, password=mdp, domain_id=dom, enabled=True, description="service Synelia")
+        else:
+            c.identity.update_user(user, password=mdp)
+        role = c.identity.find_role("member") or c.identity.find_role("Member")
+        c.identity.assign_project_role_to_user(projet, user, role)
+        r = reglages()
+        scope = openstack.connect(
+            auth_type="v3password",
+            auth_url=r.os_auth_url,
+            username=nom,
+            password=mdp,
+            user_domain_id=dom,
+            project_id=projet_id,
+            region_name=r.os_region,
         )
-        return {"id": ac.id, "secret": ac.secret}
+        ac = scope.identity.create_application_credential(user=user.id, name=f"synelia-{projet_id[:8]}")
+        return {"id": ac.id, "secret": ac.secret, "utilisateur_id": user.id}
 
     def supprimer_projet(self, projet_id: str) -> None:
         self._conn().identity.delete_project(projet_id, ignore_missing=True)

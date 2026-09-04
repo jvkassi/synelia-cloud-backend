@@ -21,6 +21,7 @@ Un module enregistre son exécuteur par type :
 from __future__ import annotations
 
 import asyncio
+import copy
 import os
 from collections.abc import Callable
 from typing import Any
@@ -182,13 +183,13 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
     debut = maintenant()
     for i in range(depuis, len(taches)):
         taches[i]["statut"] = "running"
-        travail.taches = list(taches)
+        travail.taches = copy.deepcopy(taches)
         await ctx.session.flush()
         try:
             message = await ex.etape(ctx, travail, i, taches[i]["nom"])
         except asyncio.CancelledError:
             taches[i]["statut"] = "failed"
-            travail.taches = list(taches)
+            travail.taches = copy.deepcopy(taches)
             travail.statut = "rolled_back"
             await ctx.session.flush()
             raise
@@ -205,7 +206,7 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
             )
             taches[i]["statut"] = "failed"
             taches[i]["message"] = message
-            travail.taches = list(taches)
+            travail.taches = copy.deepcopy(taches)
             travail.statut = "failed"
             travail.erreur = {
                 "message": f"Étape {i + 1} « {taches[i]['nom']} » : {message}",
@@ -225,7 +226,7 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
         taches[i]["statut"] = "ok"
         if message:
             taches[i]["message"] = message
-        travail.taches = list(taches)
+        travail.taches = copy.deepcopy(taches)
         await ctx.session.flush()
     try:
         await ex.terminer(ctx, travail)
@@ -248,7 +249,7 @@ async def relancer(ctx: Contexte, travail: Travail) -> Travail:
     for t in taches[depuis:]:
         t["statut"] = "pending"
         t.pop("message", None)
-    travail.taches = taches
+    travail.taches = copy.deepcopy(taches)
     travail.erreur = None
     travail.statut = "queued"
     await ctx.session.flush()
@@ -273,7 +274,7 @@ async def annuler(ctx: Contexte, travail: Travail) -> Travail:
         if t["statut"] in {"pending", "running"}:
             t["statut"] = "failed"
             t["message"] = "Annulé à la demande de l'utilisateur."
-    travail.taches = taches
+    travail.taches = copy.deepcopy(taches)
     ex = executeur_pour(travail.type)
     if ex.compensable:
         idx = next((i for i, t in enumerate(taches) if t["statut"] == "failed"), len(taches) - 1)
