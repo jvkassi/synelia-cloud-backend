@@ -1,6 +1,6 @@
 """Couverture du contrat : opérations du contrat ↔ routes de l'application (servie ⊇ contrat).
 
-    uv run python tools/contrat_diff.py [--strict]"""
+uv run python tools/contrat_diff.py [--strict]"""
 
 from __future__ import annotations
 
@@ -9,17 +9,15 @@ from collections import defaultdict
 
 
 def executer(strict: bool = False) -> int:
-    from fastapi.routing import APIRoute
     from synelia.app import creer_app
     from synelia_contract.operations import OPERATIONS
 
     app = creer_app()
     servies: set[tuple[str, str]] = set()
-    for route in app.routes:
-        if isinstance(route, APIRoute):
-            chemin = route.path.removeprefix("/v1")
-            for meth in route.methods:
-                servies.add((meth, chemin))
+    for chemin, item in app.openapi()["paths"].items():
+        for meth in item:
+            if meth in ("get", "post", "put", "patch", "delete"):
+                servies.add((meth.upper(), chemin.removeprefix("/v1")))
     par_tag: dict[str, list[int]] = defaultdict(lambda: [0, 0])
     manquantes = []
     for o in OPERATIONS:

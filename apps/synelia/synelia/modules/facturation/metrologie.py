@@ -18,7 +18,9 @@ async def consommation(ctx: Contexte, periode: str, espace_id: str | None = None
     debut = date(annee, mois, 1)
     fin = (debut.replace(day=28) + timedelta(days=4)).replace(day=1)
     aujourdhui = date.today()
-    vms = await Depot("vm", m.Vm).tous(ctx, filtre=lambda v: espace_id is None or v.espaceId == espace_id)
+    vms = await Depot("vm", m.Vm).tous(
+        ctx, filtre=lambda v: espace_id is None or v.espaceId == espace_id
+    )
     vcpu = sum(v.vcpu for v in vms)
     ram = sum(v.ramGo for v in vms)
     to = sum(v.diskGo for v in vms) / 1024
@@ -26,10 +28,30 @@ async def consommation(ctx: Contexte, periode: str, espace_id: str | None = None
     jours = []
     j = debut
     while j < fin and j <= aujourdhui:
-        montant = vcpu * 24 * PRIX["vcpu_heure"] + ram * 24 * PRIX["ram_go_heure"] + int(to * PRIX["stockage_to_jour"]) + ips * PRIX["ip_publique_jour"]
-        jours.append({"date": j, "vcpuHeures": vcpu * 24, "ramGoHeures": ram * 24, "stockageToJour": round(to, 3), "egressGo": 0, "montant": montant})
+        montant = (
+            vcpu * 24 * PRIX["vcpu_heure"]
+            + ram * 24 * PRIX["ram_go_heure"]
+            + int(to * PRIX["stockage_to_jour"])
+            + ips * PRIX["ip_publique_jour"]
+        )
+        jours.append(
+            {
+                "date": j,
+                "vcpuHeures": vcpu * 24,
+                "ramGoHeures": ram * 24,
+                "stockageToJour": round(to, 3),
+                "egressGo": 0,
+                "montant": montant,
+            }
+        )
         j += timedelta(days=1)
     total = sum(x["montant"] for x in jours)
     nb = max(1, len(jours))
     prevision = int(total / nb * (fin - debut).days)
-    return {"periode": periode, "jours": jours, "total": total, "prevision": prevision, "totalMoisPrecedent": 0}
+    return {
+        "periode": periode,
+        "jours": jours,
+        "total": total,
+        "prevision": prevision,
+        "totalMoisPrecedent": 0,
+    }

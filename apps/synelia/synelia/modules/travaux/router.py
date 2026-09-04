@@ -19,13 +19,22 @@ router = APIRouter(prefix="/travaux", tags=["Travaux de provisioning"])
 
 async def _travail(ctx: Contexte, travail_id: str) -> Travail:
     t = await ctx.session.get(Travail, travail_id)
-    if t is None or (t.org_id != ctx.org_id_ou_none and not (ctx.principal and ctx.principal.est_admin_plateforme)):
+    if t is None or (
+        t.org_id != ctx.org_id_ou_none
+        and not (ctx.principal and ctx.principal.est_admin_plateforme)
+    ):
         raise erreurs.introuvable("Travail", travail_id)
     return t
 
 
 @router.get("", response_model=m.TravauxGetResponse, response_model_exclude_none=True)
-async def lister_travaux(ctx: Ctx, page: Page, statut: str | None = None, type: str | None = None, depuis: str | None = None) -> Any:  # noqa: A002
+async def lister_travaux(
+    ctx: Ctx,
+    page: Page,
+    statut: str | None = None,
+    type: str | None = None,
+    depuis: str | None = None,
+) -> Any:  # noqa: A002
     q = select(Travail).where(Travail.org_id == ctx.org_id).order_by(Travail.started_at.desc())
     if statut:
         q = q.where(Travail.statut == statut)
@@ -42,11 +51,21 @@ async def obtenir_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
     return vers_contrat(await _travail(ctx, travailId))
 
 
-@router.post("/{travailId}/relance", response_model=m.TravailProvisioning, status_code=status.HTTP_202_ACCEPTED, response_model_exclude_none=True)
+@router.post(
+    "/{travailId}/relance",
+    response_model=m.TravailProvisioning,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
+)
 async def relancer_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
     return vers_contrat(await moteur.relancer(ctx, await _travail(ctx, travailId)))
 
 
-@router.post("/{travailId}/annulation", response_model=m.TravailProvisioning, status_code=status.HTTP_202_ACCEPTED, response_model_exclude_none=True)
+@router.post(
+    "/{travailId}/annulation",
+    response_model=m.TravailProvisioning,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
+)
 async def annuler_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
     return vers_contrat(await moteur.annuler(ctx, await _travail(ctx, travailId)))

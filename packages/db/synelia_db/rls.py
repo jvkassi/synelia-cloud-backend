@@ -12,7 +12,15 @@ from sqlalchemy.ext.asyncio import AsyncEngine
 
 org_id_transaction: ContextVar[str | None] = ContextVar("org_id_transaction", default=None)
 
-TABLES_TENANT = ("ressources", "travaux", "audit", "memberships", "invitations", "cles_api", "sessions_auth")
+TABLES_TENANT = (
+    "ressources",
+    "travaux",
+    "audit",
+    "memberships",
+    "invitations",
+    "cles_api",
+    "sessions_auth",
+)
 
 
 def brancher(engine: AsyncEngine) -> None:

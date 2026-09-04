@@ -88,7 +88,10 @@ class Depot(Generic[T]):
         statut: str | None = None,
         filtre: Callable[[T], bool] | None = None,
     ) -> list[T]:
-        items = [self._vers_modele(r) for r in await self.lignes(ctx, org_id=org_id, parent_id=parent_id, statut=statut)]
+        items = [
+            self._vers_modele(r)
+            for r in await self.lignes(ctx, org_id=org_id, parent_id=parent_id, statut=statut)
+        ]
         return [x for x in items if filtre(x)] if filtre else items
 
     async def lister(
@@ -103,18 +106,30 @@ class Depot(Generic[T]):
         tri_defaut: str | None = None,
     ) -> dict[str, Any]:
         """`{ donnees, pagination }` du contrat."""
-        items = await self.tous(ctx, org_id=org_id, parent_id=parent_id, statut=statut, filtre=filtre)
-        return filtrer_trier_paginer(items, page, champs_recherche=self.champs_recherche, tri_defaut=tri_defaut)
+        items = await self.tous(
+            ctx, org_id=org_id, parent_id=parent_id, statut=statut, filtre=filtre
+        )
+        return filtrer_trier_paginer(
+            items, page, champs_recherche=self.champs_recherche, tri_defaut=tri_defaut
+        )
 
-    async def compter(self, ctx: Contexte, *, org_id: str | None = None, parent_id: str | None = None) -> int:
-        q = select(func.count()).select_from(Ressource).where(Ressource.type == self.type, Ressource.supprime_le.is_(None))
+    async def compter(
+        self, ctx: Contexte, *, org_id: str | None = None, parent_id: str | None = None
+    ) -> int:
+        q = (
+            select(func.count())
+            .select_from(Ressource)
+            .where(Ressource.type == self.type, Ressource.supprime_le.is_(None))
+        )
         if not self.plateforme:
             q = q.where(Ressource.org_id == self._org(ctx, org_id))
         if parent_id is not None:
             q = q.where(Ressource.parent_id == parent_id)
         return int((await ctx.session.execute(q)).scalar_one())
 
-    async def ligne(self, ctx: Contexte, id_: str, *, org_id: str | None = None, inclure_supprimes: bool = False) -> Ressource | None:
+    async def ligne(
+        self, ctx: Contexte, id_: str, *, org_id: str | None = None, inclure_supprimes: bool = False
+    ) -> Ressource | None:
         q = self._requete(ctx, org_id, inclure_supprimes).where(Ressource.id == id_)
         return (await ctx.session.execute(q)).scalar_one_or_none()
 
@@ -128,14 +143,18 @@ class Depot(Generic[T]):
             raise erreurs.introuvable(self.libelle, id_)
         return self._vers_modele(r)
 
-    async def par_nom(self, ctx: Contexte, nom: str, *, org_id: str | None = None, parent_id: str | None = None) -> T | None:
+    async def par_nom(
+        self, ctx: Contexte, nom: str, *, org_id: str | None = None, parent_id: str | None = None
+    ) -> T | None:
         q = self._requete(ctx, org_id).where(Ressource.nom == nom)
         if parent_id is not None:
             q = q.where(Ressource.parent_id == parent_id)
         r = (await ctx.session.execute(q)).scalars().first()
         return self._vers_modele(r) if r else None
 
-    async def exiger_nom_libre(self, ctx: Contexte, nom: str, *, org_id: str | None = None, parent_id: str | None = None) -> None:
+    async def exiger_nom_libre(
+        self, ctx: Contexte, nom: str, *, org_id: str | None = None, parent_id: str | None = None
+    ) -> None:
         if await self.par_nom(ctx, nom, org_id=org_id, parent_id=parent_id) is not None:
             raise erreurs.nom_deja_pris(nom)
 
@@ -172,7 +191,9 @@ class Depot(Generic[T]):
         await ctx.session.flush()
         return modele
 
-    async def remplacer(self, ctx: Contexte, id_: str, modele: T, *, org_id: str | None = None) -> T:
+    async def remplacer(
+        self, ctx: Contexte, id_: str, modele: T, *, org_id: str | None = None
+    ) -> T:
         r = await self.ligne(ctx, id_, org_id=org_id)
         if r is None:
             raise erreurs.introuvable(self.libelle, id_)
@@ -184,20 +205,35 @@ class Depot(Generic[T]):
         await ctx.session.flush()
         return modele
 
-    async def modifier(self, ctx: Contexte, id_: str, changements: dict[str, Any] | BaseModel, *, org_id: str | None = None) -> T:
+    async def modifier(
+        self,
+        ctx: Contexte,
+        id_: str,
+        changements: dict[str, Any] | BaseModel,
+        *,
+        org_id: str | None = None,
+    ) -> T:
         """Fusion superficielle des champs non nuls d'un `Patch` du contrat, puis revalidation."""
         r = await self.ligne(ctx, id_, org_id=org_id)
         if r is None:
             raise erreurs.introuvable(self.libelle, id_)
-        patch = changements.model_dump(mode="json", exclude_unset=True) if isinstance(changements, BaseModel) else changements
+        patch = (
+            changements.model_dump(mode="json", exclude_unset=True)
+            if isinstance(changements, BaseModel)
+            else changements
+        )
         donnees = {**r.donnees, **{k: v for k, v in patch.items() if v is not None}}
         modele = self.modele.model_validate(donnees)
         return await self.remplacer(ctx, id_, modele, org_id=org_id)
 
-    async def definir_statut(self, ctx: Contexte, id_: str, statut: str, *, org_id: str | None = None, **autres: Any) -> T:
+    async def definir_statut(
+        self, ctx: Contexte, id_: str, statut: str, *, org_id: str | None = None, **autres: Any
+    ) -> T:
         return await self.modifier(ctx, id_, {self.champ_statut: statut, **autres}, org_id=org_id)
 
-    async def supprimer(self, ctx: Contexte, id_: str, *, org_id: str | None = None, logique: bool = False) -> None:
+    async def supprimer(
+        self, ctx: Contexte, id_: str, *, org_id: str | None = None, logique: bool = False
+    ) -> None:
         r = await self.ligne(ctx, id_, org_id=org_id)
         if r is None:
             raise erreurs.introuvable(self.libelle, id_)
@@ -207,7 +243,9 @@ class Depot(Generic[T]):
             await ctx.session.delete(r)
         await ctx.session.flush()
 
-    async def supprimer_enfants(self, ctx: Contexte, parent_id: str, *, org_id: str | None = None) -> int:
+    async def supprimer_enfants(
+        self, ctx: Contexte, parent_id: str, *, org_id: str | None = None
+    ) -> int:
         lignes = await self.lignes(ctx, org_id=org_id, parent_id=parent_id)
         for r in lignes:
             await ctx.session.delete(r)
@@ -215,13 +253,17 @@ class Depot(Generic[T]):
         return len(lignes)
 
     # ── secrets (chiffrés, jamais dans `donnees`) ─────────────────────────
-    async def secrets(self, ctx: Contexte, id_: str, *, org_id: str | None = None) -> dict[str, str]:
+    async def secrets(
+        self, ctx: Contexte, id_: str, *, org_id: str | None = None
+    ) -> dict[str, str]:
         r = await self.ligne(ctx, id_, org_id=org_id)
         if r is None:
             raise erreurs.introuvable(self.libelle, id_)
         return {k: dechiffrer(v) for k, v in (r.secrets or {}).items()}
 
-    async def definir_secrets(self, ctx: Contexte, id_: str, secrets: dict[str, str], *, org_id: str | None = None) -> None:
+    async def definir_secrets(
+        self, ctx: Contexte, id_: str, secrets: dict[str, str], *, org_id: str | None = None
+    ) -> None:
         r = await self.ligne(ctx, id_, org_id=org_id)
         if r is None:
             raise erreurs.introuvable(self.libelle, id_)

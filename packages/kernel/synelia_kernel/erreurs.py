@@ -69,7 +69,9 @@ def quota_depasse(message: str = "Quota dépassé.", detail: str | None = None) 
     return AppError("quota_depasse", 402, message, detail=detail)
 
 
-def interdit(message: str, roles_requis: list[str] | None = None, code: str = "interdit") -> AppError:
+def interdit(
+    message: str, roles_requis: list[str] | None = None, code: str = "interdit"
+) -> AppError:
     return AppError(code, 403, message, roles_requis=roles_requis or [])
 
 
@@ -86,7 +88,9 @@ def nom_deja_pris(nom: str) -> AppError:
     return AppError("nom_deja_pris", 409, f"Le nom « {nom} » est déjà utilisé.")
 
 
-def validation(message: str, champs: dict[str, str] | None = None, code: str = "validation") -> AppError:
+def validation(
+    message: str, champs: dict[str, str] | None = None, code: str = "validation"
+) -> AppError:
     return AppError(code, 422, message, champs=champs or {})
 
 
@@ -125,4 +129,9 @@ def trop_de_requetes() -> AppError:
 
 
 def interne(detail: str | None = None) -> AppError:
-    return AppError("erreur_interne", 500, "Erreur interne. Citez le correlationId dans votre ticket.", detail=detail)
+    return AppError(
+        "erreur_interne",
+        500,
+        "Erreur interne. Citez le correlationId dans votre ticket.",
+        detail=detail,
+    )

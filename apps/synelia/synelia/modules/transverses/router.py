@@ -14,8 +14,22 @@ from synelia.deps import Ctx, CtxPublic
 
 router = APIRouter(tags=["Compte & organisation active"])
 
-SITES = [{"code": "ABJ", "libelle": "Abidjan", "ville": "Abidjan"}, {"code": "GBM", "libelle": "Grand-Bassam", "ville": "Grand-Bassam"}]
-SECTEURS = ["Banque & assurance", "Télécoms", "Administration", "Santé", "Éducation", "Commerce", "Industrie", "Technologie", "Médias", "Autre"]
+SITES = [
+    {"code": "ABJ", "libelle": "Abidjan", "ville": "Abidjan"},
+    {"code": "GBM", "libelle": "Grand-Bassam", "ville": "Grand-Bassam"},
+]
+SECTEURS = [
+    "Banque & assurance",
+    "Télécoms",
+    "Administration",
+    "Santé",
+    "Éducation",
+    "Commerce",
+    "Industrie",
+    "Technologie",
+    "Médias",
+    "Autre",
+]
 PAYS = [
     {"code": "CI", "nom": "Côte d'Ivoire", "indicatif": "+225"},
     {"code": "SN", "nom": "Sénégal", "indicatif": "+221"},
@@ -43,7 +57,12 @@ async def obtenir_referentiels(ctx: CtxPublic) -> Any:
         "sites": SITES,
         "devises": ["XOF", "EUR", "USD"],
         "roles": [{"code": r, "libelle": rbac.ROLE_LABEL[r]} for r in rbac.ROLES_CLIENT],
-        "moyensPaiement": [{"code": "cinetpay", "libelle": "Mobile money & cartes (CinetPay)"}, {"code": "stripe", "libelle": "Carte bancaire (EUR/USD)"}, {"code": "virement", "libelle": "Virement bancaire"}, {"code": "prepaye", "libelle": "Compte prépayé"}],
+        "moyensPaiement": [
+            {"code": "cinetpay", "libelle": "Mobile money & cartes (CinetPay)"},
+            {"code": "stripe", "libelle": "Carte bancaire (EUR/USD)"},
+            {"code": "virement", "libelle": "Virement bancaire"},
+            {"code": "prepaye", "libelle": "Compte prépayé"},
+        ],
     }
 
 
@@ -75,9 +94,24 @@ async def obtenir_onboarding(ctx: Ctx) -> Any:
         faites.add("vm")
     if await _compter(ctx, "moyen_paiement"):
         faites.add("paiement")
-    etapes = [{"cle": c, "libelle": lib, "faite": c in faites, "href": href, "actionRbac": act, "obligatoire": ob} for c, lib, href, act, ob in ETAPES_ONBOARDING]
+    etapes = [
+        {
+            "cle": c,
+            "libelle": lib,
+            "faite": c in faites,
+            "href": href,
+            "actionRbac": act,
+            "obligatoire": ob,
+        }
+        for c, lib, href, act, ob in ETAPES_ONBOARDING
+    ]
     pct = round(100 * len([e for e in etapes if e["faite"]]) / len(etapes), 1)
-    return {"termine": pct >= 100, "masque": bool(etat.get("masque")), "etapes": etapes, "pctComplete": pct}
+    return {
+        "termine": pct >= 100,
+        "masque": bool(etat.get("masque")),
+        "etapes": etapes,
+        "pctComplete": pct,
+    }
 
 
 @router.patch("/onboarding", response_model=m.Onboarding, response_model_exclude_none=True)
@@ -98,13 +132,23 @@ async def modifier_onboarding(ctx: Ctx, corps: m.OnboardingPatchRequest) -> Any:
 @router.get("/recherche", response_model=m.RechercheGetResponse, response_model_exclude_none=True)
 async def rechercher(ctx: Ctx, q: str, types: str | None = None, limite: int = 20) -> Any:
     motif = f"%{q.lower()}%"
-    req = select(Ressource).where(Ressource.org_id == ctx.org_id, Ressource.supprime_le.is_(None), or_(Ressource.nom.ilike(motif), Ressource.id == q))
+    req = select(Ressource).where(
+        Ressource.org_id == ctx.org_id,
+        Ressource.supprime_le.is_(None),
+        or_(Ressource.nom.ilike(motif), Ressource.id == q),
+    )
     if types:
         req = req.where(Ressource.type.in_(types.split(",")))
     lignes = list((await ctx.session.execute(req.limit(limite + 1))).scalars())
     champs = set(m.ResultatRecherche.model_fields)
     resultats = []
     for r in lignes[:limite]:
-        d = {"id": r.id, "type": r.type, "libelle": r.nom or r.id, "href": f"/app/{r.type}s/{r.id}", "statut": r.statut}
+        d = {
+            "id": r.id,
+            "type": r.type,
+            "libelle": r.nom or r.id,
+            "href": f"/app/{r.type}s/{r.id}",
+            "statut": r.statut,
+        }
         resultats.append({k: v for k, v in d.items() if k in champs})
     return {"resultats": resultats, "tronque": len(lignes) > limite}

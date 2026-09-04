@@ -1,1 +1,3 @@
-# Module facturation : le routeur est ajouté par l'agent facturation ; `metrologie` sert déjà aux espaces.
+from synelia.modules.facturation.router import router
+
+__all__ = ["router"]

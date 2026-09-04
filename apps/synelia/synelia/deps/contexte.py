@@ -56,7 +56,9 @@ class Contexte:
     @property
     def org_id(self) -> str:
         if self.principal is None or not self.principal.org_id:
-            raise erreurs.AppError("organisation_requise", 400, "Aucune organisation active pour cette session.")
+            raise erreurs.AppError(
+                "organisation_requise", 400, "Aucune organisation active pour cette session."
+            )
         return self.principal.org_id
 
     @property
@@ -119,7 +121,11 @@ async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principa
     u = await session.get(Utilisateur, claims["sub"])
     if u is None or u.statut == "suspendu":
         raise erreurs.non_authentifie("Compte inconnu ou suspendu.")
-    membres = (await session.execute(select(Membership).where(Membership.utilisateur_id == u.id))).scalars().all()
+    membres = (
+        (await session.execute(select(Membership).where(Membership.utilisateur_id == u.id)))
+        .scalars()
+        .all()
+    )
     roles = {m.org_id: m.role for m in membres if m.scope_type == "org"}
     equipe = u.equipe or {}
     return Principal(
@@ -138,7 +144,11 @@ async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principa
 
 async def _principal_depuis_cle(session: AsyncSession, cle: str) -> Principal:
     ligne = (
-        await session.execute(select(CleApi).where(CleApi.secret_hash == hacher_jeton(cle), CleApi.revoquee_le.is_(None)))
+        await session.execute(
+            select(CleApi).where(
+                CleApi.secret_hash == hacher_jeton(cle), CleApi.revoquee_le.is_(None)
+            )
+        )
     ).scalar_one_or_none()
     if ligne is None or (ligne.expire_le and ligne.expire_le < maintenant()):
         raise erreurs.non_authentifie("Clé d'API inconnue, révoquée ou expirée.")
@@ -179,7 +189,9 @@ async def contexte(
             principal.org_id = x_organisation_id
             principal.role = principal.roles_par_org[x_organisation_id]
         else:
-            raise erreurs.interdit("Vous n'appartenez pas à cette organisation.", code="organisation_interdite")
+            raise erreurs.interdit(
+                "Vous n'appartenez pas à cette organisation.", code="organisation_interdite"
+            )
 
     rls.org_id_transaction.set(principal.org_id)
     org_id_courant.set(principal.org_id)

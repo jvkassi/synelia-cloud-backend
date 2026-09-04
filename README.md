@@ -1,43 +1,49 @@
 # synelia-cloud-backend
 
-Backend de [synelia-cloud](https://github.com/jvkassi/synelia-cloud), le portail
-Next.js de Synelia Cloud (vitrine, espace client, espace super admin), aujourd'hui
-servi par des données fictives.
+Backend Python de [synelia-cloud](https://github.com/jvkassi/synelia-cloud), le portail Next.js de
+Synelia Cloud. Il sert **le contrat `openapi.json` du portail** (514 opérations, 364 chemins, 218 schémas)
+sans Blesta, sur l'OpenStack de Synelia — variante Python du plan directeur
+([`docs/PLAN-DIRECTEUR-PYTHON.md`](docs/PLAN-DIRECTEUR-PYTHON.md)).
 
-Ce dépôt construit **tout ce que le portail attend** : les 514 opérations de son
-contrat `docs/api/openapi.json`, branchées sur l'OpenStack de Synelia et sur les
-solutions libres du catalogue. Sans Blesta : clients, souscriptions, facturation et
-paiements sont un domaine natif du backend.
+## Démarrer
 
-**Commencer par les deux plans directeurs**, écrits pour le même contrat et les mêmes
-systèmes amont, avec une comparaison honnête à la fin du second :
-
-- [`docs/PLAN-DIRECTEUR.md`](docs/PLAN-DIRECTEUR.md) — variante **Node.js** : Node 24,
-  Fastify 5, Zod 4, PostgreSQL 18 + Drizzle, Temporal, Valkey, client OpenStack à écrire.
-  Contient tout ce qui ne dépend pas du langage : règles du contrat, tenancy
-  organisation ↔ Keystone, modèle de données, correspondance contrat ↔ OpenStack,
-  facturation, feuille de route en onze phases, décisions à prendre.
-- [`docs/PLAN-DIRECTEUR-PYTHON.md`](docs/PLAN-DIRECTEUR-PYTHON.md) — variante **Python** :
-  Python 3.13, FastAPI, Pydantic 2, SQLAlchemy 2 + Alembic, Temporal, Valkey, **openstacksdk**
-  officiel, Authlib, Schemathesis. Renvoie au premier pour ce qui est commun et compare
-  les deux pistes (§9) avec une recommandation.
-
-```
-synelia-cloud (frontend) ──► apps/api · apps/worker · apps/scheduler (ce dépôt)
-                                   │
-        PostgreSQL · Valkey · Temporal · OpenStack Gazpacho · Kubernetes · Stalwart ·
-        Postal · Nextcloud · Plesk · Designate · ACME · CinetPay · Stripe · Victoria*
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh          # uv + Python 3.13
+uv sync
+uv run synelia api --rechargement                         # http://localhost:4000/v1 · docs : /v1/docs
+uv run pytest -q                                          # tests
+uv run python tools/contrat_diff.py                       # couverture du contrat (servie ⊇ contrat)
 ```
 
-## État du dépôt
+Compte d'amorçage : `admin@synelia.cloud` / `Synelia!2026` (variables `SYNELIA_SEED_*`). Sans
+`SYNELIA_DATABASE_URL`, SQLite local ; avec Postgres 18 (`docker compose up -d postgres`), RLS par organisation.
 
-La Phase 0 du plan (socle du monorepo) n'a pas encore commencé. Les deux dossiers
-présents sont l'héritage de la première approche, retenue puis abandonnée :
+```bash
+docker compose up -d            # postgres 18, valkey 8, temporal + ui (8233), mailpit (8025), api (4000), worker
+```
 
-- `blesta/` — image Docker de Blesta et son installation sur Dokploy. **Abandonné** :
-  la facturation est native. À supprimer en Phase 0.
-- `middleware/` — premier essai Express avec un client Keystone/Nova/Cinder minimal.
-  **Remplacé** par `apps/api` et `packages/openstack` ; son code sert de graine et
-  disparaît en Phase 0.
-- `docker-compose.yml` — pile Blesta + MariaDB + middleware. Remplacée par la pile du
-  plan (Postgres, Valkey, Temporal) en Phase 0.
+## Architecture (résumé)
+
+- `apps/synelia` — l'application, trois rôles : `synelia api | worker | scheduler`. Un module par domaine du
+  contrat dans `synelia/modules/` (routeur découvert automatiquement), dépendances `deps/` (contexte, RBAC,
+  pagination, confirmation), moteur des travaux `travaux/` (local en ligne ou Temporal).
+- `packages/contract` — `openapi.json` copié du frontend, `modeles.py` **généré** (datamodel-codegen),
+  `operations.py` (index), `rbac.json` (38 actions × 10 rôles), `workflows.json` (41 travaux).
+  Re-synchroniser : `uv run tools/contrat_sync.py ../synelia-cloud`.
+- `packages/db` — SQLAlchemy 2 asyncio ; tables identité/audit/travaux dédiées, `ressources` typée par le
+  contrat pour le reste ([ADR 0001](docs/ADR/0001-persistance-depot-typee.md)).
+- `packages/openstack` — paires `Simule` / `OpenStack` (openstacksdk) par domaine ; connecteurs amont.
+- `packages/kernel` — erreurs du contrat, configuration, UUID v7, argent (FCFA entiers), chiffrement, journal.
+
+## Déploiement
+
+- **Vercel** (préversions par branche, API seule, amont simulé) : `api/index.py` + `vercel.json` ;
+  voir [`docs/runbooks/deploiement-vercel-github.md`](docs/runbooks/deploiement-vercel-github.md) et
+  [ADR 0002](docs/ADR/0002-vercel-et-travaux-en-ligne.md).
+- **Docker / Dokploy / Kubernetes** (production, près du lab) : `Dockerfile` unique, `docker-compose.yml`.
+- **CI** : `.github/workflows/ci.yml` (ruff, pytest, couverture du contrat, image) ; `vercel.yml` (déploiement
+  par Actions si l'intégration Git native n'est pas utilisée).
+
+## Écrire un module
+
+[`docs/GUIDE-MODULE.md`](docs/GUIDE-MODULE.md). Module de référence : `modules/espaces/`.

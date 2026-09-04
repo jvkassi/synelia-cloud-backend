@@ -53,8 +53,14 @@ def installer(app: FastAPI) -> None:
                 mal_forme = True
             champs[".".join(loc) or "corps"] = e.get("msg", "invalide")
         if mal_forme or any(e.get("type") == "json_invalid" for e in exc.errors()):
-            return _reponse(request, erreurs.invalide("Corps JSON illisible ou absent.", detail=json.dumps(champs)))
-        return _reponse(request, erreurs.validation("Validation échouée : vérifiez les champs signalés.", champs))
+            return _reponse(
+                request,
+                erreurs.invalide("Corps JSON illisible ou absent.", detail=json.dumps(champs)),
+            )
+        return _reponse(
+            request,
+            erreurs.validation("Validation échouée : vérifiez les champs signalés.", champs),
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def _http(request: Request, exc: StarletteHTTPException) -> ORJSONResponse:

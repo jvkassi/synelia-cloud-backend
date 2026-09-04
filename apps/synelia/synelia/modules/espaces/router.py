@@ -19,12 +19,29 @@ router = APIRouter(prefix="/espaces", tags=["Espaces Cloud"])
 
 
 @router.get("", response_model=m.EspacesGetResponse, response_model_exclude_none=True)
-async def lister_espaces(page: Page, site: str | None = None, statut: str | None = None, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))) -> Any:
-    return await depot.lister(ctx, page, filtre=lambda e: (not site or e.site == site) and (not statut or e.statut == statut), tri_defaut="code")
+async def lister_espaces(
+    page: Page,
+    site: str | None = None,
+    statut: str | None = None,
+    ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True)),
+) -> Any:
+    return await depot.lister(
+        ctx,
+        page,
+        filtre=lambda e: (not site or e.site == site) and (not statut or e.statut == statut),
+        tri_defaut="code",
+    )
 
 
-@router.post("", response_model=m.TravailProvisioning, status_code=status.HTTP_202_ACCEPTED, response_model_exclude_none=True)
-async def creer_espace(corps: m.EspaceCloudCreation, ctx: Contexte = Depends(exige("espace.create"))) -> Any:
+@router.post(
+    "",
+    response_model=m.TravailProvisioning,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
+)
+async def creer_espace(
+    corps: m.EspaceCloudCreation, ctx: Contexte = Depends(exige("espace.create"))
+) -> Any:
     await depot.exiger_nom_libre(ctx, corps.code)
     offres = Depot("offre", m.Offre, plateforme=True)
     offre = await offres.trouver(ctx, corps.offerId)
@@ -44,8 +61,17 @@ async def creer_espace(corps: m.EspaceCloudCreation, ctx: Contexte = Depends(exi
         dnsInterne=corps.dnsInterne,
     )
     await depot.creer(ctx, espace)
-    await journaliser(ctx, action="espace.creation", cible_type="espace", cible_id=espace.id, cible=espace.code)
-    return await demarrer_travail(ctx, "espace.create", espace.code, cible_type="espace", cible_id=espace.id, entree=corps.model_dump(mode="json"))
+    await journaliser(
+        ctx, action="espace.creation", cible_type="espace", cible_id=espace.id, cible=espace.code
+    )
+    return await demarrer_travail(
+        ctx,
+        "espace.create",
+        espace.code,
+        cible_type="espace",
+        cible_id=espace.id,
+        entree=corps.model_dump(mode="json"),
+    )
 
 
 async def _espace(ctx: Contexte, espace_id: str) -> m.EspaceCloud:
@@ -54,46 +80,92 @@ async def _espace(ctx: Contexte, espace_id: str) -> m.EspaceCloud:
 
 
 @router.get("/{espaceId}", response_model=m.EspaceCloud, response_model_exclude_none=True)
-async def obtenir_espace(espaceId: str, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))) -> Any:  # noqa: N803
+async def obtenir_espace(
+    espaceId: str, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))
+) -> Any:  # noqa: N803
     return await _espace(ctx, espaceId)
 
 
 @router.patch("/{espaceId}", response_model=m.EspaceCloud, response_model_exclude_none=True)
-async def modifier_espace(espaceId: str, corps: m.EspaceCloudModification, ctx: Contexte = Depends(exige("espace.create"))) -> Any:  # noqa: N803
+async def modifier_espace(
+    espaceId: str, corps: m.EspaceCloudModification, ctx: Contexte = Depends(exige("espace.create"))
+) -> Any:  # noqa: N803
     e = await depot.obtenir(ctx, espaceId)
     if corps.code and corps.code != e.code:
         await depot.exiger_nom_libre(ctx, corps.code)
     await depot.modifier(ctx, espaceId, corps)
-    await journaliser(ctx, action="espace.modification", cible_type="espace", cible_id=espaceId, details=corps.model_dump(mode="json", exclude_none=True))
+    await journaliser(
+        ctx,
+        action="espace.modification",
+        cible_type="espace",
+        cible_id=espaceId,
+        details=corps.model_dump(mode="json", exclude_none=True),
+    )
     return await _espace(ctx, espaceId)
 
 
-@router.delete("/{espaceId}", response_model=m.TravailProvisioning, status_code=status.HTTP_202_ACCEPTED, response_model_exclude_none=True)
-async def supprimer_espace(espaceId: str, confirmation: str | None = None, ctx: Contexte = Depends(exige("espace.create"))) -> Any:  # noqa: N803
+@router.delete(
+    "/{espaceId}",
+    response_model=m.TravailProvisioning,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
+)
+async def supprimer_espace(
+    espaceId: str, confirmation: str | None = None, ctx: Contexte = Depends(exige("espace.create"))
+) -> Any:  # noqa: N803
     e = await depot.obtenir(ctx, espaceId)
     exiger_confirmation(e.code, confirmation)
-    if await Depot("vm", m.Vm).compter(ctx, parent_id=espaceId) or any(v.espaceId == espaceId for v in await Depot("vm", m.Vm).tous(ctx)):
+    if await Depot("vm", m.Vm).compter(ctx, parent_id=espaceId) or any(
+        v.espaceId == espaceId for v in await Depot("vm", m.Vm).tous(ctx)
+    ):
         raise erreurs.conflit("L'espace contient encore des machines.", code="espace_non_vide")
-    await journaliser(ctx, action="espace.suppression", cible_type="espace", cible_id=espaceId, cible=e.code)
-    return await demarrer_travail(ctx, "espace.delete", e.code, cible_type="espace", cible_id=espaceId, etapes=[{"nom": "Vérifier que l'espace est vide", "dureeS": 3}, {"nom": "Libérer le réseau et le projet", "dureeS": 25}, {"nom": "Clore la facturation", "dureeS": 4}])
+    await journaliser(
+        ctx, action="espace.suppression", cible_type="espace", cible_id=espaceId, cible=e.code
+    )
+    return await demarrer_travail(
+        ctx,
+        "espace.delete",
+        e.code,
+        cible_type="espace",
+        cible_id=espaceId,
+        etapes=[
+            {"nom": "Vérifier que l'espace est vide", "dureeS": 3},
+            {"nom": "Libérer le réseau et le projet", "dureeS": 25},
+            {"nom": "Clore la facturation", "dureeS": 4},
+        ],
+    )
 
 
 @router.put("/{espaceId}/quota", response_model=m.EspaceCloud, response_model_exclude_none=True)
-async def modifier_quota_espace(espaceId: str, corps: m.Quota, ctx: Contexte = Depends(exige("espace.quota.update"))) -> Any:  # noqa: N803
+async def modifier_quota_espace(
+    espaceId: str, corps: m.Quota, ctx: Contexte = Depends(exige("espace.quota.update"))
+) -> Any:  # noqa: N803
     u = await service.usage(ctx, espaceId)
     if u["vcpu"] > corps.vcpu or u["ramGo"] > corps.ramGo or u["stockageTo"] > corps.stockageTo:
         raise erreurs.quota_depasse("L'usage actuel dépasse le nouveau quota.", detail=str(u))
     await depot.modifier(ctx, espaceId, {"quota": corps.model_dump()})
-    await journaliser(ctx, action="espace.quota", cible_type="espace", cible_id=espaceId, details=corps.model_dump())
+    await journaliser(
+        ctx,
+        action="espace.quota",
+        cible_type="espace",
+        cible_id=espaceId,
+        details=corps.model_dump(),
+    )
     return await _espace(ctx, espaceId)
 
 
-@router.get("/{espaceId}/consommation", response_model=m.Consommation, response_model_exclude_none=True)
-async def obtenir_consommation_espace(espaceId: str, periode: str | None = None, ctx: Contexte = Depends(exige(None))) -> Any:  # noqa: N803
+@router.get(
+    "/{espaceId}/consommation", response_model=m.Consommation, response_model_exclude_none=True
+)
+async def obtenir_consommation_espace(
+    espaceId: str, periode: str | None = None, ctx: Contexte = Depends(exige(None))
+) -> Any:  # noqa: N803
     await depot.obtenir(ctx, espaceId)
     from synelia.modules.facturation import metrologie  # module optionnel
 
-    return await metrologie.consommation(ctx, periode or maintenant().strftime("%Y-%m"), espace_id=espaceId)
+    return await metrologie.consommation(
+        ctx, periode or maintenant().strftime("%Y-%m"), espace_id=espaceId
+    )
 
 
 @router.get("/{espaceId}/placements", response_model=list[m.Placement])

@@ -21,7 +21,9 @@ async def declarer() -> None:
     from synelia.travaux.temporal import FILE
 
     r = reglages()
-    client = await Client.connect(r.temporal_adresse or "localhost:7233", namespace=r.temporal_espace)
+    client = await Client.connect(
+        r.temporal_adresse or "localhost:7233", namespace=r.temporal_espace
+    )
     for ident, type_travail, cron in PLANIFICATIONS:
         action = ScheduleActionStartWorkflow(
             "TravailPlanifieWorkflow",
@@ -31,6 +33,8 @@ async def declarer() -> None:
             execution_timeout=timedelta(hours=3),
         )
         try:
-            await client.create_schedule(ident, Schedule(action=action, spec=ScheduleSpec(cron_expressions=[cron])))
+            await client.create_schedule(
+                ident, Schedule(action=action, spec=ScheduleSpec(cron_expressions=[cron]))
+            )
         except Exception:  # noqa: BLE001 — déjà déclarée
             pass

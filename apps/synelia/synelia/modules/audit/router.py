@@ -19,7 +19,7 @@ router = APIRouter(prefix="/audit", tags=["Audit"])
 
 
 @router.get("", response_model=m.AuditGetResponse, response_model_exclude_none=True)
-async def lister_evenements_audit(  # noqa: PLR0913
+async def lister_evenements_audit(  # noqa: PLR0913, PLR0917
     page: Page,
     depuis: datetime | None = None,
     jusqua: datetime | None = None,
@@ -43,7 +43,9 @@ async def lister_evenements_audit(  # noqa: PLR0913
     if action:
         q = q.where(Audit.action.ilike(f"%{action}%"))
     if cible:
-        q = q.where(or_(Audit.cible_id == cible, Audit.cible.ilike(f"%{cible}%"), Audit.cible_type == cible))
+        q = q.where(
+            or_(Audit.cible_id == cible, Audit.cible.ilike(f"%{cible}%"), Audit.cible_type == cible)
+        )
     if resultat:
         if resultat in service.RESULTATS_INVERSE:
             q = q.where(Audit.resultat.in_(service.RESULTATS_INVERSE[resultat]))
@@ -53,12 +55,23 @@ async def lister_evenements_audit(  # noqa: PLR0913
     org = await ctx.session.get(Organisation, org_id)
     noms = await service.noms_acteurs(ctx, lignes)
     evenements = [service.vers_contrat(a, org.nom if org else None, noms) for a in lignes]
-    return filtrer_trier_paginer(evenements, page, champs_recherche=("action", "target", "detail", "acteur"))
+    return filtrer_trier_paginer(
+        evenements, page, champs_recherche=("action", "target", "detail", "acteur")
+    )
 
 
-@router.post("/export", response_model=m.AuditExportPostResponse, status_code=status.HTTP_202_ACCEPTED, response_model_exclude_none=True)
-async def exporter_audit(corps: m.AuditExportPostRequest, ctx: Contexte = Depends(exige("compliance.export"))) -> Any:
-    libelle = f"{corps.depuis.date().isoformat()} → {corps.jusqua.date().isoformat()} ({corps.format})"
+@router.post(
+    "/export",
+    response_model=m.AuditExportPostResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
+)
+async def exporter_audit(
+    corps: m.AuditExportPostRequest, ctx: Contexte = Depends(exige("compliance.export"))
+) -> Any:
+    libelle = (
+        f"{corps.depuis.date().isoformat()} → {corps.jusqua.date().isoformat()} ({corps.format})"
+    )
     travail = await demarrer_travail(
         ctx,
         "audit.export",
@@ -68,9 +81,23 @@ async def exporter_audit(corps: m.AuditExportPostRequest, ctx: Contexte = Depend
         etapes=[
             {"nom": "Sélectionner les événements de la période", "dureeS": 5},
             {"nom": f"Générer le fichier {corps.format.upper()}", "dureeS": 15},
-            {"nom": "Signer l'empreinte" if corps.signature else "Calculer l'empreinte", "dureeS": 3},
+            {
+                "nom": "Signer l'empreinte" if corps.signature else "Calculer l'empreinte",
+                "dureeS": 3,
+            },
             {"nom": "Publier le lien de téléchargement", "dureeS": 2},
         ],
     )
-    await journaliser(ctx, action="audit.export", cible_type="travail", cible_id=travail["id"], cible=libelle, details={"format": corps.format, "signature": bool(corps.signature)})
-    return {"travailId": travail["id"], "urlTelechargement": f"{ctx.reglages.url_publique}{ctx.reglages.prefixe_api}/audit/exports/{travail['id']}", "expire": dans(24 * 3600)}
+    await journaliser(
+        ctx,
+        action="audit.export",
+        cible_type="travail",
+        cible_id=travail["id"],
+        cible=libelle,
+        details={"format": corps.format, "signature": bool(corps.signature)},
+    )
+    return {
+        "travailId": travail["id"],
+        "urlTelechargement": f"{ctx.reglages.url_publique}{ctx.reglages.prefixe_api}/audit/exports/{travail['id']}",
+        "expire": dans(24 * 3600),
+    }

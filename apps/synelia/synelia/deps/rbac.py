@@ -25,7 +25,9 @@ async def _refuser(ctx: Contexte, action: str, message: str) -> None:
     raise erreurs.interdit(message, roles_requis=rbac.roles_requis(action))
 
 
-def exige(action: str | None, *, lecture: bool = False) -> Callable[..., Coroutine[Any, Any, Contexte]]:
+def exige(
+    action: str | None, *, lecture: bool = False
+) -> Callable[..., Coroutine[Any, Any, Contexte]]:
     """Dépendance : le principal doit pouvoir exécuter `action` (ou la lire si `lecture`).
 
     Une clé d'API ne peut jamais dépasser sa portée déclarée."""

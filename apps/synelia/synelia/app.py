@@ -29,12 +29,10 @@ def routeurs_modules() -> list[APIRouter]:
     routeurs: list[APIRouter] = []
     for info in sorted(pkgutil.iter_modules(modules.__path__), key=lambda i: i.name):
         mod = importlib.import_module(f"{modules.__name__}.{info.name}")
-        r = getattr(mod, "router", None)
-        if isinstance(r, APIRouter):
-            routeurs.append(r)
-        for extra in getattr(mod, "routers", []) or []:
-            if isinstance(extra, APIRouter):
-                routeurs.append(extra)
+        candidats = [getattr(mod, "router", None), *(getattr(mod, "routers", []) or [])]
+        for r in candidats:
+            if isinstance(r, APIRouter) and not any(r is x for x in routeurs):
+                routeurs.append(r)
     return routeurs
 
 
@@ -50,7 +48,12 @@ def creer_app() -> FastAPI:
 
         await initialiser_schema()
         await amorcage.amorcer()
-        log.info("api.demarree", env=r.env, base="sqlite" if r.est_sqlite else "postgres", fournisseur=r.fournisseur)
+        log.info(
+            "api.demarree",
+            env=r.env,
+            base="sqlite" if r.est_sqlite else "postgres",
+            fournisseur=r.fournisseur,
+        )
         yield
         await fermer()
 
@@ -88,7 +91,12 @@ def creer_app() -> FastAPI:
 
     @app.get("/", include_in_schema=False)
     async def racine() -> dict[str, Any]:
-        return {"nom": r.nom, "version": r.version, "contrat": f"{r.prefixe_api}/openapi.json", "docs": f"{r.prefixe_api}/docs"}
+        return {
+            "nom": r.nom,
+            "version": r.version,
+            "contrat": f"{r.prefixe_api}/openapi.json",
+            "docs": f"{r.prefixe_api}/docs",
+        }
 
     if r.docs_actives:
 

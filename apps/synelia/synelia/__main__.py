@@ -18,7 +18,11 @@ RACINE = Path(__file__).resolve().parents[3]
 
 
 @cli.command()
-def api(hote: str = "0.0.0.0", port: int = int(os.environ.get("PORT", "4000")), rechargement: bool = False) -> None:
+def api(
+    hote: str = "0.0.0.0",
+    port: int = int(os.environ.get("PORT", "4000")),
+    rechargement: bool = False,
+) -> None:
     """Sert l'API (uvicorn)."""
     import uvicorn
 
@@ -39,7 +43,9 @@ def worker() -> None:
 
         routeurs_modules()  # importe les modules → enregistre les exécuteurs
         r = reglages()
-        client = await Client.connect(r.temporal_adresse or "localhost:7233", namespace=r.temporal_espace)
+        client = await Client.connect(
+            r.temporal_adresse or "localhost:7233", namespace=r.temporal_espace
+        )
         wfs, acts = temporal.definitions()
         w = Worker(client, task_queue=temporal.FILE, workflows=wfs, activities=acts)
         typer.echo(f"worker sur {temporal.FILE} ({r.temporal_adresse})")
@@ -75,7 +81,9 @@ def amorcer() -> None:
 @contrat.command("sync")
 def contrat_sync(frontend: str = "../synelia-cloud") -> None:
     """Copie openapi.json, RBAC, workflows, configurations depuis le frontend ; régénère les modèles."""
-    subprocess.run([sys.executable, str(RACINE / "tools" / "contrat_sync.py"), frontend], check=True)
+    subprocess.run(
+        [sys.executable, str(RACINE / "tools" / "contrat_sync.py"), frontend], check=True
+    )
 
 
 @contrat.command("diff")

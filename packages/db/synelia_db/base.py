@@ -30,7 +30,9 @@ class Identifie:
 
 
 class Horodate:
-    cree_le: Mapped[datetime] = mapped_column(DateTimeUTC, default=maintenant, server_default=func.now())
+    cree_le: Mapped[datetime] = mapped_column(
+        DateTimeUTC, default=maintenant, server_default=func.now()
+    )
     modifie_le: Mapped[datetime] = mapped_column(
         DateTimeUTC, default=maintenant, onupdate=maintenant, server_default=func.now()
     )

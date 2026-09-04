@@ -26,7 +26,9 @@ async def test_connexion_et_moi(client):
 
 
 async def test_rafraichissement_rotatif(client):
-    r = await client.post("/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"})
+    r = await client.post(
+        "/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"}
+    )
     refresh = r.json()["refreshToken"]
     r2 = await client.post("/v1/auth/rafraichir", json={"refreshToken": refresh})
     assert r2.status_code == 200 and r2.json()["accessToken"]

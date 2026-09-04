@@ -1,8 +1,6 @@
 .venv
 .git
-docs
-tests
-**/tests/**
-uv.lock
-.agents
-.claude
+__pycache__
+**/__pycache__
+.pytest_cache
+.ruff_cache

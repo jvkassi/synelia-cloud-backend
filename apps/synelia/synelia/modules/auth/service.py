@@ -37,7 +37,14 @@ async def appartenances(session, u: Utilisateur) -> list[dict[str, Any]]:
         )
     ).all()
     return [
-        {"orgId": o.id, "nom": o.nom, "secteur": o.secteur, "role": m.role, "logoUrl": o.logo_url, "defaut": o.id == u.org_active_id}
+        {
+            "orgId": o.id,
+            "nom": o.nom,
+            "secteur": o.secteur,
+            "role": m.role,
+            "logoUrl": o.logo_url,
+            "defaut": o.id == u.org_active_id,
+        }
         for m, o in lignes
     ]
 
@@ -90,8 +97,15 @@ async def ouvrir_session(
         u.org_active_id = org
     await session.flush()
     if not mfa_validee:
-        return {"expiresIn": 300, "mfaRequis": True, "defiMfa": s.mfa_defi, "utilisateur": utilisateur_contrat(u)}
-    acces = emettre_acces({"sub": u.id, "org": org, "role": role, "sid": s.id, "emprunt": emprunt}, duree_s)
+        return {
+            "expiresIn": 300,
+            "mfaRequis": True,
+            "defiMfa": s.mfa_defi,
+            "utilisateur": utilisateur_contrat(u),
+        }
+    acces = emettre_acces(
+        {"sub": u.id, "org": org, "role": role, "sid": s.id, "emprunt": emprunt}, duree_s
+    )
     return {
         "accessToken": acces,
         "refreshToken": brut,
@@ -105,7 +119,13 @@ async def ouvrir_session(
 
 
 async def valider_defi(session, defi: str) -> SessionAuth | None:
-    s = (await session.execute(select(SessionAuth).where(SessionAuth.mfa_defi == defi, SessionAuth.mfa_validee.is_(False)))).scalar_one_or_none()
+    s = (
+        await session.execute(
+            select(SessionAuth).where(
+                SessionAuth.mfa_defi == defi, SessionAuth.mfa_validee.is_(False)
+            )
+        )
+    ).scalar_one_or_none()
     return s
 
 

@@ -22,7 +22,11 @@ class IdentiteSimule:
 
     def creer_reseau(self, projet_id: str, nom: str, cidr: str) -> dict[str, Any]:
         ipaddress.ip_network(cidr)
-        return {"reseau_id": f"net-{nouvel_id()[:8]}", "sous_reseau_id": f"sub-{nouvel_id()[:8]}", "routeur_id": f"rtr-{nouvel_id()[:8]}"}
+        return {
+            "reseau_id": f"net-{nouvel_id()[:8]}",
+            "sous_reseau_id": f"sub-{nouvel_id()[:8]}",
+            "routeur_id": f"rtr-{nouvel_id()[:8]}",
+        }
 
     def creer_application_credential(self, projet_id: str) -> dict[str, str]:
         return {"id": f"ac-{nouvel_id()[:8]}", "secret": jeton_opaque(24)}
@@ -46,7 +50,9 @@ class IdentiteOpenStack(IdentiteSimule):
 
     def creer_projet(self, domaine_id: str, nom: str, region: str) -> str:
         c = self._conn(region)
-        p = c.identity.find_project(nom, domain_id=domaine_id) or c.identity.create_project(name=nom, domain_id=domaine_id, enabled=True)
+        p = c.identity.find_project(nom, domain_id=domaine_id) or c.identity.create_project(
+            name=nom, domain_id=domaine_id, enabled=True
+        )
         return p.id
 
     def poser_quotas(self, projet_id: str, vcpu: int, ram_go: int, stockage_to: float) -> None:
@@ -57,15 +63,23 @@ class IdentiteOpenStack(IdentiteSimule):
     def creer_reseau(self, projet_id: str, nom: str, cidr: str) -> dict[str, Any]:
         c = self._conn()
         net = c.network.create_network(name=nom, project_id=projet_id)
-        sub = c.network.create_subnet(name=f"{nom}-sub", network_id=net.id, ip_version=4, cidr=cidr, project_id=projet_id)
+        sub = c.network.create_subnet(
+            name=f"{nom}-sub", network_id=net.id, ip_version=4, cidr=cidr, project_id=projet_id
+        )
         ext = next((n for n in c.network.networks(is_router_external=True)), None)
-        rtr = c.network.create_router(name=f"{nom}-rtr", project_id=projet_id, external_gateway_info={"network_id": ext.id} if ext else None)
+        rtr = c.network.create_router(
+            name=f"{nom}-rtr",
+            project_id=projet_id,
+            external_gateway_info={"network_id": ext.id} if ext else None,
+        )
         c.network.add_interface_to_router(rtr, subnet_id=sub.id)
         return {"reseau_id": net.id, "sous_reseau_id": sub.id, "routeur_id": rtr.id}
 
     def creer_application_credential(self, projet_id: str) -> dict[str, str]:
         c = self._conn()
-        ac = c.identity.create_application_credential(user=c.current_user_id, name=f"synelia-{projet_id[:8]}", roles=[{"name": "member"}])
+        ac = c.identity.create_application_credential(
+            user=c.current_user_id, name=f"synelia-{projet_id[:8]}", roles=[{"name": "member"}]
+        )
         return {"id": ac.id, "secret": ac.secret}
 
     def supprimer_projet(self, projet_id: str) -> None:

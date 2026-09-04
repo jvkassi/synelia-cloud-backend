@@ -27,10 +27,21 @@ def _memo(cle: str, fabrique):  # type: ignore[no-untyped-def]
 @router.get("/gabarits", response_model=list[m.Gabarit], response_model_exclude_none=True)
 async def lister_gabarits(ctx: Ctx, site: str | None = None, famille: str | None = None) -> Any:
     gabarits = _memo("gabarits", fournisseur(ComputeSimule, ComputeOpenStack).gabarits)
-    return [g for g in gabarits if (not famille or g["famille"] == famille) and (not site or site in (g.get("sitesDisponibles") or [site]))]
+    return [
+        g
+        for g in gabarits
+        if (not famille or g["famille"] == famille)
+        and (not site or site in (g.get("sitesDisponibles") or [site]))
+    ]
 
 
 @router.get("/images", response_model=list[m.ImageSysteme], response_model_exclude_none=True)
-async def lister_images_systeme(ctx: Ctx, site: str | None = None, famille: str | None = None) -> Any:
+async def lister_images_systeme(
+    ctx: Ctx, site: str | None = None, famille: str | None = None
+) -> Any:
     images = _memo("images", fournisseur(ComputeSimule, ComputeOpenStack).images)
-    return [i for i in images if (not famille or i["famille"] == famille) and (not site or site in i["sitesDisponibles"])]
+    return [
+        i
+        for i in images
+        if (not famille or i["famille"] == famille) and (not site or site in i["sitesDisponibles"])
+    ]

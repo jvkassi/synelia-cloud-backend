@@ -14,7 +14,13 @@ from synelia_kernel.dates import maintenant
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
 
-TYPES_COMPTES = {"espaces": "espace", "vms": "vm", "clusters": "k8s_cluster", "servicesManages": "service_manage", "applications": "application"}
+TYPES_COMPTES = {
+    "espaces": "espace",
+    "vms": "vm",
+    "clusters": "k8s_cluster",
+    "servicesManages": "service_manage",
+    "applications": "application",
+}
 
 
 def visible(ctx: Contexte, org_id: str) -> bool:
@@ -31,7 +37,11 @@ async def obtenir(ctx: Contexte, org_id: str) -> Organisation:
 
 
 async def nb_utilisateurs(ctx: Contexte, org_id: str) -> int:
-    q = select(func.count()).select_from(Membership).where(Membership.org_id == org_id, Membership.scope_type == "org")
+    q = (
+        select(func.count())
+        .select_from(Membership)
+        .where(Membership.org_id == org_id, Membership.scope_type == "org")
+    )
     return int((await ctx.session.execute(q)).scalar_one())
 
 
@@ -60,17 +70,22 @@ def contexte_pour(ctx: Contexte, org_id: str) -> Contexte:
 
 
 async def synthese(ctx: Contexte, org_id: str) -> dict[str, Any]:
-    compteurs = {cle: await Depot(t, m.EspaceCloud).compter(ctx, org_id=org_id) for cle, t in TYPES_COMPTES.items()}
+    compteurs = {
+        cle: await Depot(t, m.EspaceCloud).compter(ctx, org_id=org_id)
+        for cle, t in TYPES_COMPTES.items()
+    }
     espaces = await Depot("espace", m.EspaceCloud).tous(ctx, org_id=org_id)
     quota = {"vcpu": 0, "ramGo": 0, "stockageTo": 0.0}
     usage = {"vcpu": 0, "ramGo": 0, "stockageTo": 0.0}
     for e in espaces:
         for k in quota:
             quota[k] += getattr(e.quota, k, 0) or 0
-            usage[k] += getattr(e.usage, k, 0) or 0 if e.usage else 0
+            usage[k] += (getattr(e.usage, k, 0) or 0) if e.usage else 0
     from synelia.modules.facturation import metrologie  # module optionnel
 
-    conso = await metrologie.consommation(contexte_pour(ctx, org_id), maintenant().strftime("%Y-%m"))
+    conso = await metrologie.consommation(
+        contexte_pour(ctx, org_id), maintenant().strftime("%Y-%m")
+    )
     return {
         **compteurs,
         "siegesUtilises": await nb_utilisateurs(ctx, org_id),

@@ -18,7 +18,11 @@ async def executer_depuis_worker(travail_id: str, depuis: int | None) -> str:
         travail = await session.get(Travail, travail_id)
         if travail is None:
             return "introuvable"
-        faux_request: Any = SimpleNamespace(headers={}, client=None, state=SimpleNamespace(correlation_id=travail.correlation_id or "-"))
+        faux_request: Any = SimpleNamespace(
+            headers={},
+            client=None,
+            state=SimpleNamespace(correlation_id=travail.correlation_id or "-"),
+        )
         ctx = Contexte(
             request=faux_request,
             session=session,

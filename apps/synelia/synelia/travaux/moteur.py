@@ -81,7 +81,13 @@ ETAPES_GENERIQUES = [
 
 def _taches(etapes: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return [
-        {"ordre": i + 1, "nom": e["nom"], "statut": "pending", "dureeS": int(e.get("dureeS", 0)), "message": e.get("message")}
+        {
+            "ordre": i + 1,
+            "nom": e["nom"],
+            "statut": "pending",
+            "dureeS": int(e.get("dureeS", 0)),
+            "message": e.get("message"),
+        }
         for i, e in enumerate(etapes)
     ]
 
@@ -187,8 +193,16 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
             await ctx.session.flush()
             raise
         except Exception as exc:  # noqa: BLE001
-            message = exc.message if isinstance(exc, erreurs.AppError) else str(exc) or type(exc).__name__
-            log.warning("travail.etape_echouee", travail=travail.id, type=travail.type, etape=i + 1, erreur=message)
+            message = (
+                exc.message if isinstance(exc, erreurs.AppError) else str(exc) or type(exc).__name__
+            )
+            log.warning(
+                "travail.etape_echouee",
+                travail=travail.id,
+                type=travail.type,
+                etape=i + 1,
+                erreur=message,
+            )
             taches[i]["statut"] = "failed"
             taches[i]["message"] = message
             travail.taches = list(taches)
@@ -226,7 +240,9 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
 
 async def relancer(ctx: Contexte, travail: Travail) -> Travail:
     if travail.statut not in {"failed", "rolled_back"}:
-        raise erreurs.conflit("Seul un travail en échec peut être relancé.", code="travail_non_relancable")
+        raise erreurs.conflit(
+            "Seul un travail en échec peut être relancé.", code="travail_non_relancable"
+        )
     taches = [dict(t) for t in travail.taches]
     depuis = next((i for i, t in enumerate(taches) if t["statut"] == "failed"), 0)
     for t in taches[depuis:]:
@@ -266,7 +282,11 @@ async def annuler(ctx: Contexte, travail: Travail) -> Travail:
         except Exception as exc:  # noqa: BLE001
             log.error("travail.compensation_echouee", travail=travail.id, erreur=str(exc))
     travail.statut = "rolled_back"
-    travail.erreur = {"message": "Travail annulé.", "correlationId": ctx.correlation_id, "suggestion": "Relancez l'opération depuis l'écran d'origine si nécessaire."}
+    travail.erreur = {
+        "message": "Travail annulé.",
+        "correlationId": ctx.correlation_id,
+        "suggestion": "Relancez l'opération depuis l'écran d'origine si nécessaire.",
+    }
     travail.termine_le = maintenant()
     await ctx.session.flush()
     return travail

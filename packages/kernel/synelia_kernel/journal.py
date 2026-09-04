@@ -13,7 +13,18 @@ correlation_id_courant: ContextVar[str] = ContextVar("correlation_id", default="
 org_id_courant: ContextVar[str | None] = ContextVar("org_id", default=None)
 utilisateur_id_courant: ContextVar[str | None] = ContextVar("utilisateur_id", default=None)
 
-_SECRETS = ("motDePasse", "mot_de_passe", "password", "secret", "token", "jeton", "accessToken", "refreshToken", "cle", "apiKey")
+_SECRETS = (
+    "motDePasse",
+    "mot_de_passe",
+    "password",
+    "secret",
+    "token",
+    "jeton",
+    "accessToken",
+    "refreshToken",
+    "cle",
+    "apiKey",
+)
 
 
 def _contexte(_logger: Any, _methode: str, event: dict[str, Any]) -> dict[str, Any]:
@@ -48,7 +59,9 @@ def configurer(json: bool = True, niveau: int = logging.INFO) -> None:
         structlog.processors.add_log_level,
         structlog.processors.TimeStamper(fmt="iso", utc=True),
     ]
-    processeurs.append(structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer())
+    processeurs.append(
+        structlog.processors.JSONRenderer() if json else structlog.dev.ConsoleRenderer()
+    )
     structlog.configure(
         processors=processeurs,
         wrapper_class=structlog.make_filtering_bound_logger(niveau),

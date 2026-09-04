@@ -33,7 +33,9 @@ class ClientApi(httpx.AsyncClient):
     def v1(self, chemin: str) -> str:
         return f"/v1{chemin}"
 
-    async def connecter(self, email: str = ADMIN_EMAIL, mot_de_passe: str = ADMIN_MDP) -> dict[str, Any]:
+    async def connecter(
+        self, email: str = ADMIN_EMAIL, mot_de_passe: str = ADMIN_MDP
+    ) -> dict[str, Any]:
         r = await self.post("/v1/auth/connexion", json={"email": email, "motDePasse": mot_de_passe})
         assert r.status_code == 200, r.text
         corps = r.json()

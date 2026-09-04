@@ -1,0 +1,82 @@
+"""Relais SMTP (Web Cloud) : relais par org, clés, identifiants, messages, test, webhooks."""
+
+
+async def test_cycle_relais(client):
+    r = await client.get("/v1/web/smtp")
+    assert r.status_code == 200
+    assert r.json()["actif"] is False  # relais par défaut inactif
+
+    r = await client.post(
+        "/v1/web/smtp", json={"domainesAutorises": ["exemple.ci"], "quotaJour": 500}
+    )
+    assert r.status_code == 202, r.text
+    assert r.json()["type"] == "smtp.activate" and r.json()["statut"] == "done"
+
+    relais = (await client.get("/v1/web/smtp")).json()
+    assert relais["actif"] is True
+    assert relais["hote"] == "smtp.synelia.cloud"
+    assert 587 in relais["ports"]
+
+    r = await client.post("/v1/web/smtp", json={"domainesAutorises": ["autre.ci"]})
+    assert r.status_code == 409 and r.json()["erreur"]["code"] == "relais_deja_actif"
+
+    r = await client.patch("/v1/web/smtp", json={"domainesAutorises": ["exemple.ci", "b.ci"]})
+    assert r.status_code == 200 and "b.ci" in r.json()["domainesAutorises"]
+
+    r = await client.post(
+        "/v1/web/smtp/test", json={"destinataire": "x@exemple.ci", "de": "y@exemple.ci"}
+    )
+    assert r.status_code == 200 and r.json()["envoye"] is True
+
+    r = await client.get("/v1/web/smtp/messages")
+    assert r.status_code == 200 and r.json()["donnees"] == []
+
+
+async def test_cles_smtp(client):
+    await client.post("/v1/web/smtp", json={"domainesAutorises": ["exemple.ci"]})
+    r = await client.post("/v1/web/smtp/cles", json={"nom": "app-prod", "quotaJour": 200})
+    assert r.status_code == 201, r.text
+    secret = r.json()
+    assert secret["motDePasse"] and secret["hote"] == "smtp.synelia.cloud"
+    cle = secret["cle"]
+    cid = cle["id"]
+
+    r = await client.patch(f"/v1/web/smtp/cles/{cid}", json={"quotaJour": 300})
+    assert r.status_code == 200 and r.json()["quotaJour"] == 300
+
+    r = await client.delete(f"/v1/web/smtp/cles/{cid}", params={"confirmation": "mauvais"})
+    assert r.status_code == 422
+    r = await client.delete(f"/v1/web/smtp/cles/{cid}", params={"confirmation": "app-prod"})
+    assert r.status_code == 204
+    cles = (await client.get("/v1/web/smtp/cles")).json()
+    assert cles[0]["statut"] == "revoquee"
+
+
+async def test_identifiants_regenerer(client):
+    await client.post("/v1/web/smtp", json={"domainesAutorises": ["exemple.ci"]})
+    r = await client.post("/v1/web/smtp/identifiants", json={"confirmation": "regenerer"})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["motDePasse"] and body["identifiant"]
+
+
+async def test_webhooks_smtp(client):
+    await client.post("/v1/web/smtp", json={"domainesAutorises": ["exemple.ci"]})
+    r = await client.post(
+        "/v1/web/smtp/webhooks",
+        json={"url": "https://app.ci/cb", "evenements": ["rebond", "rejete"]},
+    )
+    assert r.status_code == 201, r.text
+    w = r.json()
+    wid = w["id"]
+    assert w["actif"] is True and w["secretDefini"] is False
+
+    r = await client.patch(
+        f"/v1/web/smtp/webhooks/{wid}",
+        json={"url": "https://app.ci/cb2", "evenements": ["rebond"], "actif": False},
+    )
+    assert r.status_code == 200 and r.json()["actif"] is False
+
+    r = await client.delete(f"/v1/web/smtp/webhooks/{wid}")
+    assert r.status_code == 204
+    assert (await client.get("/v1/web/smtp/webhooks")).json() == []

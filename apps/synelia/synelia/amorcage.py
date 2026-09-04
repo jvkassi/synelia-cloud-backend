@@ -26,9 +26,18 @@ async def amorcer() -> None:
     if not r.seed_admin_email or not r.seed_admin_mot_de_passe:
         return
     async with fabrique()() as s:
-        admin = (await s.execute(select(Utilisateur).where(Utilisateur.email == r.seed_admin_email))).scalar_one_or_none()
+        admin = (
+            await s.execute(select(Utilisateur).where(Utilisateur.email == r.seed_admin_email))
+        ).scalar_one_or_none()
         if admin is None:
-            org = Organisation(nom=r.seed_organisation, pays="CI", secteur="Cloud", statut="active", tenant_plan="entreprise", domaine="synelia.cloud")
+            org = Organisation(
+                nom=r.seed_organisation,
+                pays="CI",
+                secteur="Cloud",
+                statut="active",
+                tenant_plan="entreprise",
+                domaine="synelia.cloud",
+            )
             s.add(org)
             await s.flush()
             admin = Utilisateur(
@@ -43,7 +52,11 @@ async def amorcer() -> None:
             )
             s.add(admin)
             await s.flush()
-            s.add(Membership(utilisateur_id=admin.id, org_id=org.id, role="org_admin", scope_type="org"))
+            s.add(
+                Membership(
+                    utilisateur_id=admin.id, org_id=org.id, role="org_admin", scope_type="org"
+                )
+            )
             await s.commit()
             log.info("amorcage.admin_cree", email=r.seed_admin_email, organisation=org.nom)
             if r.seed_demo:

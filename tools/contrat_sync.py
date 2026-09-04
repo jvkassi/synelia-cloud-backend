@@ -88,14 +88,23 @@ def generer_operations(spec: dict) -> str:
             codes = tuple(sorted(op.get("responses", {}).keys()))
             succes = min(int(c) for c in codes if c.startswith("2"))
             corps = ref_name(
-                op.get("requestBody", {}).get("content", {}).get("application/json", {}).get("schema")
+                op.get("requestBody", {})
+                .get("content", {})
+                .get("application/json", {})
+                .get("schema")
             )
             rep = op["responses"].get(str(succes), {})
             reponse = ref_name(rep.get("content", {}).get("application/json", {}).get("schema"))
             a_corps = "application/json" in op.get("requestBody", {}).get("content", {})
-            corps_modele = corps if corps else (nom_inline(chemin, methode, "Request") if a_corps else None)
+            corps_modele = (
+                corps if corps else (nom_inline(chemin, methode, "Request") if a_corps else None)
+            )
             a_reponse = "application/json" in rep.get("content", {})
-            reponse_modele = reponse if reponse else (nom_inline(chemin, methode, "Response") if a_reponse else None)
+            reponse_modele = (
+                reponse
+                if reponse
+                else (nom_inline(chemin, methode, "Response") if a_reponse else None)
+            )
             pchemin, prequete = [], []
             for p in op.get("parameters", []):
                 if "$ref" in p:
@@ -129,12 +138,18 @@ def corriger_collisions(fichier: Path, spec: dict) -> None:
     champs: dict[str, set[str]] = {}
     for n in arbre.body:
         if isinstance(n, ast.ClassDef):
-            champs[n.name] = {t.target.id for t in n.body if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)}
+            champs[n.name] = {
+                t.target.id
+                for t in n.body
+                if isinstance(t, ast.AnnAssign) and isinstance(t.target, ast.Name)
+            }
     for nom, schema in spec["components"]["schemas"].items():
         props = set(schema.get("properties", {}))
         if not props or nom not in champs or champs[nom] == props:
             continue
-        candidats = [c for c in champs if _re.fullmatch(rf"{nom}(Model|\d+)", c) and champs[c] == props]
+        candidats = [
+            c for c in champs if _re.fullmatch(rf"{nom}(Model|\d+)", c) and champs[c] == props
+        ]
         if not candidats:
             continue
         bon = candidats[0]
@@ -154,10 +169,15 @@ def main() -> int:
     CONTRAT.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, CONTRAT / "openapi.json")
     spec = json.loads(source.read_text())
-    print(f"openapi.json copié : {len(spec['paths'])} chemins, {len(spec['components']['schemas'])} schémas")
+    print(
+        f"openapi.json copié : {len(spec['paths'])} chemins, {len(spec['components']['schemas'])} schémas"
+    )
 
     tsx = shutil.which("tsx") or str(Path.home() / ".local" / "bin" / "tsx")
-    subprocess.run([tsx, str(RACINE / "tools" / "exporter_frontend.mts"), str(frontend), str(CONTRAT)], check=True)
+    subprocess.run(
+        [tsx, str(RACINE / "tools" / "exporter_frontend.mts"), str(frontend), str(CONTRAT)],
+        check=True,
+    )
     CATALOGUE.mkdir(parents=True, exist_ok=True)
     shutil.move(str(CONTRAT / "configurations.json"), CATALOGUE / "configurations.json")
 
@@ -167,22 +187,31 @@ def main() -> int:
     subprocess.run(
         [
             "datamodel-codegen",
-            "--input", str(CONTRAT / "openapi.json"),
-            "--input-file-type", "openapi",
-            "--output", str(CONTRAT / "modeles.py"),
-            "--output-model-type", "pydantic_v2.BaseModel",
+            "--input",
+            str(CONTRAT / "openapi.json"),
+            "--input-file-type",
+            "openapi",
+            "--output",
+            str(CONTRAT / "modeles.py"),
+            "--output-model-type",
+            "pydantic_v2.BaseModel",
             "--use-annotated",
             "--field-constraints",
             "--use-standard-collections",
             "--use-union-operator",
             "--use-schema-description",
-            "--target-python-version", "3.12",
+            "--target-python-version",
+            "3.12",
             "--disable-timestamp",
-            "--enum-field-as-literal", "all",
+            "--enum-field-as-literal",
+            "all",
             "--use-default-kwarg",
             "--collapse-root-models",
-            "--openapi-scopes", "schemas", "paths",
-            "--formatters", "ruff-format",
+            "--openapi-scopes",
+            "schemas",
+            "paths",
+            "--formatters",
+            "ruff-format",
         ],
         check=True,
     )

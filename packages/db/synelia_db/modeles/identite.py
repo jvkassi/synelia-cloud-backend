@@ -42,13 +42,17 @@ class Utilisateur(Base, Identifie, Horodate):
     preferences: Mapped[dict[str, Any]] = mapped_column(default=dict)
     reinit_jeton_hash: Mapped[str | None] = mapped_column(String(128))
     reinit_expire_le: Mapped[datetime | None] = mapped_column(DateTimeUTC)
-    equipe: Mapped[dict[str, Any] | None] = mapped_column(default=None)  # membre de l'équipe Synelia : rôle, élévation
+    equipe: Mapped[dict[str, Any] | None] = mapped_column(
+        default=None
+    )  # membre de l'équipe Synelia : rôle, élévation
 
 
 class Membership(Base, Identifie, Horodate):
     __tablename__ = "memberships"
     __table_args__ = (
-        UniqueConstraint("utilisateur_id", "org_id", "scope_type", "scope_id", name="uq_membership"),
+        UniqueConstraint(
+            "utilisateur_id", "org_id", "scope_type", "scope_id", name="uq_membership"
+        ),
         Index("ix_memberships_org", "org_id"),
     )
 
@@ -63,7 +67,9 @@ class Membership(Base, Identifie, Horodate):
 class Invitation(Base, Identifie, Horodate):
     __tablename__ = "invitations"
 
-    org_id: Mapped[str] = mapped_column(ForeignKey("organisations.id", ondelete="CASCADE"), index=True)
+    org_id: Mapped[str] = mapped_column(
+        ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
     email: Mapped[str] = mapped_column(String(320), index=True)
     role: Mapped[str] = mapped_column(String(30))
     scope_type: Mapped[str] = mapped_column(String(20), default="org")
@@ -80,7 +86,9 @@ class SessionAuth(Base, Identifie, Horodate):
 
     __tablename__ = "sessions_auth"
 
-    utilisateur_id: Mapped[str] = mapped_column(ForeignKey("utilisateurs.id", ondelete="CASCADE"), index=True)
+    utilisateur_id: Mapped[str] = mapped_column(
+        ForeignKey("utilisateurs.id", ondelete="CASCADE"), index=True
+    )
     org_id: Mapped[str | None] = mapped_column(String(36), index=True)
     role: Mapped[str | None] = mapped_column(String(30))
     famille: Mapped[str] = mapped_column(String(36), index=True)
@@ -98,7 +106,9 @@ class SessionAuth(Base, Identifie, Horodate):
 class CleApi(Base, Identifie, Horodate):
     __tablename__ = "cles_api"
 
-    org_id: Mapped[str] = mapped_column(ForeignKey("organisations.id", ondelete="CASCADE"), index=True)
+    org_id: Mapped[str] = mapped_column(
+        ForeignKey("organisations.id", ondelete="CASCADE"), index=True
+    )
     nom: Mapped[str] = mapped_column(String(120))
     prefixe: Mapped[str] = mapped_column(String(20), index=True)
     secret_hash: Mapped[str] = mapped_column(String(128), unique=True)

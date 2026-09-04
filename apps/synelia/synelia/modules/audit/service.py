@@ -44,7 +44,12 @@ def vers_contrat(a: Audit, org_nom: str | None, noms: dict[str, str]) -> dict[st
         "ts": a.date,
         "orgId": a.org_id,
         "orgNom": org_nom,
-        "actor": {"id": a.acteur_id or acteur, "nom": noms.get(a.acteur_id or "", acteur), "email": acteur if "@" in acteur else None, "type": type_acteur},
+        "actor": {
+            "id": a.acteur_id or acteur,
+            "nom": noms.get(a.acteur_id or "", acteur),
+            "email": acteur if "@" in acteur else None,
+            "type": type_acteur,
+        },
         "role": role,
         "scope": {"type": "org", "id": a.org_id, "label": org_nom or a.org_id or "plateforme"},
         "action": a.action,
@@ -61,4 +66,9 @@ async def noms_acteurs(ctx: Contexte, lignes: list[Audit]) -> dict[str, str]:
     ids = {a.acteur_id for a in lignes if a.acteur_id}
     if not ids:
         return {}
-    return {u.id: u.nom for u in (await ctx.session.execute(select(Utilisateur).where(Utilisateur.id.in_(ids)))).scalars()}
+    return {
+        u.id: u.nom
+        for u in (
+            await ctx.session.execute(select(Utilisateur).where(Utilisateur.id.in_(ids)))
+        ).scalars()
+    }

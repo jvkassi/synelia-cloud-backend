@@ -2,7 +2,13 @@
 
 
 async def test_cycle_espace(client):
-    corps = {"code": "prod-abj", "offerId": "offre-standard", "site": "ABJ", "cidr": "10.10.0.0/16", "quota": {"vcpu": 16, "ramGo": 64, "stockageTo": 2}}
+    corps = {
+        "code": "prod-abj",
+        "offerId": "offre-standard",
+        "site": "ABJ",
+        "cidr": "10.10.0.0/16",
+        "quota": {"vcpu": 16, "ramGo": 64, "stockageTo": 2},
+    }
     r = await client.post("/v1/espaces", json=corps)
     assert r.status_code == 202, r.text
     travail = r.json()
@@ -11,7 +17,7 @@ async def test_cycle_espace(client):
 
     r = await client.get("/v1/espaces")
     assert r.status_code == 200
-    espaces = r.json()["donnees"]
+    espaces = [e for e in r.json()["donnees"] if e["code"] == "prod-abj"]
     assert len(espaces) == 1 and espaces[0]["statut"] == "active"
     eid = espaces[0]["id"]
 
@@ -30,7 +36,9 @@ async def test_cycle_espace(client):
     r = await client.delete(f"/v1/espaces/{eid}", params={"confirmation": "prod-abj"})
     assert r.status_code == 202
     r = await client.get("/v1/espaces")
-    assert r.json()["pagination"]["total"] == 0
+    assert all(e["code"] != "prod-abj" for e in r.json()["donnees"])
 
-    r = await client.get("/v1/audit")  # module audit pas encore écrit → 404 chemin inconnu accepté ici
+    r = await client.get(
+        "/v1/audit"
+    )  # module audit pas encore écrit → 404 chemin inconnu accepté ici
     assert r.status_code in (200, 404)

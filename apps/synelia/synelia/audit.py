@@ -28,7 +28,9 @@ async def journaliser(
     p = ctx.principal
     org = org_id or (p.org_id if p else None)
     precedent = (
-        await ctx.session.execute(select(Audit.hash).where(Audit.org_id == org).order_by(desc(Audit.date)).limit(1))
+        await ctx.session.execute(
+            select(Audit.hash).where(Audit.org_id == org).order_by(desc(Audit.date)).limit(1)
+        )
     ).scalar_one_or_none()
     ligne = Audit(
         org_id=org,
@@ -46,7 +48,17 @@ async def journaliser(
         hash_precedent=precedent,
     )
     charge = json.dumps(
-        [precedent, org, iso(ligne.date), ligne.acteur, action, cible_type, cible_id, resultat, ligne.details],
+        [
+            precedent,
+            org,
+            iso(ligne.date),
+            ligne.acteur,
+            action,
+            cible_type,
+            cible_id,
+            resultat,
+            ligne.details,
+        ],
         sort_keys=True,
         default=str,
     )

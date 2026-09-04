@@ -75,7 +75,9 @@ def filtrer_trier_paginer(
     cle = p.tri or tri_defaut
     if cle:
         try:
-            elements = sorted(elements, key=lambda x: _valeur_tri(x, cle), reverse=(p.ordre == "desc"))
+            elements = sorted(
+                elements, key=lambda x: _valeur_tri(x, cle), reverse=(p.ordre == "desc")
+            )
         except TypeError:
             pass
     total = len(elements)

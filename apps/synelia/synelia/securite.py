@@ -70,7 +70,9 @@ def emettre_acces(claims: dict[str, Any], duree_s: int | None = None) -> str:
         "exp": now + (duree_s or r.acces_duree_s),
         **claims,
     }
-    return jwt.encode({"alg": "EdDSA", "kid": cle_signature().kid}, corps, cle_signature(), registry=_REGISTRE)
+    return jwt.encode(
+        {"alg": "EdDSA", "kid": cle_signature().kid}, corps, cle_signature(), registry=_REGISTRE
+    )
 
 
 def lire_acces(jeton: str) -> dict[str, Any]:

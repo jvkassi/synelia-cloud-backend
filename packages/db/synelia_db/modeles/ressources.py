@@ -30,5 +30,7 @@ class Ressource(Base, Identifie, Horodate):
     parent_id: Mapped[str | None] = mapped_column(String(120))
     statut: Mapped[str | None] = mapped_column(String(40))
     donnees: Mapped[dict[str, Any]] = mapped_column(default=dict)
-    secrets: Mapped[dict[str, Any]] = mapped_column(default=dict)  # chiffrés, jamais sérialisés dans `donnees`
+    secrets: Mapped[dict[str, Any]] = mapped_column(
+        default=dict
+    )  # chiffrés, jamais sérialisés dans `donnees`
     supprime_le: Mapped[datetime | None] = mapped_column(DateTimeUTC)
