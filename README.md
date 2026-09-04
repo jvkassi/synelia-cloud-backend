@@ -47,3 +47,7 @@ docker compose up -d            # postgres 18, valkey 8, temporal + ui (8233), m
 ## Écrire un module
 
 [`docs/GUIDE-MODULE.md`](docs/GUIDE-MODULE.md). Module de référence : `modules/espaces/`.
+
+## Préversions
+
+Chaque branche poussée sur GitHub obtient une URL de préversion Vercel.
