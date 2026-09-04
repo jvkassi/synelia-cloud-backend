@@ -30,6 +30,17 @@ def ip_publique(vm: m.Vm) -> str:
     return f"196.202.{hash(vm.nom) % 250}.{hash(vm.os) % 250 + 2}"
 
 
+async def serveur_id(ctx: Contexte, vm_id: str, travail: Travail | None = None) -> str:
+    """Identifiant Nova du serveur : dans les secrets de la VM (posé à la création), sinon le contexte du travail."""
+    if travail and travail.contexte.get("serveur_id"):
+        return str(travail.contexte["serveur_id"])
+    try:
+        sec = await depot.secrets(ctx, vm_id)
+    except Exception:  # noqa: BLE001
+        sec = {}
+    return str(sec.get("serveur_id") or vm_id)
+
+
 @executeur("vm.create")
 class ExecuteurVmCreate(Executeur):
     compensable = True
@@ -54,6 +65,7 @@ class ExecuteurVmCreate(Executeur):
             )
             c = dict(travail.contexte)
             c["serveur_id"] = srv["id"]
+            await depot.definir_secrets(ctx, vm.id, {"serveur_id": srv["id"]})
             c["ip_privee"] = srv.get("ip_privee") or ip_privee(vm)
             travail.contexte = c
             return f"Serveur amont {srv['id']} créé"
@@ -70,8 +82,8 @@ class ExecuteurVmCreate(Executeur):
         )
 
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
-        sid = travail.contexte.get("serveur_id")
-        if sid:
+        sid = await serveur_id(ctx, travail.cible_id or "", travail)
+        if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
         await depot.definir_statut(ctx, travail.cible_id or "", "error")
 
@@ -126,7 +138,7 @@ class ExecuteurVmPower(Executeur):
     async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
         if index == 0:
             vm = await depot.obtenir(ctx, travail.cible_id or "")
-            amont().action(travail.contexte.get("serveur_id") or vm.id, self._ACTION[travail.type])
+            amont().action(await serveur_id(ctx, vm.id, travail), self._ACTION[travail.type])
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
@@ -154,7 +166,7 @@ class ExecuteurVmSnapshot(Executeur):
         vm = await depot.obtenir(ctx, travail.cible_id or "")
         entre = travail.entree or {}
         nom = entre.get("nom") or "snapshot"
-        amont().instantane(travail.contexte.get("serveur_id") or vm.id, nom)
+        amont().instantane(await serveur_id(ctx, vm.id, travail), nom)
         inst = m.InstantaneVm(
             id=nouvel_id(),
             vmId=vm.id,
@@ -182,8 +194,8 @@ class ExecuteurVmRestore(Executeur):
 @executeur("vm.delete")
 class ExecuteurVmDelete(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
-        sid = travail.contexte.get("serveur_id")
-        if sid:
+        sid = await serveur_id(ctx, travail.cible_id or "", travail)
+        if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 

@@ -12,6 +12,7 @@ from synelia_kernel.ids import nouvel_id
 from synelia.audit import journaliser
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
 from synelia.modules.espaces.service import verifier_quota
+from synelia.modules.vms import service
 from synelia.modules.vms.service import amont, depot, instantane_depot
 from synelia.travaux import demarrer_travail
 
@@ -258,7 +259,7 @@ async def redemarrer_vm(
 )
 async def ouvrir_console_vm(vmId: str, ctx: Contexte = Depends(exige("vm.power"))) -> Any:  # noqa: N803
     vm = await _vm(ctx, vmId)
-    url = amont().console(vm.id)
+    url = amont().console(await service.serveur_id(ctx, vm.id))
     return m.ConsoleVm(url=url, protocole="vnc", expire=maintenant() + timedelta(hours=2))
 
 
@@ -267,7 +268,7 @@ async def obtenir_journaux_vm(
     vmId: str, niveau: str | None = None, ctx: Contexte = Depends(exige(None))
 ) -> Any:  # noqa: N803
     vm = await _vm(ctx, vmId)
-    lignes = amont().journaux(vm.id)
+    lignes = amont().journaux(await service.serveur_id(ctx, vm.id))
     extrait = [m.LigneLog(ts=maintenant(), niveau="INFO", source="vm", message=ln) for ln in lignes]
     return m.ExtraitLogs(lignes=extrait, tronque=len(extrait) >= 20)
 

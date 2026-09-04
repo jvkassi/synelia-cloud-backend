@@ -1,0 +1,40 @@
+# Hébergement du backend sur dev01, près du lab : Postgres durable + API en mode OpenStack réel.
+# Lancement : docker compose -f docker-compose.dev01.yml --env-file ~/.config/synelia/backend-dev01.env up -d --build
+name: synelia-backend-dev01
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: synelia
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: synelia
+    ports: ["127.0.0.1:5433:5432"]
+    volumes: [pgdata-dev01:/var/lib/postgresql]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synelia"]
+      interval: 5s
+      retries: 30
+    restart: unless-stopped
+
+  api:
+    build: .
+    depends_on: { postgres: { condition: service_healthy } }
+    environment:
+      SYNELIA_ENV: production
+      SYNELIA_URL_PUBLIQUE: https://api.synelia.dev01.ovh.smile.ci
+      SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:${POSTGRES_PASSWORD}@postgres:5432/synelia
+      SYNELIA_SECRET: ${SYNELIA_SECRET:?}
+      SYNELIA_SEED_ADMIN_MOT_DE_PASSE: ${SYNELIA_SEED_ADMIN_MOT_DE_PASSE:?}
+      SYNELIA_CORS_ORIGINES: '["https://synelia-cloud.vercel.app","https://synelia.cloud","http://localhost:3000","http://localhost:3111"]'
+      SYNELIA_FOURNISSEUR: openstack
+      SYNELIA_OS_AUTH_URL: ${SYNELIA_OS_AUTH_URL:?}
+      SYNELIA_OS_APPLICATION_CREDENTIAL_ID: ${SYNELIA_OS_APPLICATION_CREDENTIAL_ID:?}
+      SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET: ${SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET:?}
+      SYNELIA_OS_REGION: RegionOne
+      SYNELIA_TRAVAUX_EN_LIGNE: "false"
+    ports: ["127.0.0.1:4010:4000"]
+    restart: unless-stopped
+
+volumes:
+  pgdata-dev01: {}
