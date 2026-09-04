@@ -258,8 +258,15 @@ async def redemarrer_vm(
     response_model_exclude_none=True,
 )
 async def ouvrir_console_vm(vmId: str, ctx: Contexte = Depends(exige("vm.power"))) -> Any:  # noqa: N803
+    from synelia_openstack.erreurs import traduire
+
     vm = await _vm(ctx, vmId)
-    url = amont().console(await service.serveur_id(ctx, vm.id))
+    try:
+        url = amont().console(await service.serveur_id(ctx, vm.id))
+    except erreurs.AppError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise traduire(exc, "Machine virtuelle") from None
     return m.ConsoleVm(url=url, protocole="vnc", expire=maintenant() + timedelta(hours=2))
 
 
@@ -268,7 +275,14 @@ async def obtenir_journaux_vm(
     vmId: str, niveau: str | None = None, ctx: Contexte = Depends(exige(None))
 ) -> Any:  # noqa: N803
     vm = await _vm(ctx, vmId)
-    lignes = amont().journaux(await service.serveur_id(ctx, vm.id))
+    from synelia_openstack.erreurs import traduire
+
+    try:
+        lignes = amont().journaux(await service.serveur_id(ctx, vm.id))
+    except erreurs.AppError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise traduire(exc, "Machine virtuelle") from None
     extrait = [m.LigneLog(ts=maintenant(), niveau="INFO", source="vm", message=ln) for ln in lignes]
     return m.ExtraitLogs(lignes=extrait, tronque=len(extrait) >= 20)
 

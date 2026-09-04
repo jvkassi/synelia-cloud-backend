@@ -239,12 +239,34 @@ class ComputeOpenStack(ComputeSimule):
         return {"id": s.id, "statut": s.status, "ip_privee": ip}
 
     def action(self, serveur_id: str, action: str) -> None:
-        c = self._c()
-        {
-            "arret": c.compute.stop_server,
-            "demarrage": c.compute.start_server,
-            "redemarrage": lambda s: c.compute.reboot_server(s, "SOFT"),
-        }[action](serveur_id)
+        from synelia_openstack.erreurs import traduire
+
+        try:
+            c = self._c()
+            if action == "arret":
+                c.compute.stop_server(serveur_id)
+                c.compute.wait_for_server(
+                    c.compute.get_server(serveur_id), status="SHUTOFF", wait=300
+                )
+            elif action == "demarrage":
+                c.compute.start_server(serveur_id)
+                c.compute.wait_for_server(
+                    c.compute.get_server(serveur_id), status="ACTIVE", wait=300
+                )
+            elif action == "redemarrage":
+                c.compute.reboot_server(serveur_id, "SOFT")
+                c.compute.wait_for_server(
+                    c.compute.get_server(serveur_id), status="ACTIVE", wait=300
+                )
+            else:
+                msg = f"Action inconnue : {action}."
+                raise ValueError(msg)
+        except Exception as exc:
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            raise traduire(exc, "Machine virtuelle") from None
 
     def supprimer_serveur(self, serveur_id: str) -> None:
         self._c().compute.delete_server(serveur_id, ignore_missing=True)
@@ -264,7 +286,14 @@ class ComputeOpenStack(ComputeSimule):
         return self._c().compute.create_console(serveur_id, console_type="novnc")["url"]
 
     def journaux(self, serveur_id: str, lignes: int = 20) -> list[str]:
-        return (
-            self._c().compute.get_server_console_output(serveur_id, length=lignes).get("output")
-            or ""
-        ).splitlines()
+        from synelia_openstack.erreurs import traduire
+
+        try:
+            sortie = self._c().compute.get_server_console_output(serveur_id, length=lignes)
+        except Exception as exc:
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            raise traduire(exc, "Machine virtuelle") from None
+        return ((sortie or {}).get("output") or "").splitlines()
