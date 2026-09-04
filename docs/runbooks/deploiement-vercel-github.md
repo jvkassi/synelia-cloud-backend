@@ -59,3 +59,18 @@ Documentation interactive : `https://<url>/v1/docs`. Contrat servi : `/v1/openap
 
 ## 6. Brancher le frontend
 `NEXT_PUBLIC_API_URL=https://<url>/v1` côté synelia-cloud.
+
+## 6. Backend près du lab : `https://api.synelia.dev01.ovh.smile.ci`
+
+Sur dev01, `docker-compose.dev01.yml` lance Postgres 18 (volume durable) et l'API en mode **OpenStack réel**
+(lab kolla via `https://keystone.openstack-lab.dev01.ovh.smile.ci/v3`, application credential `synelia-backend`).
+Apache (vhost `api.synelia.dev01.ovh.smile.ci`, certificat Let's Encrypt) proxifie vers `127.0.0.1:4010`.
+
+```bash
+sudo docker compose -f docker-compose.dev01.yml --env-file /home/jekas/.config/synelia/backend-dev01.env up -d --build
+sudo kill -USR1 "$(cat /run/httpd/httpd.pid)"   # rechargement gracieux d'Apache (le `systemctl reload` échoue sur cet hôte)
+```
+
+Répartition : **Vercel** = frontend + backend bac à sable (amont simulé, SQLite éphémère, préversions par branche) ;
+**dev01** = backend de référence sur le vrai OpenStack, base durable. Le frontend pointe `NEXT_PUBLIC_API_URL`
+sur l'un ou l'autre.

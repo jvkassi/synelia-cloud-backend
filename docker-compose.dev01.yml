@@ -33,6 +33,7 @@ services:
       SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET: ${SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET:?}
       SYNELIA_OS_REGION: RegionOne
       SYNELIA_TRAVAUX_EN_LIGNE: "false"
+      SYNELIA_SEED_DEMO: "false"
     ports: ["127.0.0.1:4010:4000"]
     restart: unless-stopped
 
