@@ -96,6 +96,8 @@ class IdentiteOpenStack(IdentiteSimule):
         c.identity.assign_project_role_to_user(projet, user, role)
         r = reglages()
         scope = openstack.connect(
+            load_yaml_config=False,
+            load_envvars=False,
             auth_type="v3password",
             auth_url=r.os_auth_url,
             username=nom,

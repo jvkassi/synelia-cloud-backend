@@ -35,6 +35,8 @@ def connexion(region: str | None = None) -> Any:
         conn = openstack.connect(cloud=r.os_cloud, region_name=region or r.os_region)
     else:
         conn = openstack.connect(
+            load_yaml_config=False,
+            load_envvars=False,  # jamais les OS_* du shell : une credential ne doit pas recevoir de scope
             auth_type="v3applicationcredential",
             auth_url=r.os_auth_url,
             application_credential_id=r.os_application_credential_id,
@@ -52,6 +54,8 @@ def connexion_avec(application_credential_id: str, secret: str, region: str | No
 
     r = reglages()
     conn = openstack.connect(
+        load_yaml_config=False,
+        load_envvars=False,
         auth_type="v3applicationcredential",
         auth_url=r.os_auth_url,
         application_credential_id=application_credential_id,
