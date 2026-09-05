@@ -159,23 +159,31 @@ def _indenter(bloc: str, colonnes: int) -> str:
 
 
 def construire_cloud_init(domaine: str, version_php: str) -> str:
-    """`#cloud-config` : Docker + Traefik (reverse-proxy HTTP sur :80, provider Docker piloté
-    par labels) et un conteneur PHP pour `domaine`, routé par son `Host()`. Nextcloud
-    (« Drive ») est ajouté plus tard au même `docker-compose.yml`, sur cette même VM, quand
-    `web_drive` est activé pour l'organisation (voir `web_drive.service`) — un Traefik par VM
-    d'hébergement, tout le reste en conteneurs Docker derrière lui."""
+    """`#cloud-config` : Docker + Traefik (reverse-proxy HTTP sur :80) et un conteneur PHP pour
+    `domaine`, routé par son `Host()`. Nextcloud (« Drive ») est ajouté plus tard au même
+    `docker-compose.yml`, sur cette même VM, quand `web_drive` est activé pour l'organisation
+    (voir `web_drive.service`) — un Traefik par VM d'hébergement, tout le reste en conteneurs
+    Docker derrière lui.
+
+    Traefik route via son *provider fichier* (config statique dans `traefik-dynamic/`), pas le
+    provider Docker : le Docker Engine récent (>= API 1.44, cf. `docker.io` sur Ubuntu 24.04)
+    rejette le client Docker vendorisé par Traefik (bloqué sur l'API 1.24, y compris en v3.5) —
+    `Error response from daemon: client version 1.24 is too old`. Bug de compatibilité amont
+    réel, constaté en direct (VM de debug jetable + SSH), pas un problème de labels. Le provider
+    fichier n'a pas besoin du socket Docker : chaque service se route par son nom de conteneur
+    sur le réseau `synelia` (résolution DNS interne de Compose)."""
     compose = f"""services:
   traefik:
-    image: traefik:v3.1
+    image: traefik:v3.5
     restart: unless-stopped
     command:
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
       - --entrypoints.web.address=:80
     ports:
       - "80:80"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - {_RACINE_DOCKER}/traefik-dynamic:/etc/traefik/dynamic:ro
     networks:
       - synelia
 
@@ -184,17 +192,25 @@ def construire_cloud_init(domaine: str, version_php: str) -> str:
     restart: unless-stopped
     volumes:
       - {_RACINE_DOCKER}/www:/var/www/html:ro
-    labels:
-      - traefik.enable=true
-      - traefik.http.routers.site.rule=Host(`{domaine}`)
-      - traefik.http.routers.site.entrypoints=web
-      - traefik.http.services.site.loadbalancer.server.port=80
     networks:
       - synelia
 
 networks:
   synelia:
     name: synelia
+"""
+    routage = f"""http:
+  routers:
+    site:
+      rule: "Host(`{domaine}`)"
+      entryPoints:
+        - web
+      service: site
+  services:
+    site:
+      loadBalancer:
+        servers:
+          - url: "http://site:80"
 """
     index_php = (
         "<?php\n"
@@ -209,6 +225,8 @@ networks:
         "write_files:\n"
         f"  - path: {_RACINE_DOCKER}/docker-compose.yml\n"
         "    content: |\n" + _indenter(compose, 6) + "\n"
+        f"  - path: {_RACINE_DOCKER}/traefik-dynamic/site.yml\n"
+        "    content: |\n" + _indenter(routage, 6) + "\n"
         f"  - path: {_RACINE_DOCKER}/www/index.php\n"
         "    content: |\n" + _indenter(index_php, 6) + "\n"
         "runcmd:\n"
