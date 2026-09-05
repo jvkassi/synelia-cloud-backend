@@ -1,0 +1,33 @@
+# Relais SMTP réel (module web_smtp) sur dev01 : process séparé, réseau hôte.
+#
+# `network_mode: host` est nécessaire ici (pas de `ports:`) : le port 587 sur 127.0.0.1 est déjà
+# pris par le conteneur Zimbra (zimbra/docker-compose.yml, MTA global) sur cet hôte, et le relais
+# a lui-même besoin d'atteindre Postgres (127.0.0.1:5433, déjà publié) et Zimbra (127.0.0.1:587)
+# comme s'il tournait en process natif — le réseau hôte règle les deux d'un coup, sans coupler les
+# deux projets docker-compose entre eux.
+#
+# Le relais écoute donc en clair sur 127.0.0.1:2587 (boucle locale uniquement, jamais exposé par
+# Apache) : c'est ce port qu'on utilise pour les tests `smtplib`/`openssl s_client` depuis dev01.
+#
+# Lancement : docker compose -f docker-compose.relais-smtp.dev01.yml --env-file ~/.config/synelia/backend-dev01.env up -d --build
+name: synelia-relais-smtp-dev01
+
+services:
+  relais-smtp:
+    build: .
+    command: ["relais-smtp"]
+    network_mode: host
+    environment:
+      SYNELIA_ENV: production
+      SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:${POSTGRES_PASSWORD}@127.0.0.1:5433/synelia
+      SYNELIA_SECRET: ${SYNELIA_SECRET:?}
+      SYNELIA_SMTP_RELAIS_HOTE: 127.0.0.1
+      SYNELIA_SMTP_RELAIS_PORT: "2587"
+      # Amont : Zimbra (partagé, toutes orgs), déjà publié en 127.0.0.1:587 par zimbra/docker-compose.yml.
+      # Tant que Zimbra n'a pas de compte de service dédié, la livraison finale peut échouer/différer :
+      # seuls AUTH + quota + protocole SMTP sont garantis réels par ce relais.
+      SYNELIA_SMTP_RELAIS_AMONT_HOTE: 127.0.0.1
+      SYNELIA_SMTP_RELAIS_AMONT_PORT: "587"
+      SYNELIA_SMTP_RELAIS_AMONT_IDENTIFIANT: ${SYNELIA_SMTP_RELAIS_AMONT_IDENTIFIANT:-}
+      SYNELIA_SMTP_RELAIS_AMONT_MOT_DE_PASSE: ${SYNELIA_SMTP_RELAIS_AMONT_MOT_DE_PASSE:-}
+    restart: unless-stopped

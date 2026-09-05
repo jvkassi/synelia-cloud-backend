@@ -262,7 +262,11 @@ async def creer_cle_s3(
 ) -> Any:
     await depot_cle.exiger_nom_libre(ctx, corps.nom)
     amont = service.amont_objet()
-    secret = amont.creer_cle(corps.nom, corps.buckets, corps.droits)
+    if corps.buckets:
+        buckets_reels = [service.nom_reel_bucket(ctx, b) for b in corps.buckets]
+    else:
+        buckets_reels = [f"{service.prefixe_bucket(ctx)}-*"]
+    secret = amont.creer_cle_s3(corps.nom, buckets_reels, corps.droits)
     cle = m.CleS3(
         id=nouvel_id(),
         nom=corps.nom,
@@ -309,6 +313,8 @@ async def revoquer_cle_s3(
     await journaliser(
         ctx, action="cle_s3.revocation", cible_type="cle_s3", cible_id=cleS3Id, cible=cle.nom
     )
+    if cle.accessKeyId:
+        service.amont_objet().revoquer_cle_s3(cle.accessKeyId)
     await depot_cle.supprimer(ctx, cleS3Id, logique=True)
     return Response(status_code=204)
 
@@ -345,8 +351,9 @@ async def creer_bucket(
             "Le nom du bucket est requis.", {"nom": "Champ requis."}
         )
     await depot_bucket.exiger_nom_libre(ctx, corps.nom)
+    nom_reel = service.nom_reel_bucket(ctx, corps.nom)
     amont = service.amont_objet()
-    amont.creer_bucket(nom=corps.nom, region=corps.region, classe=corps.classe)
+    amont.creer_bucket(nom=nom_reel, region=corps.region)
     bucket = m.Bucket(
         id=nouvel_id(),
         orgId=ctx.org_id,
@@ -361,7 +368,7 @@ async def creer_bucket(
         accessLogs=bool(corps.accessLogs),
         policy=corps.policy or "prive",
     )
-    await depot_bucket.creer(ctx, bucket)
+    await depot_bucket.creer(ctx, bucket, secrets={"bucket_reel": nom_reel})
     await journaliser(
         ctx, action="bucket.creation", cible_type="bucket", cible_id=bucket.id, cible=bucket.nom
     )
@@ -408,7 +415,8 @@ async def supprimer_bucket(
     await journaliser(
         ctx, action="bucket.suppression", cible_type="bucket", cible_id=bucketId, cible=bucket.nom
     )
-    service.amont_objet().supprimer_bucket(bucketId)
+    nom_reel = await service.nom_reel_bucket_existant(ctx, bucketId, bucket.nom)
+    service.amont_objet().supprimer_bucket(nom_reel)
     await depot_bucket.supprimer(ctx, bucketId, logique=True)
     return Response(status_code=204)
 
@@ -421,8 +429,9 @@ async def supprimer_bucket(
 async def obtenir_usage_bucket(
     bucketId: str, fenetre: str | None = None, ctx: Contexte = Depends(exige(None))
 ) -> Any:  # noqa: N803
-    await depot_bucket.obtenir(ctx, bucketId)
-    usage = service.amont_objet().usage(bucketId)
+    bucket = await depot_bucket.obtenir(ctx, bucketId)
+    nom_reel = await service.nom_reel_bucket_existant(ctx, bucketId, bucket.nom)
+    usage = service.amont_objet().usage(nom_reel)
     return m.BucketsBucketIdUsageGetResponse(
         tailleGo=usage["taille_go"],
         objets=usage["objets"],

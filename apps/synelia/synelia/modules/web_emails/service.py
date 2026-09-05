@@ -1,10 +1,10 @@
-"""Règles messagerie (Web Cloud) : dépôt, exécuteur d'activation, amont Stalwart."""
+"""Règles messagerie (Web Cloud) : dépôt, exécuteur d'activation, amont Zimbra."""
 
 from __future__ import annotations
 
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
-from synelia_openstack import stalwart
+from synelia_openstack import zimbra
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -28,8 +28,8 @@ PALIERS = {
 DMARC = "v=DMARC1; p=none; rua=mailto:dmarc@synelia.cloud"
 
 
-def amont() -> stalwart.StalwartSimule:
-    return stalwart.choisir_stalwart()
+def amont() -> zimbra.ZimbraSimule:
+    return zimbra.choisir_zimbra()
 
 
 def palier(cle: str) -> dict:
@@ -40,6 +40,7 @@ def palier(cle: str) -> dict:
 class ExecuteurMessagerieActivate(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         mess = await depot.obtenir(ctx, travail.cible_id or "")
+        amont().creer_domaine(mess.domaine)
         await depot.modifier(
             ctx,
             mess.id,

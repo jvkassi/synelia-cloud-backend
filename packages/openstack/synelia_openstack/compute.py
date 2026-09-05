@@ -236,7 +236,13 @@ class ComputeOpenStack(ComputeSimule):
         if kw.get("cle_ssh"):
             params["key_name"] = kw["cle_ssh"]
         if kw.get("cloud_init"):
-            params["user_data"] = kw["cloud_init"]
+            # Nova exige que `user_data` soit du Base64 côté client (openstacksdk ne l'encode
+            # pas lui-même, contrairement au CLI `openstack server create --user-data`) : sans
+            # cet encodage la valeur est silencieusement perdue (aucune erreur, mais l'instance
+            # démarre sans cloud-init).
+            import base64
+
+            params["user_data"] = base64.b64encode(kw["cloud_init"].encode()).decode()
         s = c.compute.create_server(**params)
         s = c.compute.wait_for_server(s, wait=600)
         ip = next((a["addr"] for nets in (s.addresses or {}).values() for a in nets if a.get("version") == 4), None)

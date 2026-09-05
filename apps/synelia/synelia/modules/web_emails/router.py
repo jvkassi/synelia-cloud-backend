@@ -27,7 +27,7 @@ def _nouvelle(domaine: str, palier: str) -> m.Messagerie:
         domaine=domaine,
         actif=False,
         palier=palier,
-        solutionOSS="stalwart",
+        solutionOSS="zimbra",
         hoteWebmail="webmail.synelia.cloud",
         boites=[],
         boitesIncluses=p["boites"],

@@ -76,7 +76,6 @@ async def modifier_dnssec(
     z = await depot.obtenir(ctx, zoneId)
     if z.dnssec == corps.actif:
         raise erreurs.conflit("DNSSEC est déjà dans cet état.", code="dnssec_etat_identique")
-    service.amont().activer_dnssec(zoneId, corps.actif)
     await depot.remplacer(ctx, zoneId, z.model_copy(update={"dnssec": corps.actif}))
     await journaliser(
         ctx,

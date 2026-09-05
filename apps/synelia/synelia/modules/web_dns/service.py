@@ -3,8 +3,6 @@ from __future__ import annotations
 from synelia_contract import modeles as m
 from synelia_kernel import erreurs
 from synelia_kernel.ids import nouvel_id
-from synelia_openstack import fournisseur
-from synelia_openstack.designate import DesignateOpenStack, DesignateSimule
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -53,10 +51,6 @@ MODELES_DNS = [
         ],
     ),
 ]
-
-
-def amont() -> DesignateSimule:
-    return fournisseur(DesignateSimule, DesignateOpenStack)
 
 
 async def creer_zone(ctx: Contexte, domaine: str) -> m.ZoneDns:

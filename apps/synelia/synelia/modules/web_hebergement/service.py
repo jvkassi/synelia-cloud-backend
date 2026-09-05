@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import pathlib
 from typing import Any
 
 from synelia_contract import modeles as m
@@ -8,6 +9,7 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 from synelia_openstack import fournisseur
 from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
+from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -87,6 +89,13 @@ def amont() -> ComputeSimule:
     return fournisseur(ComputeSimule, ComputeOpenStack)
 
 
+def amont_identite() -> IdentiteSimule:
+    """Keystone/Neutron scopé projet — même amont que `espaces.service.amont()` — pour
+    l'IP flottante publique dont chaque VM d'hébergement a besoin (dev01 ne peut atteindre
+    que le réseau externe du lab, pas les réseaux privés des Espaces)."""
+    return fournisseur(IdentiteSimule, IdentiteOpenStack)
+
+
 # Le lab ne possède aujourd'hui que deux gabarits Nova réels — taillés pour Kubernetes,
 # pas de petit gabarit dédié à l'hébergement web. On rattache les paliers les plus légers
 # à `k8s.worker` et les autres à `k8s.master` ; c'est une limitation connue de capacité,
@@ -125,38 +134,70 @@ def image_ubuntu() -> str:
     return str(img["id"]) if img else "ubuntu-24.04"
 
 
+_RACINE_DOCKER = "/srv/synelia"
+
+
+def _indenter(bloc: str, colonnes: int) -> str:
+    prefixe = " " * colonnes
+    return "\n".join(f"{prefixe}{ligne}" for ligne in bloc.splitlines())
+
+
 def construire_cloud_init(domaine: str, version_php: str) -> str:
-    """`#cloud-config` minimal : pile LEMP (Nginx + PHP-FPM + MariaDB) et un vhost du domaine."""
-    paquet_php = f"php{version_php}"
-    racine = f"/var/www/{domaine}"
-    vhost = (
-        "server {\n"
-        "    listen 80;\n"
-        f"    server_name {domaine};\n"
-        f"    root {racine};\n"
-        "    index index.php index.html;\n"
-        "    location / { try_files $uri $uri/ =404; }\n"
-        "    location ~ \\.php$ {\n"
-        "        include snippets/fastcgi-php.conf;\n"
-        f"        fastcgi_pass unix:/run/php/{paquet_php}-fpm.sock;\n"
-        "    }\n"
-        "}\n"
+    """`#cloud-config` : Docker + Traefik (reverse-proxy HTTP sur :80, provider Docker piloté
+    par labels) et un conteneur PHP pour `domaine`, routé par son `Host()`. Nextcloud
+    (« Drive ») est ajouté plus tard au même `docker-compose.yml`, sur cette même VM, quand
+    `web_drive` est activé pour l'organisation (voir `web_drive.service`) — un Traefik par VM
+    d'hébergement, tout le reste en conteneurs Docker derrière lui."""
+    compose = f"""services:
+  traefik:
+    image: traefik:v3.1
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - "80:80"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - synelia
+
+  site:
+    image: php:{version_php}-apache
+    restart: unless-stopped
+    volumes:
+      - {_RACINE_DOCKER}/www:/var/www/html:ro
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.site.rule=Host(`{domaine}`)
+      - traefik.http.routers.site.entrypoints=web
+      - traefik.http.services.site.loadbalancer.server.port=80
+    networks:
+      - synelia
+
+networks:
+  synelia:
+    name: synelia
+"""
+    index_php = (
+        "<?php\n"
+        f'echo "<h1>{domaine}</h1><p>Synelia Web Hebergement -- PHP " . phpversion() . "</p>";\n'
     )
     return (
         "#cloud-config\n"
         "package_update: true\n"
         "packages:\n"
-        "  - nginx\n"
-        f"  - {paquet_php}-fpm\n"
-        "  - mariadb-server\n"
+        "  - docker.io\n"
+        "  - docker-compose-v2\n"
         "write_files:\n"
-        f"  - path: /etc/nginx/sites-available/{domaine}\n"
-        "    content: |\n" + "\n".join(f"      {ligne}" for ligne in vhost.splitlines()) + "\n"
+        f"  - path: {_RACINE_DOCKER}/docker-compose.yml\n"
+        "    content: |\n" + _indenter(compose, 6) + "\n"
+        f"  - path: {_RACINE_DOCKER}/www/index.php\n"
+        "    content: |\n" + _indenter(index_php, 6) + "\n"
         "runcmd:\n"
-        f"  - mkdir -p {racine}\n"
-        f"  - ln -sf /etc/nginx/sites-available/{domaine} /etc/nginx/sites-enabled/{domaine}\n"
-        f"  - systemctl enable --now {paquet_php}-fpm mariadb\n"
-        "  - systemctl restart nginx\n"
+        "  - systemctl enable --now docker\n"
+        f"  - [sh, -c, 'cd {_RACINE_DOCKER} && docker compose up -d']\n"
     )
 
 
@@ -183,6 +224,52 @@ def ip_privee(hebergement_id: str) -> str:
     return f"10.{hash(hebergement_id) % 250}.0.{hash('web') % 250 + 2}"
 
 
+def ip_publique(hebergement_id: str) -> str:
+    """Repli plausible-mais-stable quand l'amont est simulé (pas de vraie IP flottante) —
+    même convention que `vms.service.ip_publique`."""
+    return f"196.202.{hash(hebergement_id) % 250}.{hash('web') % 250 + 2}"
+
+
+_APACHE_CONF_DIR = pathlib.Path("/var/lib/synelia-vhosts-staging")
+
+
+def _chemin_vhost(sous_domaine: str) -> pathlib.Path:
+    return _APACHE_CONF_DIR / f"hebergement-{sous_domaine}.conf"
+
+
+def ecrire_vhost_apache(sous_domaine: str, ip_cible: str, port: int = 80) -> None:
+    """Dépose un vhost Apache dans la zone intermédiaire `/var/lib/synelia-vhosts-staging`
+    (montée dans ce conteneur) qui reverse-proxy `sous_domaine` vers la VM d'hébergement
+    (IP flottante). `/etc/httpd/conf.d` appartient à root sur l'hôte dev01 — c'est le service
+    hôte `apache-vhosts-sync` (docs/runbooks) qui recopie ce dossier vers conf.d et relance
+    Apache (`kill -USR1`, `systemctl reload` échoue sur cet hôte). Best-effort : ce module peut
+    tourner ailleurs que sur dev01 (tests, autre environnement) — une erreur d'écriture ne doit
+    jamais faire échouer la création/suppression de l'hébergement."""
+    conf = (
+        f"<VirtualHost *:80>\n"
+        f"    ServerName {sous_domaine}\n"
+        f"    ProxyPreserveHost On\n"
+        f"    ProxyPass / http://{ip_cible}:{port}/ connectiontimeout=5 timeout=30\n"
+        f"    ProxyPassReverse / http://{ip_cible}:{port}/\n"
+        f"</VirtualHost>\n"
+    )
+    try:
+        if not _APACHE_CONF_DIR.is_dir():
+            return
+        _chemin_vhost(sous_domaine).write_text(conf)
+    except OSError:
+        pass
+
+
+def supprimer_vhost_apache(sous_domaine: str) -> None:
+    try:
+        chemin = _chemin_vhost(sous_domaine)
+        if chemin.exists():
+            chemin.unlink()
+    except OSError:
+        pass
+
+
 async def serveur_id(ctx: Contexte, hebergement_id: str, travail: Travail | None = None) -> str:
     """Identifiant Nova du serveur : dans les secrets (posé à la création), sinon le travail."""
     if travail and travail.contexte.get("serveur_id"):
@@ -200,7 +287,7 @@ def construire_hebergement(ctx: Contexte, corps: m.HebergementCreation) -> m.Heb
         id=hid,
         orgId=ctx.org_id,
         domaine=corps.domaine,
-        domaineProvisoire=f"h-{hid[:8]}.synelia.cloud",
+        domaineProvisoire=f"h-{hid[:8]}.cloud.dev01.ovh.smile.ci",
         palier=corps.palier,
         serveur=m.Serveur(
             nom=f"srv-{hid[:8]}",
@@ -368,15 +455,33 @@ class ExecuteurHebergementCreer(Executeur):
             )
             c = dict(travail.contexte)
             c["serveur_id"] = srv["id"]
+            c["projet_id"] = secrets_reseau.get("projet_id")
             await depot.definir_secrets(ctx, h.id, {"serveur_id": srv["id"]})
             c["ip_privee"] = srv.get("ip_privee") or ip_privee(h.id)
             travail.contexte = c
             return f"Serveur amont {srv['id']} créé"
+        if index == 2:
+            # IP flottante publique : dev01 (Apache) ne peut atteindre que le réseau externe
+            # du lab, jamais les réseaux privés des Espaces — chaque VM d'hébergement doit
+            # donc être joignable par une vraie IP flottante, pas seulement l'IP privée.
+            hid = travail.cible_id or ""
+            c = dict(travail.contexte)
+            fip = amont_identite().creer_ip_flottante(c.get("projet_id"))
+            # Tracé en secrets/contexte avant l'association : une IP flottante déjà allouée
+            # mais pas encore associée doit rester libérable par `compenser`.
+            await depot.definir_secrets(ctx, hid, {"ip_flottante_id": fip["id"]})
+            c["ip_flottante_id"] = fip["id"]
+            travail.contexte = c
+            adresse = amont_identite().associer_ip_flottante(fip["id"], c["serveur_id"])
+            adresse = adresse or fip.get("adresse") or ip_publique(hid)
+            c["ip_publique"] = adresse
+            travail.contexte = c
+            return f"IP flottante {adresse} associée"
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         h = await depot.obtenir(ctx, travail.cible_id or "")
-        ip = travail.contexte.get("ip_privee") or ip_privee(h.id)
+        ip = travail.contexte.get("ip_publique") or ip_publique(h.id)
         serveur = h.serveur.model_copy(update={"ip": ip, "statut": "en_ligne", "chargeCpuPct": 12.0})
         await depot.modifier(ctx, h.id, {"serveur": serveur.model_dump(mode="json")})
         base = await depot_bases.creer(
@@ -384,20 +489,30 @@ class ExecuteurHebergementCreer(Executeur):
         )
         travail.contexte = {**travail.contexte, "serveur_bases_id": base.id}
         await depot.definir_statut(ctx, travail.cible_id or "", "en_ligne")
+        ecrire_vhost_apache(h.domaineProvisoire, ip)
 
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
+        fip_id = travail.contexte.get("ip_flottante_id")
+        if fip_id:
+            amont_identite().supprimer_ip_flottante(fip_id)
         await depot.definir_statut(ctx, travail.cible_id or "", "suspendu")
 
 
 @executeur("hebergement.supprimer")
 class ExecuteurHebergementSupprimer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        h = await depot.obtenir(ctx, travail.cible_id or "")
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
+        secrets = await depot.secrets(ctx, travail.cible_id or "")
+        fip_id = secrets.get("ip_flottante_id")
+        if fip_id:
+            amont_identite().supprimer_ip_flottante(fip_id)
+        supprimer_vhost_apache(h.domaineProvisoire)
         await depot_enfants(ctx, travail.cible_id or "")
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 

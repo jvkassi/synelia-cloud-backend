@@ -4,7 +4,7 @@ from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_openstack import fournisseur
 from synelia_openstack.block_storage import BlockStorageOpenStack, BlockStorageSimule
-from synelia_openstack.objet import ObjetOpenStack, ObjetSimule
+from synelia_openstack.minio import MinioSimule, choisir_minio
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -19,8 +19,28 @@ def amont_cinder() -> BlockStorageSimule:
     return fournisseur(BlockStorageSimule, BlockStorageOpenStack)
 
 
-def amont_objet() -> ObjetSimule:
-    return fournisseur(ObjetSimule, ObjetOpenStack)
+def amont_objet() -> MinioSimule:
+    return choisir_minio()
+
+
+def prefixe_bucket(ctx: Contexte) -> str:
+    """Préfixe de nommage réel du bucket dans MinIO (instance partagée, comme AWS S3 : les
+    noms de bucket sont uniques globalement, pas seulement au sein de l'organisation)."""
+    return ctx.org_id.lower().replace("_", "-")
+
+
+def nom_reel_bucket(ctx: Contexte, nom: str) -> str:
+    return f"{prefixe_bucket(ctx)}-{nom}".lower()[:63]
+
+
+async def nom_reel_bucket_existant(ctx: Contexte, bucket_id: str, nom: str) -> str:
+    """Nom réel MinIO d'un bucket déjà créé : celui posé dans ses secrets à la création,
+    sinon reconstruit (mode simulé, ou bucket créé avant l'ajout de ce champ)."""
+    try:
+        secrets = await depot_bucket.secrets(ctx, bucket_id)
+    except Exception:  # noqa: BLE001
+        secrets = {}
+    return str(secrets.get("bucket_reel") or nom_reel_bucket(ctx, nom))
 
 
 def iops_pour(classe: str) -> int:

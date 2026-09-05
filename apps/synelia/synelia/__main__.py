@@ -54,6 +54,14 @@ def worker() -> None:
     asyncio.run(_run())
 
 
+@cli.command("relais-smtp")
+def relais_smtp() -> None:
+    """Relais SMTP réel (module web_smtp) : AUTH + quota + relais vers l'amont sur le port 587."""
+    from synelia.relais_smtp import demarrer
+
+    demarrer()
+
+
 @cli.command()
 def scheduler() -> None:
     """Déclare les Temporal Schedules (cycle de facturation, relances, ACME…). Idempotent."""

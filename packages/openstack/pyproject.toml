@@ -6,6 +6,7 @@ dependencies = [
   "synelia-kernel",
   "httpx>=0.28",
   "kubernetes>=31",
+  "minio>=7.2",
 ]
 
 [build-system]

@@ -49,6 +49,10 @@ def amont() -> postal.PostalSimule:
 @executeur("smtp.activate")
 class ExecuteurSmtpActivate(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        # L'identifiant et le secret posés ici sont la vraie backing du relais : le process
+        # `synelia relais-smtp` (apps/synelia/synelia/relais_smtp.py) lit ces mêmes lignes
+        # `smtp_relais` (identifiant + secret chiffré `mot_de_passe`) pour authentifier les
+        # connexions SMTP réelles et appliquer le quota — aucune valeur simulée en aval.
         relais = await depot.obtenir(ctx, travail.cible_id or "")
         identifiant = f"smtp@{travail.org_id or ctx.org_id_ou_none or 'org'}"
         await depot.modifier(

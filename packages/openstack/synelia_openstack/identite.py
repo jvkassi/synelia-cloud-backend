@@ -45,6 +45,9 @@ class IdentiteSimule:
     def supprimer_ip_flottante(self, ip_id: str) -> None:
         return None
 
+    def associer_ip_flottante(self, ip_id: str, serveur_id: str) -> str | None:
+        return None
+
     def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         return {"id": f"ac-{nouvel_id()[:8]}", "secret": jeton_opaque(24)}
 
@@ -133,6 +136,16 @@ class IdentiteOpenStack(IdentiteSimule):
 
     def supprimer_ip_flottante(self, ip_id: str) -> None:
         self._conn().network.delete_ip(ip_id, ignore_missing=True)
+
+    def associer_ip_flottante(self, ip_id: str, serveur_id: str) -> str | None:
+        """Associe une IP flottante déjà allouée au port du serveur Nova (une seule interface
+        dans notre cas — VM d'hébergement mono-réseau)."""
+        c = self._conn()
+        port = next(iter(c.network.ports(device_id=serveur_id)), None)
+        if port is None:
+            return None
+        fip = c.network.update_ip(ip_id, port_id=port.id)
+        return fip.floating_ip_address
 
     def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         """Un utilisateur de service par projet (jamais d'humain dans Keystone), rôle `member`,
