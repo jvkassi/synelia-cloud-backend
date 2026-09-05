@@ -153,7 +153,9 @@ class ComputeSimule:
             "ip_privee": f"10.{hash(kw.get('nom', '')) % 250}.0.{hash(kw.get('image_id', '')) % 250 + 2}",
         }
 
-    def assurer_keypair(self, nom: str, cle_publique: str) -> str:
+    def assurer_keypair(
+        self, nom: str, cle_publique: str, identifiants: dict[str, Any] | None = None
+    ) -> str:
         return nom
 
     def action(self, serveur_id: str, action: str) -> None:
@@ -221,14 +223,18 @@ class ComputeOpenStack(ComputeSimule):
             )
         return out
 
-    def creer_serveur(self, **kw: Any) -> dict[str, Any]:
-        ident = kw.get("identifiants") or {}
+    def _connexion_pour(self, identifiants: dict[str, Any] | None):  # type: ignore[no-untyped-def]
+        ident = identifiants or {}
         if ident.get("application_credential_id"):
             from synelia_openstack.fabrique import connexion_avec
 
-            c = connexion_avec(ident["application_credential_id"], ident["application_credential_secret"])
-        else:
-            c = self._c()
+            return connexion_avec(
+                ident["application_credential_id"], ident["application_credential_secret"]
+            )
+        return self._c()
+
+    def creer_serveur(self, **kw: Any) -> dict[str, Any]:
+        c = self._connexion_pour(kw.get("identifiants"))
         params: dict[str, Any] = {
             "name": kw["nom"],
             "image_id": kw["image_id"],
@@ -272,12 +278,18 @@ class ComputeOpenStack(ComputeSimule):
         ip = next((a["addr"] for nets in (s.addresses or {}).values() for a in nets if a.get("version") == 4), None)
         return {"id": s.id, "statut": s.status, "ip_privee": ip}
 
-    def assurer_keypair(self, nom: str, cle_publique: str) -> str:
+    def assurer_keypair(
+        self, nom: str, cle_publique: str, identifiants: dict[str, Any] | None = None
+    ) -> str:
         """Importe la clé publique donnée comme keypair Nova `nom`, si elle n'existe pas déjà
         (idempotent : appelé à chaque création d'hébergement, une seule fois réellement créé
         côté Nova). On importe une clé déjà générée par nous — jamais celle générée par Nova
-        elle-même (qui ne renvoie la clé privée qu'une fois, à la création)."""
-        c = self._c()
+        elle-même (qui ne renvoie la clé privée qu'une fois, à la création). Le keypair Nova
+        est scellé à un projet/utilisateur : il doit être créé avec la **même** connexion
+        (`identifiants` — l'application credential de la zone VPS) que celle qui créera le
+        serveur, sinon Nova répond `Invalid key_name provided` (keypair invisible depuis le
+        projet du serveur, alors qu'il existe bien ailleurs — vu en direct sur le lab)."""
+        c = self._connexion_pour(identifiants)
         existante = c.compute.find_keypair(nom, ignore_missing=True)
         if existante is None:
             c.compute.create_keypair(name=nom, public_key=cle_publique)

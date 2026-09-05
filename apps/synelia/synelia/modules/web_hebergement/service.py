@@ -9,6 +9,7 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import jeton_opaque, nouvel_id
 from synelia_openstack import fournisseur
 from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
+from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
 from synelia_openstack.network import NetworkOpenStack, NetworkSimule
 from synelia_openstack.ssh import SshReel, SshSimule
 
@@ -102,6 +103,16 @@ def amont_ssh() -> SshSimule:
     return fournisseur(SshSimule, SshReel)
 
 
+def amont_identite() -> IdentiteSimule:
+    """Keystone/Neutron admin — IP flottante **dédiée à l'accès SSH backend** d'une VM
+    d'hébergement. Le réseau privé de la zone VPS (`vps-zone-net`, 10.90.0.0/16) n'est
+    routable que depuis l'intérieur du lab OpenStack : le backend (hors du lab) ne peut
+    joindre une VM que par une IP flottante. Le trafic HTTP public, lui, ne passe jamais par
+    cette IP : uniquement par le load balancer partagé (`amont_network()`), c'est pour ça que
+    `web_hebergement` n'avait jusqu'ici jamais eu besoin d'IP flottante par VM."""
+    return fournisseur(IdentiteSimule, IdentiteOpenStack)
+
+
 NOM_KEYPAIR_ZONE = "synelia-hebergement"
 
 
@@ -118,16 +129,18 @@ async def assurer_cle_ssh_zone(ctx: Contexte) -> dict[str, str]:
 
     zone = await zone_vps_secrets(ctx)
     if zone.get("ssh_prive") and zone.get("ssh_publique"):
-        return {
-            "ssh_prive": zone["ssh_prive"],
-            "ssh_publique": zone["ssh_publique"],
-            "ssh_cle_nom": zone.get("ssh_cle_nom") or NOM_KEYPAIR_ZONE,
-        }
+        # Clé déjà générée : on réenregistre quand même le keypair Nova (idempotent, un
+        # `find_keypair` avant tout `create_keypair`) plutôt que de faire confiance à sa
+        # seule présence dans les secrets — un keypair Nova peut disparaître (recréation du
+        # projet, erreur d'appel initiale) sans que les secrets ne bougent.
+        nom = zone.get("ssh_cle_nom") or NOM_KEYPAIR_ZONE
+        amont().assurer_keypair(nom, zone["ssh_publique"], identifiants=zone)
+        return {"ssh_prive": zone["ssh_prive"], "ssh_publique": zone["ssh_publique"], "ssh_cle_nom": nom}
     r = reglages()
     if not r.vps_zone_espace_id:
         return {}
     cle = amont_ssh().generer_cle()
-    amont().assurer_keypair(NOM_KEYPAIR_ZONE, cle["publique"])
+    amont().assurer_keypair(NOM_KEYPAIR_ZONE, cle["publique"], identifiants=zone)
     secrets = {
         "ssh_cle_nom": NOM_KEYPAIR_ZONE,
         "ssh_prive": cle["prive"],
@@ -301,6 +314,18 @@ async def serveur_id(ctx: Contexte, hebergement_id: str, travail: Travail | None
     except Exception:  # noqa: BLE001
         sec = {}
     return str(sec.get("serveur_id") or hebergement_id)
+
+
+async def ip_gestion_hebergement(ctx: Contexte, hebergement: m.Hebergement) -> str | None:
+    """Adresse à laquelle SSH peut joindre la VM d'hébergement : l'IP flottante de gestion
+    (`ssh_fip_id`/`ssh_ip`, posée à la création — voir `amont_identite()`), sinon l'IP privée
+    en mode simulé (jamais reproché : aucun appel réseau n'y est réellement fait). Une VM créée
+    avant ce câblage n'a ni l'une ni l'autre utilisable en réel : `None`."""
+    try:
+        secrets = await depot.secrets(ctx, hebergement.id)
+    except Exception:  # noqa: BLE001
+        secrets = {}
+    return secrets.get("ssh_ip") or hebergement.serveur.ip or None
 
 
 def construire_hebergement(ctx: Contexte, corps: m.HebergementCreation) -> m.Hebergement:
@@ -676,6 +701,19 @@ class ExecuteurHebergementCreer(Executeur):
             await depot.definir_secrets(ctx, h.id, {"serveur_id": srv["id"]})
             c["ip_privee"] = srv.get("ip_privee") or ip_privee(h.id)
             travail.contexte = c
+            # IP flottante dédiée à l'accès SSH backend (jamais au trafic HTTP public, qui ne
+            # passe que par le load balancer partagé) : sans elle, `router_sites` ne peut pas
+            # joindre cette VM après coup pour y installer une application supplémentaire —
+            # le réseau privé de la zone VPS n'est routable que depuis l'intérieur du lab.
+            fip = amont_identite().creer_ip_flottante(zone.get("projet_id"))
+            ip_gestion = amont_identite().associer_ip_flottante(fip.get("id"), srv["id"])
+            amont_network().assurer_regle_ssh(srv["id"])
+            c["ssh_fip_id"] = fip.get("id")
+            c["ssh_ip"] = ip_gestion or fip.get("adresse")
+            travail.contexte = c
+            await depot.definir_secrets(
+                ctx, h.id, {"ssh_fip_id": fip.get("id") or "", "ssh_ip": c["ssh_ip"] or ""}
+            )
             return f"Serveur amont {srv['id']} créé"
         if index == 2:
             # Routage L7 sur le load balancer partagé de la zone VPS (un pool + une policy
@@ -731,6 +769,9 @@ class ExecuteurHebergementCreer(Executeur):
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
+        fip_id = travail.contexte.get("ssh_fip_id")
+        if fip_id:
+            amont_identite().supprimer_ip_flottante(fip_id)
         n = amont_network()
         lb_id = (await zone_vps_secrets(ctx)).get("lb_id")
         policy_id = travail.contexte.get("lb_policy_id")
@@ -748,6 +789,13 @@ class ExecuteurHebergementCreer(Executeur):
 @executeur("hebergement.supprimer")
 class ExecuteurHebergementSupprimer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        try:
+            secrets_avant = await depot.secrets(ctx, travail.cible_id or "")
+        except Exception:  # noqa: BLE001
+            secrets_avant = {}
+        fip_id = secrets_avant.get("ssh_fip_id")
+        if fip_id:
+            amont_identite().supprimer_ip_flottante(fip_id)
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
@@ -797,12 +845,13 @@ class ExecuteurSiteInstaller(Executeur):
             hebergement = await depot.obtenir(ctx, site.hebergementId)
             zone = await zone_vps_secrets(ctx)
             cle_privee = zone.get("ssh_prive")
-            if not cle_privee or not hebergement.serveur.ip:
+            ip = await ip_gestion_hebergement(ctx, hebergement)
+            if not cle_privee or not ip:
                 raise erreurs.amont_indisponible(
                     "hébergement (SSH)",
-                    "Aucune clé SSH backend disponible pour cette VM : soit la zone VPS "
-                    "n'est pas encore initialisée, soit cette VM a été créée avant le câblage "
-                    "SSH (cloud-init ne s'exécute qu'au premier démarrage — non rattrapable).",
+                    "Aucune IP de gestion SSH backend disponible pour cette VM : soit la "
+                    "zone VPS n'est pas encore initialisée, soit cette VM a été créée avant "
+                    "le câblage SSH/IP flottante (non rattrapable a posteriori).",
                 )
             application = application_pour_site(site.type, site.hote)
             mdp = jeton_opaque(16)
@@ -810,7 +859,6 @@ class ExecuteurSiteInstaller(Executeur):
                 application, site.hote, site.phpVersion, mdp, site.id
             )
             ssh = amont_ssh()
-            ip = hebergement.serveur.ip
             racine = f"{_RACINE_DOCKER}/sites/{site.id}"
             ssh.ecrire_fichier(ip, cle_privee, f"{racine}/docker-compose.yml", compose)
             for chemin, contenu in fichiers.items():
@@ -860,10 +908,11 @@ class ExecuteurSiteInstaller(Executeur):
             amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
         hebergement = await depot.trouver(ctx, site.hebergementId)
         cle_privee = zone.get("ssh_prive")
-        if hebergement and cle_privee and hebergement.serveur.ip:
+        ip = hebergement and await ip_gestion_hebergement(ctx, hebergement)
+        if hebergement and cle_privee and ip:
             racine = f"{_RACINE_DOCKER}/sites/{site.id}"
             amont_ssh().executer(
-                hebergement.serveur.ip,
+                ip,
                 cle_privee,
                 f"cd {racine} && docker compose down -v; rm -rf {racine} "
                 f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml",
@@ -885,10 +934,11 @@ class ExecuteurSiteSupprimer(Executeur):
             amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
         hebergement = await depot.trouver(ctx, site.hebergementId)
         cle_privee = zone.get("ssh_prive")
-        if hebergement and cle_privee and hebergement.serveur.ip:
+        ip = hebergement and await ip_gestion_hebergement(ctx, hebergement)
+        if hebergement and cle_privee and ip:
             racine = f"{_RACINE_DOCKER}/sites/{site.id}"
             amont_ssh().executer(
-                hebergement.serveur.ip,
+                ip,
                 cle_privee,
                 f"cd {racine} && docker compose down -v; rm -rf {racine} "
                 f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml",

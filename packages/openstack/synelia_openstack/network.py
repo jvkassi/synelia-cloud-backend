@@ -90,6 +90,9 @@ class NetworkSimule:
     def supprimer_regle_hote(self, policy_id: str, loadbalancer_id: str | None = None) -> None:
         return None
 
+    def assurer_regle_ssh(self, serveur_id: str) -> None:
+        return None
+
 
 class NetworkOpenStack(NetworkSimule):
     """openstacksdk : Neutron (networks, floating IPs, security groups), Octavia, VPN."""
@@ -282,3 +285,31 @@ class NetworkOpenStack(NetworkSimule):
         c.load_balancer.delete_l7_policy(policy_id, ignore_missing=True)
         if loadbalancer_id:
             self._attendre_actif(c, loadbalancer_id)
+
+    def assurer_regle_ssh(self, serveur_id: str) -> None:
+        """Autorise le port 22 en entrée sur le groupe de sécurité du serveur donné : le
+        groupe `default` d'un projet fraîchement créé n'autorise **aucune** entrée externe
+        (constaté en direct : une IP flottante posée sans cette règle reste injoignable, y
+        compris en SSH) — sans elle, l'IP flottante de gestion (`amont_identite()`) ne sert à
+        rien. Idempotent : ne recrée pas la règle si elle existe déjà."""
+        c = self._c()
+        port = next(iter(c.network.ports(device_id=serveur_id)), None)
+        if port is None or not port.security_group_ids:
+            return
+        for sg_id in port.security_group_ids:
+            sg = c.network.get_security_group(sg_id)
+            deja = any(
+                r.get("protocol") == "tcp"
+                and r.get("port_range_min") == 22
+                and r.get("direction") == "ingress"
+                for r in (sg.security_group_rules or [])
+            )
+            if not deja:
+                c.network.create_security_group_rule(
+                    security_group_id=sg_id,
+                    direction="ingress",
+                    protocol="tcp",
+                    port_range_min=22,
+                    port_range_max=22,
+                    ethertype="IPv4",
+                )

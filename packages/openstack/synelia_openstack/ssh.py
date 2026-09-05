@@ -35,16 +35,20 @@ class SshReel(SshSimule):
     def generer_cle(self) -> dict[str, str]:
         import paramiko
 
-        cle = paramiko.Ed25519Key.generate()
+        # RSA, pas Ed25519 : `Ed25519Key` (paramiko 5.x, lib PyNaCl) n'expose plus de
+        # méthode `generate()` — seule `RSAKey.generate()` en offre une directement,
+        # sans dépendance supplémentaire (RSA reste tout à fait adapté à un simple accès
+        # SSH backend → VM interne, pas un usage exposé publiquement).
+        cle = paramiko.RSAKey.generate(3072)
         tampon = io.StringIO()
         cle.write_private_key(tampon)
-        publique = f"ssh-ed25519 {cle.get_base64()} synelia-hebergement"
+        publique = f"ssh-rsa {cle.get_base64()} synelia-hebergement"
         return {"prive": tampon.getvalue(), "publique": publique}
 
     def _client(self, hote: str, cle_privee: str, utilisateur: str):  # type: ignore[no-untyped-def]
         import paramiko
 
-        cle = paramiko.Ed25519Key.from_private_key(io.StringIO(cle_privee))
+        cle = paramiko.RSAKey.from_private_key(io.StringIO(cle_privee))
         client = paramiko.SSHClient()
         # VM interne de la zone VPS, jamais exposée en dehors du réseau privé partagé : pas
         # d'infrastructure de clés d'hôte à vérifier, comme pour toute VM fraîchement créée
