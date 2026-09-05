@@ -74,3 +74,10 @@ sudo kill -USR1 "$(cat /run/httpd/httpd.pid)"   # rechargement gracieux d'Apache
 Répartition : **Vercel** = frontend + backend bac à sable (amont simulé, SQLite éphémère, préversions par branche) ;
 **dev01** = backend de référence sur le vrai OpenStack, base durable. Le frontend pointe `NEXT_PUBLIC_API_URL`
 sur l'un ou l'autre.
+
+## 7. Frontend du bac à sable : `https://app.synelia.dev01.ovh.smile.ci`
+
+Conteneur Docker (image bun → Node standalone, `Dockerfile` du dépôt frontend) construit depuis le commit poussé de la
+branche `branchement-api`, `NEXT_PUBLIC_API_URL=https://api.synelia.dev01.ovh.smile.ci/v1` figé à la construction,
+servi sur `127.0.0.1:3010` derrière Apache (vhost + Let's Encrypt). Fichiers : `/var/lib/synelia-cloud/deploy-dev01/`
+(copies dans `docs/runbooks/`). Redéployer : `/var/lib/synelia-cloud/deploy-dev01/redeploy-front.sh [ref]`.
