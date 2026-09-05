@@ -41,7 +41,10 @@ async def obtenir_mon_compte(ctx: Ctx) -> Any:
     u = await _moi(ctx)
     apps = await auth.appartenances(ctx.session, u)
     role = ctx.role
-    perms = [a for a, p in permissions_effectives(role).items() if p != "none"]
+    p = ctx.principal
+    if p and p.est_admin_plateforme:
+        role = p.role_equipe or role  # l'équipe Synelia voit ses droits plateforme, pas ceux du rôle d'org
+    perms = [a for a, perm in permissions_effectives(role).items() if perm != "none"]
     return {
         "utilisateur": auth.utilisateur_contrat(u),
         "organisations": apps,
