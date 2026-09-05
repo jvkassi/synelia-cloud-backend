@@ -4,11 +4,13 @@ from typing import Any
 
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
+from synelia_kernel import erreurs
 from synelia_kernel.dates import maintenant
-from synelia_kernel.ids import nouvel_id
+from synelia_kernel.ids import jeton_opaque, nouvel_id
 from synelia_openstack import fournisseur
 from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
 from synelia_openstack.network import NetworkOpenStack, NetworkSimule
+from synelia_openstack.ssh import SshReel, SshSimule
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -94,6 +96,49 @@ def amont_network() -> NetworkSimule:
     return fournisseur(NetworkSimule, NetworkOpenStack)
 
 
+def amont_ssh() -> SshSimule:
+    """SSH vers une VM d'hébergement déjà en service — installation d'une application
+    supplémentaire après coup (`router_sites`), pas à la création de la VM elle-même."""
+    return fournisseur(SshSimule, SshReel)
+
+
+NOM_KEYPAIR_ZONE = "synelia-hebergement"
+
+
+async def assurer_cle_ssh_zone(ctx: Contexte) -> dict[str, str]:
+    """Clé SSH unique de la zone VPS, générée une fois puis réutilisée par toutes les VM
+    d'hébergement : la clé privée est stockée dans les secrets de l'Espace Cloud de la zone
+    (comme `lb_id`, `reseau_id`…), la clé publique est enregistrée comme keypair Nova
+    (`assurer_keypair`, idempotent) et injectée dans le cloud-init de chaque nouvelle VM
+    (`construire_cloud_init`). Les VM déjà créées avant ce câblage ne l'ont pas : le
+    cloud-init ne s'exécute qu'au premier démarrage, on ne peut pas les retrofit."""
+    from synelia_kernel.config import reglages
+
+    from synelia.modules.espaces.service import depot as depot_espaces
+
+    zone = await zone_vps_secrets(ctx)
+    if zone.get("ssh_prive") and zone.get("ssh_publique"):
+        return {
+            "ssh_prive": zone["ssh_prive"],
+            "ssh_publique": zone["ssh_publique"],
+            "ssh_cle_nom": zone.get("ssh_cle_nom") or NOM_KEYPAIR_ZONE,
+        }
+    r = reglages()
+    if not r.vps_zone_espace_id:
+        return {}
+    cle = amont_ssh().generer_cle()
+    amont().assurer_keypair(NOM_KEYPAIR_ZONE, cle["publique"])
+    secrets = {
+        "ssh_cle_nom": NOM_KEYPAIR_ZONE,
+        "ssh_prive": cle["prive"],
+        "ssh_publique": cle["publique"],
+    }
+    await depot_espaces.definir_secrets(
+        ctx, r.vps_zone_espace_id, secrets, org_id=r.vps_zone_org_id
+    )
+    return secrets
+
+
 async def zone_vps_secrets(ctx: Contexte) -> dict[str, Any]:
     """Secrets de la zone VPS partagée : un unique Espace Cloud admin (réseau privé + load
     balancer Octavia public), configuré une fois (bootstrap manuel, voir docs/runbooks) et
@@ -158,7 +203,7 @@ def _indenter(bloc: str, colonnes: int) -> str:
     return "\n".join(f"{prefixe}{ligne}" for ligne in bloc.splitlines())
 
 
-def construire_cloud_init(domaine: str, version_php: str) -> str:
+def construire_cloud_init(domaine: str, version_php: str, cle_publique: str | None = None) -> str:
     """`#cloud-config` : Docker + Traefik (reverse-proxy HTTP sur :80) et un conteneur PHP pour
     `domaine`, routé par son `Host()`. Nextcloud (« Drive ») est ajouté plus tard au même
     `docker-compose.yml`, sur cette même VM, quand `web_drive` est activé pour l'organisation
@@ -216,9 +261,17 @@ networks:
         "<?php\n"
         f'echo "<h1>{domaine}</h1><p>Synelia Web Hebergement -- PHP " . phpversion() . "</p>";\n'
     )
+    # Clé SSH backend (`assurer_cle_ssh_zone`) : injectée pour root — c'est elle qui permet
+    # à `router_sites` d'installer une application supplémentaire après coup, sur une VM
+    # déjà en service (cloud-init ne s'exécute qu'au premier démarrage, on ne peut pas
+    # revenir en arrière sur une VM déjà créée sans cette clé).
+    acces_ssh = (
+        f"disable_root: false\nssh_authorized_keys:\n  - {cle_publique}\n" if cle_publique else ""
+    )
     return (
         "#cloud-config\n"
         "package_update: true\n"
+        f"{acces_ssh}"
         "packages:\n"
         "  - docker.io\n"
         "  - docker-compose-v2\n"
@@ -342,12 +395,204 @@ def construire_site(
         else None,
         majEnAttente=0,
         securite=m.Securite(waf=False, bruteForce=True, scanMalware=True),
-        statut="en_ligne",
+        statut="installation",
     )
 
 
 def _version_defaut(type_: str) -> str | None:
     return {"wordpress": "6.7", "prestashop": "8.2", "laravel": "11", "php": "8.2"}.get(type_)
+
+
+# `SiteWeb.type` (contrat) ne distingue que 5 valeurs (`wordpress`, `prestashop`, `php`,
+# `statique`, `laravel`) : Ghost et Dolibarr sont posés côté catalogue frontend sous
+# `type: 'php'`, comme Joomla l'était avant eux. Plutôt qu'étendre le contrat pour un simple
+# discriminant, on retrouve l'application réelle depuis le premier label du nom d'hôte — le
+# catalogue de `/app/web/applications` nomme déjà ses hôtes `ghost.<domaine>`, `dolibarr.
+# <domaine>`… Une installation « PHP générique » depuis le formulaire libre (hôte quelconque)
+# retombe sur `php`, ce qui est le bon défaut.
+_APPLICATIONS_PHP = {"ghost", "dolibarr"}
+
+
+def application_pour_site(site_type: str, hote: str) -> str:
+    if site_type in {"wordpress", "prestashop", "statique"}:
+        return site_type
+    label = hote.split(".", 1)[0].lower()
+    if site_type == "php" and label in _APPLICATIONS_PHP:
+        return label
+    return "php"
+
+
+def _slug_site(site_id: str) -> str:
+    return site_id[:8]
+
+
+def construire_site_stack(
+    application: str, hote: str, php_version: str, mot_de_passe: str, site_id: str
+) -> tuple[str, str, dict[str, str]]:
+    """`docker-compose.yml` + route Traefik + fichiers additionnels pour installer
+    `application` sur une VM d'hébergement **déjà en service**, à côté d'autres sites : chaque
+    service est nommé par le short id du site (jamais par son rôle générique `app`/`db`) pour
+    ne jamais entrer en collision avec un autre site installé sur la même VM, tous rattachés
+    au même réseau Docker externe `synelia` créé par le compose principal de la VM
+    (`construire_cloud_init`)."""
+    sid = _slug_site(site_id)
+    app_svc = f"app-{sid}"
+    db_svc = f"db-{sid}"
+    racine = f"{_RACINE_DOCKER}/sites/{site_id}"
+    fichiers: dict[str, str] = {}
+    port = 80
+    if application == "wordpress":
+        services = f"""  {db_svc}:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD={mot_de_passe}
+      - MARIADB_DATABASE=wordpress
+      - MARIADB_USER=wordpress
+      - MARIADB_PASSWORD={mot_de_passe}
+    volumes:
+      - {racine}/db:/var/lib/mysql
+    networks:
+      - synelia
+
+  {app_svc}:
+    image: wordpress:php{php_version}-apache
+    restart: unless-stopped
+    depends_on:
+      - {db_svc}
+    environment:
+      - WORDPRESS_DB_HOST={db_svc}
+      - WORDPRESS_DB_NAME=wordpress
+      - WORDPRESS_DB_USER=wordpress
+      - WORDPRESS_DB_PASSWORD={mot_de_passe}
+    volumes:
+      - {racine}/www:/var/www/html
+    networks:
+      - synelia
+"""
+    elif application == "prestashop":
+        services = f"""  {db_svc}:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD={mot_de_passe}
+      - MARIADB_DATABASE=prestashop
+      - MARIADB_USER=prestashop
+      - MARIADB_PASSWORD={mot_de_passe}
+    volumes:
+      - {racine}/db:/var/lib/mysql
+    networks:
+      - synelia
+
+  {app_svc}:
+    image: prestashop/prestashop:8-apache
+    restart: unless-stopped
+    depends_on:
+      - {db_svc}
+    environment:
+      - DB_SERVER={db_svc}
+      - DB_NAME=prestashop
+      - DB_USER=prestashop
+      - DB_PASSWD={mot_de_passe}
+      - PS_INSTALL_AUTO=1
+      - PS_DOMAIN={hote}
+      - ADMIN_MAIL=admin@{hote}
+      - ADMIN_PASSWD={mot_de_passe}
+    volumes:
+      - {racine}/www:/var/www/html
+    networks:
+      - synelia
+"""
+    elif application == "ghost":
+        port = 2368
+        services = f"""  {app_svc}:
+    image: ghost:5-alpine
+    restart: unless-stopped
+    environment:
+      - url=http://{hote}
+      - database__client=sqlite3
+      - database__connection__filename=/var/lib/ghost/content/data/ghost.db
+      - database__useNullAsDefault=true
+    volumes:
+      - {racine}/content:/var/lib/ghost/content
+    networks:
+      - synelia
+"""
+    elif application == "dolibarr":
+        services = f"""  {db_svc}:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD={mot_de_passe}
+      - MARIADB_DATABASE=dolibarr
+      - MARIADB_USER=dolibarr
+      - MARIADB_PASSWORD={mot_de_passe}
+    volumes:
+      - {racine}/db:/var/lib/mysql
+    networks:
+      - synelia
+
+  {app_svc}:
+    image: dolibarr/dolibarr:latest
+    restart: unless-stopped
+    depends_on:
+      - {db_svc}
+    environment:
+      - DOLI_DB_HOST={db_svc}
+      - DOLI_DB_USER=dolibarr
+      - DOLI_DB_PASSWORD={mot_de_passe}
+      - DOLI_DB_NAME=dolibarr
+      - DOLI_URL_ROOT=http://{hote}
+      - DOLI_ADMIN_LOGIN=admin
+      - DOLI_ADMIN_PASSWORD={mot_de_passe}
+      - DOLI_INSTALL_AUTO=1
+    volumes:
+      - {racine}/html:/var/www/html
+      - {racine}/doc:/var/www/documents
+    networks:
+      - synelia
+"""
+    elif application == "statique":
+        fichiers[f"{racine}/www/index.html"] = (
+            f"<!doctype html><html><head><title>{hote}</title></head><body>"
+            f"<h1>{hote}</h1><p>Synelia Web Cloud — site statique.</p></body></html>\n"
+        )
+        services = f"""  {app_svc}:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - {racine}/www:/usr/share/nginx/html:ro
+    networks:
+      - synelia
+"""
+    else:  # `php` générique et `laravel` : même patron que le site par défaut de la VM
+        fichiers[f"{racine}/www/index.php"] = (
+            "<?php\n"
+            f'echo "<h1>{hote}</h1><p>Synelia Web Cloud -- PHP " . phpversion() . "</p>";\n'
+        )
+        services = f"""  {app_svc}:
+    image: php:{php_version}-apache
+    restart: unless-stopped
+    volumes:
+      - {racine}/www:/var/www/html:ro
+    networks:
+      - synelia
+"""
+    compose = f"services:\n{services}\nnetworks:\n  synelia:\n    external: true\n    name: synelia\n"
+    routage = f"""http:
+  routers:
+    {app_svc}:
+      rule: "Host(`{hote}`)"
+      entryPoints:
+        - web
+      service: {app_svc}
+  services:
+    {app_svc}:
+      loadBalancer:
+        servers:
+          - url: "http://{app_svc}:{port}"
+"""
+    return compose, routage, fichiers
 
 
 SERVICES_PARTAGES = [
@@ -412,6 +657,7 @@ class ExecuteurHebergementCreer(Executeur):
         if index == 1:
             h = await depot.obtenir(ctx, travail.cible_id or "")
             zone = await zone_vps_secrets(ctx)
+            cle = await assurer_cle_ssh_zone(ctx)
             srv = amont().creer_serveur(
                 nom=h.serveur.nom,
                 image_id=image_ubuntu(),
@@ -420,7 +666,10 @@ class ExecuteurHebergementCreer(Executeur):
                 identifiants=zone,
                 org_id=ctx.org_id_ou_none,
                 espace_id=None,
-                cloud_init=construire_cloud_init(h.domaineProvisoire, h.php.versionDefaut),
+                cle_ssh=cle.get("ssh_cle_nom"),
+                cloud_init=construire_cloud_init(
+                    h.domaineProvisoire, h.php.versionDefaut, cle.get("ssh_publique")
+                ),
             )
             c = dict(travail.contexte)
             c["serveur_id"] = srv["id"]
@@ -531,14 +780,120 @@ class ExecuteurHebergementRedemarrer(Executeur):
 
 @executeur("site.installer")
 class ExecuteurSiteInstaller(Executeur):
+    """Installe une application Docker supplémentaire sur une VM d'hébergement **déjà en
+    service**, par SSH (`amont_ssh()`, clé de la zone VPS posée par `assurer_cle_ssh_zone`
+    à la création de la VM) : écrit un `docker-compose.yml` dédié sous
+    `_RACINE_DOCKER/sites/<siteId>/`, une route Traefik de plus (le provider fichier la
+    reprend seul, sans redémarrage — `--providers.file.watch=true`), démarre les conteneurs,
+    puis ajoute une règle L7 de plus sur le pool **déjà existant** de l'hébergement (même VM,
+    même membre : inutile d'en recréer un, contrairement à `web_hebergement`/`web_drive` qui
+    provisionnent chacun leur propre VM)."""
+
+    compensable = True
+
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        site = await depot_sites.obtenir(ctx, travail.cible_id or "")
+        if index == 0:
+            hebergement = await depot.obtenir(ctx, site.hebergementId)
+            zone = await zone_vps_secrets(ctx)
+            cle_privee = zone.get("ssh_prive")
+            if not cle_privee or not hebergement.serveur.ip:
+                raise erreurs.amont_indisponible(
+                    "hébergement (SSH)",
+                    "Aucune clé SSH backend disponible pour cette VM : soit la zone VPS "
+                    "n'est pas encore initialisée, soit cette VM a été créée avant le câblage "
+                    "SSH (cloud-init ne s'exécute qu'au premier démarrage — non rattrapable).",
+                )
+            application = application_pour_site(site.type, site.hote)
+            mdp = jeton_opaque(16)
+            compose, routage, fichiers = construire_site_stack(
+                application, site.hote, site.phpVersion, mdp, site.id
+            )
+            ssh = amont_ssh()
+            ip = hebergement.serveur.ip
+            racine = f"{_RACINE_DOCKER}/sites/{site.id}"
+            ssh.ecrire_fichier(ip, cle_privee, f"{racine}/docker-compose.yml", compose)
+            for chemin, contenu in fichiers.items():
+                ssh.ecrire_fichier(ip, cle_privee, chemin, contenu)
+            ssh.ecrire_fichier(
+                ip, cle_privee, f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml", routage
+            )
+            # MariaDB (le cas échéant) est créée par ce même `docker compose up -d`, avec
+            # l'application : pas d'étape séparée à distinguer côté SSH.
+            ssh.executer(ip, cle_privee, f"cd {racine} && docker compose up -d")
+            await depot_sites.definir_secrets(
+                ctx, site.id, {"application": application, "mot_de_passe": mdp}
+            )
+            c = dict(travail.contexte)
+            c["application"] = application
+            travail.contexte = c
+            return f"{application} installé sur {hebergement.domaineProvisoire}"
+        if index == 2:
+            hebergement = await depot.obtenir(ctx, site.hebergementId)
+            heb_secrets = await depot.secrets(ctx, hebergement.id)
+            zone = await zone_vps_secrets(ctx)
+            regle = amont_network().ajouter_regle_hote(
+                listener_id=zone.get("lb_listener_id"),
+                loadbalancer_id=zone.get("lb_id"),
+                pool_id=heb_secrets.get("lb_pool_id"),
+                hote=site.hote,
+            )
+            await depot_sites.definir_secrets(ctx, site.id, {"lb_policy_id": regle["policy_id"]})
+            c = dict(travail.contexte)
+            c["lb_policy_id"] = regle["policy_id"]
+            travail.contexte = c
+            return f"Domaine {site.hote} routé sur le load balancer partagé"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         await depot_sites.definir_statut(ctx, travail.cible_id or "", "en_ligne")
+
+    async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
+        site = await depot_sites.obtenir(ctx, travail.cible_id or "")
+        try:
+            secrets = await depot_sites.secrets(ctx, site.id)
+        except Exception:  # noqa: BLE001
+            secrets = {}
+        zone = await zone_vps_secrets(ctx)
+        policy_id = travail.contexte.get("lb_policy_id") or secrets.get("lb_policy_id")
+        if policy_id:
+            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+        hebergement = await depot.trouver(ctx, site.hebergementId)
+        cle_privee = zone.get("ssh_prive")
+        if hebergement and cle_privee and hebergement.serveur.ip:
+            racine = f"{_RACINE_DOCKER}/sites/{site.id}"
+            amont_ssh().executer(
+                hebergement.serveur.ip,
+                cle_privee,
+                f"cd {racine} && docker compose down -v; rm -rf {racine} "
+                f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml",
+            )
+        await depot_sites.definir_statut(ctx, site.id, "suspendu")
 
 
 @executeur("site.supprimer")
 class ExecuteurSiteSupprimer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
-        await depot_sites.supprimer(ctx, travail.cible_id or "", logique=True)
+        site = await depot_sites.obtenir(ctx, travail.cible_id or "")
+        try:
+            secrets = await depot_sites.secrets(ctx, site.id)
+        except Exception:  # noqa: BLE001
+            secrets = {}
+        zone = await zone_vps_secrets(ctx)
+        policy_id = secrets.get("lb_policy_id")
+        if policy_id:
+            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+        hebergement = await depot.trouver(ctx, site.hebergementId)
+        cle_privee = zone.get("ssh_prive")
+        if hebergement and cle_privee and hebergement.serveur.ip:
+            racine = f"{_RACINE_DOCKER}/sites/{site.id}"
+            amont_ssh().executer(
+                hebergement.serveur.ip,
+                cle_privee,
+                f"cd {racine} && docker compose down -v; rm -rf {racine} "
+                f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml",
+            )
+        await depot_sites.supprimer(ctx, site.id, logique=True)
 
 
 @executeur("site.analyse_securite")

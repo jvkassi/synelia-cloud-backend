@@ -153,6 +153,9 @@ class ComputeSimule:
             "ip_privee": f"10.{hash(kw.get('nom', '')) % 250}.0.{hash(kw.get('image_id', '')) % 250 + 2}",
         }
 
+    def assurer_keypair(self, nom: str, cle_publique: str) -> str:
+        return nom
+
     def action(self, serveur_id: str, action: str) -> None:
         return None
 
@@ -268,6 +271,17 @@ class ComputeOpenStack(ComputeSimule):
             raise traduire(exc, "Machine virtuelle") from None
         ip = next((a["addr"] for nets in (s.addresses or {}).values() for a in nets if a.get("version") == 4), None)
         return {"id": s.id, "statut": s.status, "ip_privee": ip}
+
+    def assurer_keypair(self, nom: str, cle_publique: str) -> str:
+        """Importe la clé publique donnée comme keypair Nova `nom`, si elle n'existe pas déjà
+        (idempotent : appelé à chaque création d'hébergement, une seule fois réellement créé
+        côté Nova). On importe une clé déjà générée par nous — jamais celle générée par Nova
+        elle-même (qui ne renvoie la clé privée qu'une fois, à la création)."""
+        c = self._c()
+        existante = c.compute.find_keypair(nom, ignore_missing=True)
+        if existante is None:
+            c.compute.create_keypair(name=nom, public_key=cle_publique)
+        return nom
 
     def action(self, serveur_id: str, action: str) -> None:
         from synelia_openstack.erreurs import traduire
