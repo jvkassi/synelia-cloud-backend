@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
+from synelia_openstack.k8s_workload import obtenir as k8s
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -42,6 +43,11 @@ def hote_interne(service: m.ServiceProjet, projet: m.Projet) -> str:
     return f"{service.nom}.{projet.nom}.svc.cluster.local"
 
 
+def namespace_projet(projet: m.Projet) -> str:
+    """Un projet applicatif = un namespace Kubernetes, 1:1, sur le cluster PaaS."""
+    return f"projet-{projet.id}"
+
+
 @executeur("projet_service.create")
 class ExecuteurServiceCreate(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
@@ -63,6 +69,8 @@ class ExecuteurServiceDelete(Executeur):
 @executeur("projet.delete")
 class ExecuteurProjetDelete(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        projet = await depot_projet.obtenir(ctx, travail.cible_id or "")
+        k8s().supprimer_namespace(namespace_projet(projet))
         await depot_projet.supprimer(ctx, travail.cible_id or "", logique=True)
 
 

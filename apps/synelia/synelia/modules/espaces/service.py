@@ -78,7 +78,15 @@ class ExecuteurEspaceCreate(Executeur):
             a.poser_quotas(c["projet_id"], e.quota.vcpu, e.quota.ramGo, e.quota.stockageTo)
         elif index == 2:
             c.update(a.creer_reseau(c["projet_id"], f"{e.code}-net", e.cidr))
-            await depot.definir_secrets(ctx, e.id, {"projet_id": c["projet_id"], "reseau_id": c["reseau_id"]})
+            await depot.definir_secrets(
+                ctx,
+                e.id,
+                {
+                    "projet_id": c["projet_id"],
+                    "reseau_id": c["reseau_id"],
+                    "routeur_id": c["routeur_id"],
+                },
+            )
         elif index == 3:
             ac = a.creer_application_credential(c["projet_id"], c.get("domaine_id"))
             await depot.definir_secrets(
@@ -105,8 +113,14 @@ class ExecuteurEspaceCreate(Executeur):
 @executeur("espace.delete")
 class ExecuteurEspaceDelete(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
-        pid = travail.contexte.get("projet_id")
+        # Le projet/réseau amont est posé en secrets par ExecuteurEspaceCreate, pas dans
+        # `travail.contexte` (qui n'existe que pour ce job-ci, vide pour un `espace.delete`).
+        secrets = await depot.secrets(ctx, travail.cible_id or "")
+        pid = secrets.get("projet_id")
         if pid:
+            rid, rtid = secrets.get("reseau_id"), secrets.get("routeur_id")
+            if rid and rtid:
+                amont().supprimer_reseau(rid, rtid)
             amont().supprimer_projet(pid)
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 

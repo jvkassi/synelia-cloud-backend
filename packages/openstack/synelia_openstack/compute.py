@@ -181,6 +181,10 @@ class ComputeOpenStack(ComputeSimule):
     def gabarits(self) -> list[dict[str, Any]]:
         out = []
         for f in self._c().compute.flavors():
+            if not f.is_public:
+                # Gabarits privés (ex. l'amphora Octavia) : pas accessibles depuis le
+                # projet tenant, Nova rejette la création de serveur avec ce flavor.
+                continue
             extra = f.extra_specs or {}
             out.append(
                 {

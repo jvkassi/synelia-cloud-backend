@@ -26,6 +26,63 @@ class ActionRbac(BaseModel):
     ]
 
 
+class AgentIA(BaseModel):
+    id: str
+    nom: str
+    consigne: Annotated[
+        str, Field(description="Consigne système envoyée au modèle avant le message de l’appelant.")
+    ]
+    espaceId: str | None = None
+    modele: Annotated[
+        str, Field(description="Slug du modèle IA utilisé — référence `ModeleIA.slug`.")
+    ]
+    temperature: float
+    topP: float
+    jetonsMax: int
+    statut: Literal["brouillon", "publie", "suspendu"]
+    createdAt: AwareDatetime
+
+
+class AgentIACreation(BaseModel):
+    nom: str
+    consigne: str
+    espaceId: str | None = None
+    modele: str
+    temperature: float | None = 0.7
+    topP: float | None = 1
+    jetonsMax: int | None = 1024
+
+
+class AgentIAModification(BaseModel):
+    nom: str | None = None
+    consigne: str | None = None
+    modele: str | None = None
+    temperature: float | None = None
+    topP: float | None = None
+    jetonsMax: int | None = None
+    statut: Literal["brouillon", "publie", "suspendu"] | None = None
+
+
+class AgentInvocationRequest(BaseModel):
+    message: Annotated[
+        str,
+        Field(
+            description="Message de l’appelant — un seul tour, pas de mémoire de conversation dans ce MVP."
+        ),
+    ]
+    conversationId: Annotated[
+        str | None, Field(description="Réservé pour un usage futur ; ignoré aujourd’hui.")
+    ] = None
+
+
+class AgentInvocationResponse(BaseModel):
+    reponse: str
+    jetonsEntree: int
+    jetonsSortie: int
+    coutFcfa: float
+    latenceMs: int
+
+
 class Constat(BaseModel):
     fichier: str
     constat: str
@@ -1288,81 +1345,6 @@ class Erreur(BaseModel):
     documentationUrl: str | None = None
 
 
-class ErreurDegrade(BaseModel):
-    code: str
-    message: str
-    correlationId: str
-    integration: Annotated[
-        str,
-        Field(
-            description="Intégration en défaut : `centreon`, `grafana`, `victorialogs`, `openstack`…"
-        ),
-    ]
-    donneesPartielles: Annotated[
-        bool | None, Field(description="Vrai quand une réponse dégradée accompagne l’erreur.")
-    ] = None
-    dateDonnees: Annotated[
-        AwareDatetime | None, Field(description="Fraîcheur des dernières données connues.")
-    ] = None
-
-
-class ErreurInterdit(BaseModel):
-    code: str
-    message: str
-    correlationId: str
-    actionRbac: Annotated[
-        str | None,
-        Field(
-            description="Identifiant de l'action refusée dans la matrice RBAC (`vm.create_delete`)."
-        ),
-    ] = None
-    rolesRequis: Annotated[
-        list[
-            Literal[
-                "super_admin",
-                "platform_operator",
-                "org_admin",
-                "espace_admin",
-                "project_owner",
-                "operator",
-                "service_admin",
-                "billing_manager",
-                "compliance",
-                "read_only",
-            ]
-        ],
-        Field(description="Rôles qui exécutent pleinement cette action."),
-    ]
-    roleCourant: (
-        Literal[
-            "super_admin",
-            "platform_operator",
-            "org_admin",
-            "espace_admin",
-            "project_owner",
-            "operator",
-            "service_admin",
-            "billing_manager",
-            "compliance",
-            "read_only",
-        ]
-        | None
-    ) = None
-
-
-class Champ(BaseModel):
-    champ: str
-    message: str
-    attendu: str | None = None
-
-
-class ErreurValidation(BaseModel):
-    code: str
-    message: str
-    correlationId: str
-    champs: list[Champ]
-
-
 class Ligne(BaseModel):
     libelle: str
     quantite: float
@@ -2273,6 +2255,61 @@ class ModeleDns(BaseModel):
     remplaceExistants: bool | None = None
 
 
+class ModeleIA(BaseModel):
+    id: str
+    slug: Annotated[
+        str,
+        Field(
+            description="Identifiant appelé côté passerelle — le vrai modèle OpenRouter pour les modèles invocables."
+        ),
+    ]
+    nom: str
+    editeur: str
+    famille: Literal["texte", "code", "embedding", "reranker", "transcription", "vision"]
+    hebergement: Literal["souverain", "externe"]
+    residence: str
+    site: str | None = None
+    parametres: str | None = None
+    licence: str
+    contexteJetons: int | None = None
+    prixEntree: Annotated[
+        float | None, Field(description="Prix pour un million de jetons en entrée, en FCFA.")
+    ] = None
+    prixSortie: Annotated[
+        float | None, Field(description="Prix pour un million de jetons en sortie, en FCFA.")
+    ] = None
+    unite: Literal["jeton", "minute"] | None = None
+    latenceP50Ms: int | None = None
+    debitJetonsSec: int | None = None
+    statut: Literal["disponible", "apercu", "degrade", "retire"]
+    usages: list[str] | None = None
+    description: str | None = None
+    invocable: Annotated[
+        bool,
+        Field(
+            description="Vrai si ce modèle est réellement appelable via la passerelle LiteLLM ; sinon `invoquer` renvoie 422."
+        ),
+    ]
+
+
+class ModeleIACreation(BaseModel):
+    slug: str
+    nom: str
+    editeur: str
+    famille: Literal["texte", "code", "embedding", "reranker", "transcription", "vision"]
+    hebergement: Literal["souverain", "externe"]
+    residence: str
+    licence: str
+    contexteJetons: int | None = None
+    prixEntree: float | None = None
+    prixSortie: float | None = None
+    unite: Literal["jeton", "minute"] | None = None
+    statut: Literal["disponible", "apercu", "degrade", "retire"] | None = None
+    usages: list[str] | None = None
+    description: str | None = None
+    invocable: bool | None = None
+
+
 class MoyenPaiement(BaseModel):
     id: str
     type: Literal["carte", "virement", "orange_money", "mtn_momo", "wave", "prepaye"]
@@ -2947,15 +2984,65 @@ class ReponseErreur(BaseModel):
 
 
 class ReponseErreurDegrade(BaseModel):
-    erreur: ErreurDegrade
+    erreur: Erreur
+    integration: Annotated[
+        str,
+        Field(
+            description="Intégration en défaut : `centreon`, `grafana`, `victorialogs`, `openstack`…"
+        ),
+    ]
+    donneesPartielles: Annotated[
+        bool | None, Field(description="Vrai quand une réponse dégradée accompagne l’erreur.")
+    ] = None
+    dateDonnees: Annotated[
+        AwareDatetime | None, Field(description="Fraîcheur des dernières données connues.")
+    ] = None
 
 
 class ReponseErreurInterdit(BaseModel):
-    erreur: ErreurInterdit
+    erreur: Erreur
+    rolesRequis: Annotated[
+        list[
+            Literal[
+                "super_admin",
+                "platform_operator",
+                "org_admin",
+                "espace_admin",
+                "project_owner",
+                "operator",
+                "service_admin",
+                "billing_manager",
+                "compliance",
+                "read_only",
+            ]
+        ],
+        Field(description="Rôles qui exécutent pleinement cette action."),
+    ]
+    roleCourant: (
+        Literal[
+            "super_admin",
+            "platform_operator",
+            "org_admin",
+            "espace_admin",
+            "project_owner",
+            "operator",
+            "service_admin",
+            "billing_manager",
+            "compliance",
+            "read_only",
+        ]
+        | None
+    ) = None
 
 
 class ReponseErreurValidation(BaseModel):
-    erreur: ErreurValidation
+    erreur: Erreur
+    champs: Annotated[
+        dict[str, str],
+        Field(
+            description="Message de validation par champ en défaut, indexé par son chemin (`prix`, `espaceId`…)."
+        ),
+    ]
 
 
 class Reseau(BaseModel):
@@ -4601,6 +4688,16 @@ class FacturationSouscriptionsSouscriptionIdDeleteResponse(BaseModel):
 
 class GroupesSecuriteGroupeIdAttachementsPutRequest(BaseModel):
     cibles: list[str]
+
+
+class IaAgentsGetResponse(BaseModel):
+    donnees: list[AgentIA]
+    pagination: Pagination
+
+
+class IaModelesGetResponse(BaseModel):
+    donnees: list[ModeleIA]
+    pagination: Pagination
 
 
 class InvitationsGetResponse(BaseModel):

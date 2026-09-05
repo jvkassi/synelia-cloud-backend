@@ -13,14 +13,18 @@ from synelia.audit import journaliser
 from synelia.depot import Depot
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
 from synelia.modules.reseau.service import (
+    creer_reseau_amont,
     depot_groupe,
     depot_ip,
     depot_lb,
     depot_reseau,
     depot_vpn,
+    liberer_ip_amont,
     metriques_vides,
-    prochaine_ip,
+    reserver_ip_amont,
     sante_defaut,
+    supprimer_lb_amont,
+    supprimer_reseau_amont,
 )
 from synelia.travaux import demarrer_travail
 
@@ -56,6 +60,7 @@ async def creer_reseau(
 ) -> Any:
     await depot_reseau.exiger_nom_libre(ctx, corps.nom)
     _valider_cidr(corps.cidr)
+    secrets_amont = await creer_reseau_amont(ctx, corps.espaceId, corps.nom, corps.cidr)
     reseau = m.Reseau(
         id=nouvel_id(),
         espaceId=corps.espaceId,
@@ -65,7 +70,7 @@ async def creer_reseau(
         workloads=0,
         vlan=corps.vlan,
     )
-    await depot_reseau.creer(ctx, reseau)
+    await depot_reseau.creer(ctx, reseau, secrets=secrets_amont)
     await journaliser(
         ctx, action="reseau.creation", cible_type="reseau", cible_id=reseau.id, cible=reseau.nom
     )
@@ -105,6 +110,7 @@ async def supprimer_reseau(
 ) -> Response:  # noqa: N803
     r = await depot_reseau.obtenir(ctx, reseauId)
     exiger_confirmation(r.nom, confirmation)
+    await supprimer_reseau_amont(ctx, reseauId)
     await journaliser(
         ctx, action="reseau.suppression", cible_type="reseau", cible_id=reseauId, cible=r.nom
     )
@@ -140,16 +146,17 @@ async def lister_ips(
 async def reserver_ip(
     corps: m.IpPubliqueReservation, ctx: Contexte = Depends(exige("network.manage"))
 ) -> Any:
+    amont_ip = await reserver_ip_amont(ctx, corps.espaceId)
     ip = m.IpPublique(
         id=nouvel_id(),
         espaceId=corps.espaceId,
-        adresse=await prochaine_ip(ctx, corps.espaceId),
+        adresse=amont_ip["adresse"],
         ptr=corps.ptr,
         attachedTo=None,
         attachedLabel=None,
         antiDdos=corps.antiDdos,
     )
-    await depot_ip.creer(ctx, ip)
+    await depot_ip.creer(ctx, ip, secrets={"ip_flottante_id": amont_ip["id"]})
     await journaliser(
         ctx, action="ip.reservation", cible_type="ip_publique", cible_id=ip.id, cible=ip.adresse
     )
@@ -183,6 +190,7 @@ async def liberer_ip(
 ) -> Response:  # noqa: N803
     ip = await depot_ip.obtenir(ctx, ipId)
     exiger_confirmation(ip.adresse, confirmation)
+    await liberer_ip_amont(ctx, ipId)
     await journaliser(
         ctx, action="ip.liberation", cible_type="ip_publique", cible_id=ipId, cible=ip.adresse
     )
@@ -544,6 +552,7 @@ async def supprimer_load_balancer(
 ) -> Response:  # noqa: N803
     lb = await depot_lb.obtenir(ctx, lbId)
     exiger_confirmation(lb.nom, confirmation)
+    await supprimer_lb_amont(ctx, lbId)
     await journaliser(
         ctx, action="lb.suppression", cible_type="load_balancer", cible_id=lbId, cible=lb.nom
     )

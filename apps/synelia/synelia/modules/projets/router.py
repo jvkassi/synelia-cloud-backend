@@ -97,6 +97,7 @@ async def creer_projet(
         variables=[],
     )
     await s.depot_projet.creer(ctx, projet, parent_id=corps.espaceId)
+    s.k8s().creer_namespace(s.namespace_projet(projet))
     await journaliser(
         ctx, action="projet.creation", cible_type="projet", cible_id=projet.id, cible=projet.nom
     )

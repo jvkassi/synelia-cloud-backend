@@ -7,7 +7,7 @@ from synelia_db.modeles import Travail
 from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 from synelia_openstack import fournisseur
-from synelia_openstack.plesk import PleskOpenStack, PleskSimule
+from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -83,8 +83,115 @@ def traduire_cron(expression: str) -> str:
     return f"Planification : {expression}."
 
 
-def amont() -> PleskSimule:
-    return fournisseur(PleskSimule, PleskOpenStack)
+def amont() -> ComputeSimule:
+    return fournisseur(ComputeSimule, ComputeOpenStack)
+
+
+# Le lab ne possède aujourd'hui que deux gabarits Nova réels — taillés pour Kubernetes,
+# pas de petit gabarit dédié à l'hébergement web. On rattache les paliers les plus légers
+# à `k8s.worker` et les autres à `k8s.master` ; c'est une limitation connue de capacité,
+# pas un choix définitif (`enterprise` obtient donc les mêmes ressources que `business`).
+_GABARIT_NOM_PAR_PALIER = {
+    "starter": "k8s.worker",
+    "pro": "k8s.worker",
+    "business": "k8s.master",
+    "enterprise": "k8s.master",
+}
+# Repli en mode simulé (catalogue de démo sans `k8s.*`) : le plus proche du palier.
+_GABARIT_SIMULE_PAR_PALIER = {
+    "starter": "s1.small",
+    "pro": "g1.medium",
+    "business": "g1.large",
+    "enterprise": "g1.xlarge",
+}
+
+
+def gabarit_pour_palier(palier: str) -> str:
+    nom = _GABARIT_NOM_PAR_PALIER.get(palier, "k8s.worker")
+    g = next((f for f in amont().gabarits() if f["nom"] == nom), None)
+    if g:
+        return str(g["id"])
+    return _GABARIT_SIMULE_PAR_PALIER.get(palier, "g1.medium")
+
+
+def image_ubuntu() -> str:
+    """Image système du serveur d'hébergement : Ubuntu 24.04, ou la plus proche disponible."""
+    images = amont().images()
+    img = next((i for i in images if i["id"] == "ubuntu-24.04"), None)
+    if img is None:
+        img = next((i for i in images if "ubuntu" in i["nom"].lower()), None)
+    if img is None:
+        img = images[0] if images else None
+    return str(img["id"]) if img else "ubuntu-24.04"
+
+
+def construire_cloud_init(domaine: str, version_php: str) -> str:
+    """`#cloud-config` minimal : pile LEMP (Nginx + PHP-FPM + MariaDB) et un vhost du domaine."""
+    paquet_php = f"php{version_php}"
+    racine = f"/var/www/{domaine}"
+    vhost = (
+        "server {\n"
+        "    listen 80;\n"
+        f"    server_name {domaine};\n"
+        f"    root {racine};\n"
+        "    index index.php index.html;\n"
+        "    location / { try_files $uri $uri/ =404; }\n"
+        "    location ~ \\.php$ {\n"
+        "        include snippets/fastcgi-php.conf;\n"
+        f"        fastcgi_pass unix:/run/php/{paquet_php}-fpm.sock;\n"
+        "    }\n"
+        "}\n"
+    )
+    return (
+        "#cloud-config\n"
+        "package_update: true\n"
+        "packages:\n"
+        "  - nginx\n"
+        f"  - {paquet_php}-fpm\n"
+        "  - mariadb-server\n"
+        "write_files:\n"
+        f"  - path: /etc/nginx/sites-available/{domaine}\n"
+        "    content: |\n" + "\n".join(f"      {ligne}" for ligne in vhost.splitlines()) + "\n"
+        "runcmd:\n"
+        f"  - mkdir -p {racine}\n"
+        f"  - ln -sf /etc/nginx/sites-available/{domaine} /etc/nginx/sites-enabled/{domaine}\n"
+        f"  - systemctl enable --now {paquet_php}-fpm mariadb\n"
+        "  - systemctl restart nginx\n"
+    )
+
+
+async def reseau_organisation(ctx: Contexte, site: str) -> dict[str, str]:
+    """Réseau/identifiants OpenStack à utiliser pour le serveur d'hébergement.
+
+    `Hebergement` n'a pas de notion d'Espace Cloud dans le contrat (seulement `orgId`) :
+    on rattache la VM au réseau du premier Espace Cloud actif de l'organisation sur ce
+    site (à défaut, n'importe quel site). Sans Espace Cloud, on retombe sur l'allocation
+    réseau automatique de Nova (identifiants amont par défaut)."""
+    from synelia.modules.espaces.service import depot as depot_espaces
+
+    espaces = await depot_espaces.tous(
+        ctx, filtre=lambda e: e.site == site and e.statut == "active"
+    )
+    if not espaces:
+        espaces = await depot_espaces.tous(ctx, filtre=lambda e: e.statut == "active")
+    if not espaces:
+        return {}
+    return await depot_espaces.secrets(ctx, espaces[0].id)
+
+
+def ip_privee(hebergement_id: str) -> str:
+    return f"10.{hash(hebergement_id) % 250}.0.{hash('web') % 250 + 2}"
+
+
+async def serveur_id(ctx: Contexte, hebergement_id: str, travail: Travail | None = None) -> str:
+    """Identifiant Nova du serveur : dans les secrets (posé à la création), sinon le travail."""
+    if travail and travail.contexte.get("serveur_id"):
+        return str(travail.contexte["serveur_id"])
+    try:
+        sec = await depot.secrets(ctx, hebergement_id)
+    except Exception:  # noqa: BLE001
+        sec = {}
+    return str(sec.get("serveur_id") or hebergement_id)
 
 
 def construire_hebergement(ctx: Contexte, corps: m.HebergementCreation) -> m.Hebergement:
@@ -102,12 +209,12 @@ def construire_hebergement(ctx: Contexte, corps: m.HebergementCreation) -> m.Heb
             diskGo={"starter": 40, "pro": 80, "business": 160, "enterprise": 320}.get(
                 corps.palier, 80
             ),
-            ip=f"192.168.{hash(hid) % 250}.10",
+            ip="",
             site=corps.site,
-            os="Debian 12",
-            serveurWeb="Nginx 1.26",
-            statut="en_ligne",
-            chargeCpuPct=12.0,
+            os="Ubuntu 24.04 LTS",
+            serveurWeb="Nginx",
+            statut="maintenance",
+            chargeCpuPct=0.0,
         ),
         php=m.Php(
             versionDefaut=corps.versionPhp or "8.2",
@@ -245,7 +352,33 @@ SERVICES_PARTAGES = [
 class ExecuteurHebergementCreer(Executeur):
     compensable = True
 
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 1:
+            h = await depot.obtenir(ctx, travail.cible_id or "")
+            secrets_reseau = await reseau_organisation(ctx, h.serveur.site)
+            srv = amont().creer_serveur(
+                nom=h.serveur.nom,
+                image_id=image_ubuntu(),
+                gabarit_id=gabarit_pour_palier(h.palier),
+                reseau_id=secrets_reseau.get("reseau_id"),
+                identifiants=secrets_reseau,
+                org_id=ctx.org_id_ou_none,
+                espace_id=None,
+                cloud_init=construire_cloud_init(h.domaineProvisoire, h.php.versionDefaut),
+            )
+            c = dict(travail.contexte)
+            c["serveur_id"] = srv["id"]
+            await depot.definir_secrets(ctx, h.id, {"serveur_id": srv["id"]})
+            c["ip_privee"] = srv.get("ip_privee") or ip_privee(h.id)
+            travail.contexte = c
+            return f"Serveur amont {srv['id']} créé"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        h = await depot.obtenir(ctx, travail.cible_id or "")
+        ip = travail.contexte.get("ip_privee") or ip_privee(h.id)
+        serveur = h.serveur.model_copy(update={"ip": ip, "statut": "en_ligne", "chargeCpuPct": 12.0})
+        await depot.modifier(ctx, h.id, {"serveur": serveur.model_dump(mode="json")})
         base = await depot_bases.creer(
             ctx, construire_serveur_bases(ctx, travail.cible_id or ""), parent_id=travail.cible_id
         )
@@ -253,18 +386,29 @@ class ExecuteurHebergementCreer(Executeur):
         await depot.definir_statut(ctx, travail.cible_id or "", "en_ligne")
 
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
-        await depot.supprimer(ctx, travail.cible_id or "", logique=True)
+        sid = await serveur_id(ctx, travail.cible_id or "", travail)
+        if sid and sid != (travail.cible_id or ""):
+            amont().supprimer_serveur(sid)
+        await depot.definir_statut(ctx, travail.cible_id or "", "suspendu")
 
 
 @executeur("hebergement.supprimer")
 class ExecuteurHebergementSupprimer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        sid = await serveur_id(ctx, travail.cible_id or "", travail)
+        if sid and sid != (travail.cible_id or ""):
+            amont().supprimer_serveur(sid)
         await depot_enfants(ctx, travail.cible_id or "")
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
 @executeur("hebergement.redemarrer")
 class ExecuteurHebergementRedemarrer(Executeur):
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 1:
+            amont().action(await serveur_id(ctx, travail.cible_id or "", travail), "redemarrage")
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         await depot.definir_statut(ctx, travail.cible_id or "", "en_ligne")
 

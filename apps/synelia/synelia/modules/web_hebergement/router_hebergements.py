@@ -75,7 +75,7 @@ async def creer_hebergement(
         entree=corps.model_dump(mode="json"),
         etapes=[
             {"nom": "Réserver les quotas du palier", "dureeS": 4},
-            {"nom": "Créer le serveur d'hébergement (Plesk)", "dureeS": 40},
+            {"nom": "Créer le serveur d'hébergement (OpenStack)", "dureeS": 40},
             {"nom": "Provisionner le serveur de bases", "dureeS": 20},
             {"nom": "Activer la surveillance", "dureeS": 6},
         ],
@@ -137,7 +137,7 @@ async def supprimer_hebergement(
         cible_id=hebergementId,
         etapes=[
             {"nom": "Suspension des sites et bases", "dureeS": 8},
-            {"nom": "Suppression du serveur (Plesk)", "dureeS": 25},
+            {"nom": "Suppression du serveur (OpenStack)", "dureeS": 25},
             {"nom": "Clore la facturation", "dureeS": 4},
         ],
     )

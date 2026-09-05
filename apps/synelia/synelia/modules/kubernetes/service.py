@@ -28,13 +28,52 @@ def amont() -> MagnumSimule:
 
 @executeur("k8s.create")
 class ExecuteurK8sCreate(Executeur):
+    compensable = True
+
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 0:
+            cluster = await depot_cluster.obtenir(ctx, travail.cible_id or "")
+            entree = travail.entree or {}
+            from synelia.modules.espaces.service import depot as depot_espaces
+
+            secrets_espace = await depot_espaces.secrets(ctx, cluster.espaceId)
+            cl = amont().creer_cluster(
+                nom=cluster.nom,
+                pools=entree.get("pools") or [],
+                master_count=cluster.controlPlane.nodes,
+                reseau_id=secrets_espace.get("reseau_id"),
+            )
+            await depot_cluster.definir_secrets(ctx, cluster.id, {"magnum_cluster_id": cl["id"]})
+            c = dict(travail.contexte)
+            c["statut_amont"] = cl["statut"]
+            travail.contexte = c
+            return f"Cluster Magnum soumis ({cl['id']}, {cl['statut']})"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
-        await depot_cluster.definir_statut(ctx, travail.cible_id or "", "running")
+        # Le simulé renvoie CREATE_COMPLETE instantanément ; le réel (Heat/CAPI) prend bien
+        # plus longtemps qu'une étape de travail, donc on ne bloque pas dessus et le cluster
+        # reste `provisioning` côté plateforme tant qu'un réconciliateur (à écrire) n'a pas
+        # confirmé CREATE_COMPLETE côté Magnum.
+        statut_amont = str(travail.contexte.get("statut_amont", ""))
+        statut = "running" if statut_amont.endswith("COMPLETE") else "provisioning"
+        await depot_cluster.definir_statut(ctx, travail.cible_id or "", statut)
+
+    async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
+        secrets = await depot_cluster.secrets(ctx, travail.cible_id or "")
+        mid = secrets.get("magnum_cluster_id")
+        if mid:
+            amont().supprimer_cluster(mid)
+        await depot_cluster.definir_statut(ctx, travail.cible_id or "", "erreur")
 
 
 @executeur("k8s.delete")
 class ExecuteurK8sDelete(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        secrets = await depot_cluster.secrets(ctx, travail.cible_id or "")
+        mid = secrets.get("magnum_cluster_id")
+        if mid:
+            amont().supprimer_cluster(mid)
         await depot_pool.supprimer_enfants(ctx, travail.cible_id or "")
         await depot_cluster.supprimer(ctx, travail.cible_id or "", logique=True)
 

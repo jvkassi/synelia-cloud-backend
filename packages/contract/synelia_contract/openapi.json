@@ -106,6 +106,14 @@
       "description": "Bibliothèque de solutions libres qualifiées."
     },
     {
+      "name": "IA — Modèles",
+      "description": "Catalogue des modèles IA, avec la passerelle qui les rend réellement invocables."
+    },
+    {
+      "name": "IA — Agents",
+      "description": "Agents : consigne, modèle, réglages, invocation en un aller-retour."
+    },
+    {
       "name": "Observabilité",
       "description": "Séries, événements, journaux, règles d’alerte."
     },
@@ -317,6 +325,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -437,6 +448,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -819,6 +833,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -1491,6 +1508,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -1752,6 +1772,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -2348,6 +2371,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -2451,6 +2477,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -2539,6 +2568,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -2787,6 +2819,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -2959,6 +2994,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -3286,6 +3324,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -3374,6 +3415,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -4059,6 +4103,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -4473,6 +4520,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -4751,6 +4801,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -4861,6 +4914,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -5042,6 +5098,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -5801,6 +5860,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -6571,7 +6633,7 @@
           {
             "name": "email",
             "in": "query",
-            "required": false,
+            "required": true,
             "description": "Adresse saisie.",
             "schema": {
               "type": "string",
@@ -6598,6 +6660,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -6703,6 +6768,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -7490,6 +7558,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -8153,6 +8224,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -8390,6 +8464,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -9335,6 +9412,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -9391,6 +9471,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -10519,6 +10602,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -10572,6 +10658,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -11461,6 +11550,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -12162,6 +12254,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -12391,6 +12486,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -13154,6 +13252,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -13479,6 +13580,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -14021,6 +14125,600 @@
         }
       }
     },
+    "/ia/agents": {
+      "get": {
+        "tags": [
+          "IA — Agents"
+        ],
+        "operationId": "listerAgentsIA",
+        "summary": "Lister les agents",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/ParPage"
+          },
+          {
+            "$ref": "#/components/parameters/Tri"
+          },
+          {
+            "$ref": "#/components/parameters/Ordre"
+          },
+          {
+            "$ref": "#/components/parameters/Recherche"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "donnees": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentIA"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "donnees",
+                    "pagination"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IA — Agents"
+        ],
+        "operationId": "creerAgentIA",
+        "summary": "Créer un agent",
+        "x-rbac": "ia.agent.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentIACreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/agents/{agentId}": {
+      "get": {
+        "tags": [
+          "IA — Agents"
+        ],
+        "operationId": "obtenirAgentIA",
+        "summary": "Obtenir un agent",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l’agent.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "agent-support"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "IA — Agents"
+        ],
+        "operationId": "modifierAgentIA",
+        "summary": "Modifier un agent",
+        "x-rbac": "ia.agent.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l’agent.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "agent-support"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentIAModification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IA — Agents"
+        ],
+        "operationId": "supprimerAgentIA",
+        "summary": "Supprimer un agent",
+        "description": "Action destructive : le nom exact de la ressource est exigé en confirmation.",
+        "x-rbac": "ia.agent.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Confirmation"
+          },
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l’agent.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "agent-support"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Supprimé. Aucun corps."
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/agents/{agentId}/invoquer": {
+      "post": {
+        "tags": [
+          "IA — Agents"
+        ],
+        "operationId": "invoquerAgent",
+        "summary": "Invoquer un agent",
+        "description": "Un aller-retour : la consigne de l’agent et le message de l’appelant partent vers le modèle configuré via la passerelle LiteLLM. Pas de mémoire de conversation ni d’anonymisation dans ce MVP. Un agent dont le modèle n’est pas invocable sur cette passerelle renvoie 422, jamais une réponse inventée.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "agentId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de l’agent.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "agent-support"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentInvocationRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AgentInvocationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "424": {
+            "$ref": "#/components/responses/Degrade"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/modeles": {
+      "get": {
+        "tags": [
+          "IA — Modèles"
+        ],
+        "operationId": "listerModelesIA",
+        "summary": "Lister les modèles IA",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/ParPage"
+          },
+          {
+            "$ref": "#/components/parameters/Tri"
+          },
+          {
+            "$ref": "#/components/parameters/Ordre"
+          },
+          {
+            "$ref": "#/components/parameters/Recherche"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "donnees": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ModeleIA"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "donnees",
+                    "pagination"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IA — Modèles"
+        ],
+        "operationId": "creerModeleIA",
+        "summary": "Créer un modèle IA",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ModeleIACreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModeleIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/modeles/{modeleId}": {
+      "get": {
+        "tags": [
+          "IA — Modèles"
+        ],
+        "operationId": "obtenirModeleIA",
+        "summary": "Obtenir un modèle IA",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "modeleId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du modèle IA.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "m-llama-70b"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModeleIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
     "/invitations": {
       "get": {
         "tags": [
@@ -14100,6 +14798,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -14358,6 +15059,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -14854,6 +15558,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -14909,6 +15616,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -15801,6 +16511,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -16455,6 +17168,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -16545,6 +17261,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -16858,6 +17577,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -17790,6 +18512,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -18223,6 +18948,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "424": {
             "$ref": "#/components/responses/Degrade"
           },
@@ -18615,6 +19343,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -19187,6 +19918,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -19739,6 +20473,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -19791,6 +20528,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -21279,6 +22019,9 @@
           "400": {
             "$ref": "#/components/responses/Invalide"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -21562,7 +22305,7 @@
           {
             "name": "nom",
             "in": "query",
-            "required": false,
+            "required": true,
             "description": "Nom complet avec son extension.",
             "schema": {
               "type": "string"
@@ -21582,6 +22325,9 @@
           },
           "400": {
             "$ref": "#/components/responses/Invalide"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "424": {
             "$ref": "#/components/responses/Degrade"
@@ -21659,6 +22405,9 @@
           },
           "400": {
             "$ref": "#/components/responses/Invalide"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -21741,6 +22490,9 @@
           },
           "400": {
             "$ref": "#/components/responses/Invalide"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -22383,7 +23135,7 @@
           {
             "name": "q",
             "in": "query",
-            "required": false,
+            "required": true,
             "description": "Terme recherché.",
             "schema": {
               "type": "string"
@@ -22443,6 +23195,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -22564,6 +23319,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -22901,6 +23659,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -22997,6 +23758,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -23108,6 +23872,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -23527,6 +24294,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -23745,6 +24515,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -23798,6 +24571,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -23948,6 +24724,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -24483,6 +25262,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -24880,6 +25662,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -24935,6 +25720,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -25779,6 +26567,9 @@
           "404": {
             "$ref": "#/components/responses/Introuvable"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -26320,6 +27111,9 @@
           "400": {
             "$ref": "#/components/responses/Invalide"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -26576,6 +27370,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -27091,6 +27888,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -27359,6 +28159,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -27486,6 +28289,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -27541,6 +28347,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -28778,6 +29587,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
           "409": {
             "$ref": "#/components/responses/Conflit"
           },
@@ -28889,6 +29701,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -29461,6 +30276,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -30027,6 +30845,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -30525,6 +31346,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -31325,6 +32149,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -32123,6 +32950,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -32540,7 +33370,7 @@
           {
             "name": "nom",
             "in": "query",
-            "required": false,
+            "required": true,
             "description": "Nom complet avec son extension.",
             "schema": {
               "type": "string"
@@ -32575,6 +33405,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "424": {
             "$ref": "#/components/responses/Degrade"
@@ -32729,6 +33562,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -33258,6 +34094,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -34126,6 +34965,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -35564,6 +36406,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
           },
@@ -35632,6 +36477,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
           },
           "409": {
             "$ref": "#/components/responses/Conflit"
@@ -36895,6 +37743,9 @@
           "403": {
             "$ref": "#/components/responses/Interdit"
           },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
           "424": {
             "$ref": "#/components/responses/Degrade"
           },
@@ -37325,6 +38176,9 @@
           },
           "403": {
             "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
           },
           "429": {
             "$ref": "#/components/responses/TropDeRequetes"
@@ -37921,13 +38775,9 @@
         "name": "Accept-Language",
         "in": "header",
         "required": false,
-        "description": "Langue des libellés renvoyés par l'API (messages, intitulés de catalogue). `fr` par défaut ; `en` prévu. Les identifiants et les codes ne sont jamais traduits.",
+        "description": "Langue des libellés renvoyés par l'API (messages, intitulés de catalogue). Chaîne libre (l'API accepte toute étiquette de langue RFC 5646 envoyée par un client HTTP réel) ; seul `fr` est effectivement traduit aujourd'hui, tout le reste retombe sur `fr`. Les identifiants et les codes ne sont jamais traduits.",
         "schema": {
           "type": "string",
-          "enum": [
-            "fr",
-            "en"
-          ],
           "default": "fr"
         }
       },
@@ -38167,6 +39017,174 @@
           "libelle",
           "groupe",
           "perms"
+        ]
+      },
+      "AgentIA": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "consigne": {
+            "type": "string",
+            "description": "Consigne système envoyée au modèle avant le message de l’appelant."
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "modele": {
+            "type": "string",
+            "description": "Slug du modèle IA utilisé — référence `ModeleIA.slug`."
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "topP": {
+            "type": "number"
+          },
+          "jetonsMax": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "brouillon",
+              "publie",
+              "suspendu"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "nom",
+          "consigne",
+          "modele",
+          "temperature",
+          "topP",
+          "jetonsMax",
+          "statut",
+          "createdAt"
+        ]
+      },
+      "AgentIACreation": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "consigne": {
+            "type": "string"
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "modele": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number",
+            "default": 0.7
+          },
+          "topP": {
+            "type": "number",
+            "default": 1
+          },
+          "jetonsMax": {
+            "type": "integer",
+            "format": "int32",
+            "default": 1024
+          }
+        },
+        "required": [
+          "nom",
+          "consigne",
+          "modele"
+        ]
+      },
+      "AgentIAModification": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "consigne": {
+            "type": "string"
+          },
+          "modele": {
+            "type": "string"
+          },
+          "temperature": {
+            "type": "number"
+          },
+          "topP": {
+            "type": "number"
+          },
+          "jetonsMax": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "brouillon",
+              "publie",
+              "suspendu"
+            ]
+          }
+        }
+      },
+      "AgentInvocationRequest": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string",
+            "description": "Message de l’appelant — un seul tour, pas de mémoire de conversation dans ce MVP."
+          },
+          "conversationId": {
+            "type": "string",
+            "description": "Réservé pour un usage futur ; ignoré aujourd’hui."
+          }
+        },
+        "required": [
+          "message"
+        ]
+      },
+      "AgentInvocationResponse": {
+        "type": "object",
+        "properties": {
+          "reponse": {
+            "type": "string"
+          },
+          "jetonsEntree": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "jetonsSortie": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coutFcfa": {
+            "type": "number"
+          },
+          "latenceMs": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "required": [
+          "reponse",
+          "jetonsEntree",
+          "jetonsSortie",
+          "coutFcfa",
+          "latenceMs"
         ]
       },
       "AnalyseDepot": {
@@ -42583,138 +43601,6 @@
           "correlationId"
         ]
       },
-      "ErreurDegrade": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "correlationId": {
-            "type": "string"
-          },
-          "integration": {
-            "type": "string",
-            "description": "Intégration en défaut : `centreon`, `grafana`, `victorialogs`, `openstack`…"
-          },
-          "donneesPartielles": {
-            "type": "boolean",
-            "description": "Vrai quand une réponse dégradée accompagne l’erreur."
-          },
-          "dateDonnees": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Fraîcheur des dernières données connues."
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "correlationId",
-          "integration"
-        ]
-      },
-      "ErreurInterdit": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "correlationId": {
-            "type": "string"
-          },
-          "actionRbac": {
-            "type": "string",
-            "description": "Identifiant de l'action refusée dans la matrice RBAC (`vm.create_delete`)."
-          },
-          "rolesRequis": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "enum": [
-                "super_admin",
-                "platform_operator",
-                "org_admin",
-                "espace_admin",
-                "project_owner",
-                "operator",
-                "service_admin",
-                "billing_manager",
-                "compliance",
-                "read_only"
-              ]
-            },
-            "description": "Rôles qui exécutent pleinement cette action."
-          },
-          "roleCourant": {
-            "type": "string",
-            "enum": [
-              "super_admin",
-              "platform_operator",
-              "org_admin",
-              "espace_admin",
-              "project_owner",
-              "operator",
-              "service_admin",
-              "billing_manager",
-              "compliance",
-              "read_only"
-            ]
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "correlationId",
-          "rolesRequis"
-        ]
-      },
-      "ErreurValidation": {
-        "type": "object",
-        "properties": {
-          "code": {
-            "type": "string"
-          },
-          "message": {
-            "type": "string"
-          },
-          "correlationId": {
-            "type": "string"
-          },
-          "champs": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "champ": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                },
-                "attendu": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "champ",
-                "message"
-              ]
-            }
-          }
-        },
-        "required": [
-          "code",
-          "message",
-          "correlationId",
-          "champs"
-        ]
-      },
       "EspaceCloud": {
         "type": "object",
         "properties": {
@@ -46062,6 +46948,200 @@
           "enregistrements"
         ]
       },
+      "ModeleIA": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "slug": {
+            "type": "string",
+            "description": "Identifiant appelé côté passerelle — le vrai modèle OpenRouter pour les modèles invocables."
+          },
+          "nom": {
+            "type": "string"
+          },
+          "editeur": {
+            "type": "string"
+          },
+          "famille": {
+            "type": "string",
+            "enum": [
+              "texte",
+              "code",
+              "embedding",
+              "reranker",
+              "transcription",
+              "vision"
+            ]
+          },
+          "hebergement": {
+            "type": "string",
+            "enum": [
+              "souverain",
+              "externe"
+            ]
+          },
+          "residence": {
+            "type": "string"
+          },
+          "site": {
+            "type": "string"
+          },
+          "parametres": {
+            "type": "string"
+          },
+          "licence": {
+            "type": "string"
+          },
+          "contexteJetons": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prixEntree": {
+            "type": "number",
+            "description": "Prix pour un million de jetons en entrée, en FCFA."
+          },
+          "prixSortie": {
+            "type": "number",
+            "description": "Prix pour un million de jetons en sortie, en FCFA."
+          },
+          "unite": {
+            "type": "string",
+            "enum": [
+              "jeton",
+              "minute"
+            ]
+          },
+          "latenceP50Ms": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "debitJetonsSec": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "apercu",
+              "degrade",
+              "retire"
+            ]
+          },
+          "usages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "invocable": {
+            "type": "boolean",
+            "description": "Vrai si ce modèle est réellement appelable via la passerelle LiteLLM ; sinon `invoquer` renvoie 422."
+          }
+        },
+        "required": [
+          "id",
+          "slug",
+          "nom",
+          "editeur",
+          "famille",
+          "hebergement",
+          "residence",
+          "licence",
+          "statut",
+          "invocable"
+        ]
+      },
+      "ModeleIACreation": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "editeur": {
+            "type": "string"
+          },
+          "famille": {
+            "type": "string",
+            "enum": [
+              "texte",
+              "code",
+              "embedding",
+              "reranker",
+              "transcription",
+              "vision"
+            ]
+          },
+          "hebergement": {
+            "type": "string",
+            "enum": [
+              "souverain",
+              "externe"
+            ]
+          },
+          "residence": {
+            "type": "string"
+          },
+          "licence": {
+            "type": "string"
+          },
+          "contexteJetons": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "prixEntree": {
+            "type": "number"
+          },
+          "prixSortie": {
+            "type": "number"
+          },
+          "unite": {
+            "type": "string",
+            "enum": [
+              "jeton",
+              "minute"
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "disponible",
+              "apercu",
+              "degrade",
+              "retire"
+            ]
+          },
+          "usages": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "invocable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "slug",
+          "nom",
+          "editeur",
+          "famille",
+          "hebergement",
+          "residence",
+          "licence"
+        ]
+      },
       "MoyenPaiement": {
         "type": "object",
         "properties": {
@@ -48247,33 +49327,90 @@
         "type": "object",
         "properties": {
           "erreur": {
-            "$ref": "#/components/schemas/ErreurDegrade"
+            "$ref": "#/components/schemas/Erreur"
+          },
+          "integration": {
+            "type": "string",
+            "description": "Intégration en défaut : `centreon`, `grafana`, `victorialogs`, `openstack`…"
+          },
+          "donneesPartielles": {
+            "type": "boolean",
+            "description": "Vrai quand une réponse dégradée accompagne l’erreur."
+          },
+          "dateDonnees": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Fraîcheur des dernières données connues."
           }
         },
         "required": [
-          "erreur"
+          "erreur",
+          "integration"
         ]
       },
       "ReponseErreurInterdit": {
         "type": "object",
         "properties": {
           "erreur": {
-            "$ref": "#/components/schemas/ErreurInterdit"
+            "$ref": "#/components/schemas/Erreur"
+          },
+          "rolesRequis": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "super_admin",
+                "platform_operator",
+                "org_admin",
+                "espace_admin",
+                "project_owner",
+                "operator",
+                "service_admin",
+                "billing_manager",
+                "compliance",
+                "read_only"
+              ]
+            },
+            "description": "Rôles qui exécutent pleinement cette action."
+          },
+          "roleCourant": {
+            "type": "string",
+            "enum": [
+              "super_admin",
+              "platform_operator",
+              "org_admin",
+              "espace_admin",
+              "project_owner",
+              "operator",
+              "service_admin",
+              "billing_manager",
+              "compliance",
+              "read_only"
+            ]
           }
         },
         "required": [
-          "erreur"
+          "erreur",
+          "rolesRequis"
         ]
       },
       "ReponseErreurValidation": {
         "type": "object",
         "properties": {
           "erreur": {
-            "$ref": "#/components/schemas/ErreurValidation"
+            "$ref": "#/components/schemas/Erreur"
+          },
+          "champs": {
+            "type": "object",
+            "description": "Message de validation par champ en défaut, indexé par son chemin (`prix`, `espaceId`…).",
+            "additionalProperties": {
+              "type": "string"
+            }
           }
         },
         "required": [
-          "erreur"
+          "erreur",
+          "champs"
         ]
       },
       "Reseau": {

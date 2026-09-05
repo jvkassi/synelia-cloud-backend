@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date
 from typing import Any
 
@@ -21,6 +22,8 @@ from synelia.travaux import demarrer_travail
 
 router = APIRouter(prefix="/facturation", tags=["Facturation"])
 
+_RE_PERIODE = re.compile(r"^[0-9]{4}-(0[1-9]|1[0-2])$")
+
 
 @router.get("/consommation", response_model=m.Consommation, response_model_exclude_none=True)
 async def obtenir_consommation(
@@ -39,6 +42,10 @@ async def exporter_consommation(
     corps: m.FacturationConsommationExportPostRequest,
     ctx: Contexte = Depends(exige("invoice.view", lecture=True)),
 ) -> Any:
+    if not _RE_PERIODE.match(corps.periode or ""):
+        raise erreurs.validation(
+            "Periode invalide, attendu AAAA-MM.", {"periode": "Format attendu : AAAA-MM."}
+        )
     await metrologie.consommation(ctx, corps.periode)
     travail = await demarrer_travail(
         ctx,
@@ -237,6 +244,10 @@ async def supprimer_moyen_paiement(
 async def recharger_prepaye(
     corps: m.Rechargement, ctx: Contexte = Depends(exige("payment.update"))
 ) -> Any:
+    if not (1 <= corps.montant <= 100_000_000_000):
+        raise erreurs.validation(
+            "Montant invalide.", {"montant": "Doit etre un entier positif raisonnable."}
+        )
     await crediter(ctx, ctx.org_id, f"Rechargement prépayé {corps.montant} FCFA", corps.montant)
     solde = await service.solde_credit(ctx)
     return {"solde": solde, "urlRedirection": None, "statut": "credite"}

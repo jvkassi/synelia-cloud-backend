@@ -3,6 +3,7 @@ from __future__ import annotations
 from synelia_contract import modeles as m
 from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
 from synelia_openstack import fournisseur
+from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
 from synelia_openstack.network import NetworkOpenStack, NetworkSimule
 
 from synelia.demo import peupleur
@@ -25,12 +26,63 @@ def amont() -> NetworkSimule:
     return fournisseur(NetworkSimule, NetworkOpenStack)
 
 
+def amont_identite() -> IdentiteSimule:
+    """Réseaux secondaires et IP flottantes vivent dans le projet de l'Espace Cloud parent :
+    même amont (Keystone/Neutron scopé projet) que `espaces.service.amont()`."""
+    return fournisseur(IdentiteSimule, IdentiteOpenStack)
+
+
 async def prochaine_ip(ctx: Contexte, espace_id: str) -> str:
     ips = await depot_ip.tous(ctx, filtre=lambda ip: ip.espaceId == espace_id)
     n = len(ips)
     octet3 = (n // 250) + 1
     octet4 = (n % 250) + 2
     return f"196.201.{octet3}.{octet4}"
+
+
+async def _projet_id(ctx: Contexte, espace_id: str) -> str | None:
+    from synelia.modules.espaces.service import depot as depot_espaces
+
+    secrets_espace = await depot_espaces.secrets(ctx, espace_id)
+    return secrets_espace.get("projet_id")
+
+
+async def creer_reseau_amont(ctx: Contexte, espace_id: str, nom: str, cidr: str) -> dict[str, str]:
+    """Crée le réseau/sous-réseau amont (sans routeur : c'est un réseau interne de plus dans un
+    projet qui en a déjà un) et renvoie les identifiants à poser en secrets sur la ressource."""
+    projet_id = await _projet_id(ctx, espace_id)
+    r = amont_identite().creer_reseau_secondaire(projet_id, nom, cidr)
+    return {"reseau_id": r["reseau_id"], "sous_reseau_id": r.get("sous_reseau_id") or ""}
+
+
+async def supprimer_reseau_amont(ctx: Contexte, reseau_id_local: str) -> None:
+    secrets = await depot_reseau.secrets(ctx, reseau_id_local)
+    rid = secrets.get("reseau_id")
+    if rid:
+        amont_identite().supprimer_reseau_secondaire(rid)
+
+
+async def reserver_ip_amont(ctx: Contexte, espace_id: str) -> dict[str, str]:
+    """Alloue une IP flottante amont ; le simulé ne renvoie pas d'adresse plausible-mais-stable
+    (pas d'accès à la base), on retombe alors sur l'allocation séquentielle locale."""
+    projet_id = await _projet_id(ctx, espace_id)
+    fip = amont_identite().creer_ip_flottante(projet_id)
+    adresse = fip.get("adresse") or await prochaine_ip(ctx, espace_id)
+    return {"id": fip["id"], "adresse": adresse}
+
+
+async def liberer_ip_amont(ctx: Contexte, ip_id_local: str) -> None:
+    secrets = await depot_ip.secrets(ctx, ip_id_local)
+    fid = secrets.get("ip_flottante_id")
+    if fid:
+        amont_identite().supprimer_ip_flottante(fid)
+
+
+async def supprimer_lb_amont(ctx: Contexte, lb_id_local: str) -> None:
+    secrets = await depot_lb.secrets(ctx, lb_id_local)
+    oid = secrets.get("octavia_lb_id")
+    if oid:
+        amont().supprimer_load_balancer(oid)
 
 
 def sante_defaut() -> m.HealthCheck:
@@ -45,9 +97,37 @@ def metriques_vides() -> m.Metriques:
 
 @executeur("lb.create")
 class ExecuteurLbCreate(Executeur):
+    compensable = True
+
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 1:
+            lb = await depot_lb.obtenir(ctx, travail.cible_id or "")
+            entree = travail.entree or {}
+            from synelia.modules.espaces.service import depot as depot_espaces
+
+            secrets_espace = await depot_espaces.secrets(ctx, lb.espaceId)
+            res = amont().creer_load_balancer(
+                projet_id=secrets_espace.get("projet_id"),
+                nom=lb.nom,
+                reseau_id=secrets_espace.get("reseau_id"),
+                layer=lb.layer,
+                exposure=lb.exposure,
+                listeners=entree.get("listeners"),
+            )
+            await depot_lb.definir_secrets(ctx, lb.id, {"octavia_lb_id": res["id"]})
+            c = dict(travail.contexte)
+            c["vip"] = res["vip"]
+            travail.contexte = c
+            return f"Load balancer amont {res['id']} créé ({res['statut']})"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         lb = await depot_lb.obtenir(ctx, travail.cible_id or "")
-        await depot_lb.modifier(ctx, lb.id, {"vip": amont().allouer_vip()})
+        vip = travail.contexte.get("vip") or amont().allouer_vip()
+        await depot_lb.modifier(ctx, lb.id, {"vip": vip})
+
+    async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
+        await supprimer_lb_amont(ctx, travail.cible_id or "")
 
 
 @peupleur

@@ -26,7 +26,7 @@ services:
       SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:${POSTGRES_PASSWORD}@postgres:5432/synelia
       SYNELIA_SECRET: ${SYNELIA_SECRET:?}
       SYNELIA_SEED_ADMIN_MOT_DE_PASSE: ${SYNELIA_SEED_ADMIN_MOT_DE_PASSE:?}
-      SYNELIA_CORS_ORIGINES: '["https://synelia-cloud.vercel.app","https://synelia.cloud","http://localhost:3000","http://localhost:3111"]'
+      SYNELIA_CORS_ORIGINES: '["*"]'
       SYNELIA_FOURNISSEUR: openstack
       SYNELIA_OS_AUTH_URL: ${SYNELIA_OS_AUTH_URL:?}
       SYNELIA_OS_APPLICATION_CREDENTIAL_ID: ${SYNELIA_OS_APPLICATION_CREDENTIAL_ID:?}
@@ -34,7 +34,19 @@ services:
       SYNELIA_OS_REGION: RegionOne
       SYNELIA_TRAVAUX_EN_LIGNE: "false"
       SYNELIA_SEED_DEMO: "false"
+      SYNELIA_LITELLM_URL: http://litellm:4000
+      SYNELIA_LITELLM_MASTER_KEY: ${SYNELIA_LITELLM_MASTER_KEY:?}
     ports: ["127.0.0.1:4010:4000"]
+    restart: unless-stopped
+
+  litellm:
+    image: ghcr.io/berriai/litellm:main-stable
+    environment:
+      SYNELIA_OPENROUTER_KEY: ${SYNELIA_OPENROUTER_KEY:?}
+      SYNELIA_LITELLM_MASTER_KEY: ${SYNELIA_LITELLM_MASTER_KEY:?}
+    volumes: ["./litellm/config.yaml:/app/config.yaml:ro"]
+    command: ["--config", "/app/config.yaml", "--port", "4000"]
+    ports: ["127.0.0.1:4001:4000"]
     restart: unless-stopped
 
 volumes:

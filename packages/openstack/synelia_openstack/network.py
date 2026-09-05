@@ -28,6 +28,21 @@ class NetworkSimule:
     def creer_groupe(self, nom: str, description: str | None = None) -> str:
         return f"sg-{nouvel_id()[:8]}"
 
+    def creer_load_balancer(
+        self,
+        *,
+        projet_id: str | None,
+        nom: str,
+        reseau_id: str | None,
+        layer: str,
+        exposure: str,
+        listeners: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        return {"id": f"lb-{nouvel_id()[:8]}", "vip": self.allouer_vip(), "statut": "ACTIVE"}
+
+    def supprimer_load_balancer(self, lb_id: str) -> None:
+        return None
+
 
 class NetworkOpenStack(NetworkSimule):
     """openstacksdk : Neutron (networks, floating IPs, security groups), Octavia, VPN."""
@@ -53,4 +68,58 @@ class NetworkOpenStack(NetworkSimule):
         return "196.201.1.10"
 
     def regles_vip(self) -> dict[str, Any]:
-        return {"id": nouvel_id}
+        return {"id": nouvel_id()}
+
+    def _attendre_actif(self, c: Any, lb_id: str, wait: int = 60) -> Any:
+        """Attente bornée (Octavia déploie une paire d'amphores : bien plus long qu'une étape
+        de travail). Au-delà de `wait`, on relit juste le statut courant et on continue :
+        le load balancer reste `PENDING_CREATE`/`PENDING_UPDATE` tant qu'un réconciliateur (à
+        écrire) n'a pas confirmé `ACTIVE` côté Octavia."""
+        try:
+            return c.load_balancer.wait_for_load_balancer(lb_id, wait=wait)
+        except Exception:  # noqa: BLE001
+            return c.load_balancer.get_load_balancer(lb_id)
+
+    def creer_load_balancer(
+        self,
+        *,
+        projet_id: str | None,
+        nom: str,
+        reseau_id: str | None,
+        layer: str,
+        exposure: str,
+        listeners: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        c = self._c()
+        lb = c.load_balancer.create_load_balancer(
+            name=nom, vip_network_id=reseau_id, project_id=projet_id
+        )
+        vip = lb.vip_address
+        lb = self._attendre_actif(c, lb.id)
+        statut = lb.provisioning_status
+        if statut == "ACTIVE":
+            proto_defaut = "tcp" if layer == "l4" else "http"
+            for ln in listeners or [{"protocole": proto_defaut, "port": 80}]:
+                protocole = str(ln.get("protocole") or proto_defaut).upper()
+                port = int(ln.get("port") or 80)
+                ecouteur = c.load_balancer.create_listener(
+                    name=f"{nom}-ecouteur",
+                    loadbalancer_id=lb.id,
+                    protocol=protocole,
+                    protocol_port=port,
+                )
+                lb = self._attendre_actif(c, lb.id)
+                statut = lb.provisioning_status
+                if statut == "ACTIVE":
+                    c.load_balancer.create_pool(
+                        name=f"{nom}-pool",
+                        listener_id=ecouteur.id,
+                        protocol=protocole,
+                        lb_algorithm="ROUND_ROBIN",
+                    )
+                    lb = self._attendre_actif(c, lb.id)
+                    statut = lb.provisioning_status
+        return {"id": lb.id, "vip": vip or lb.vip_address, "statut": statut}
+
+    def supprimer_load_balancer(self, lb_id: str) -> None:
+        self._c().load_balancer.delete_load_balancer(lb_id, cascade=True, ignore_missing=True)

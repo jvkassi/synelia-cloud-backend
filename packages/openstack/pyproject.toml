@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
   "synelia-kernel",
   "httpx>=0.28",
+  "kubernetes>=31",
 ]
 
 [build-system]

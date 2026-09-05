@@ -1114,7 +1114,7 @@ async def mettre_a_jour_incident(
 async def modifier_statut_services(
     corps: m.AdminStatutServicesPutRequest, ctx: Contexte = Depends(exige_admin("capacity.manage"))
 ) -> Any:
-    for existant in await depot_statut_service.tous(ctx):
+    for existant in await depot_statut_service.lignes(ctx):
         await depot_statut_service.supprimer(ctx, existant.id)
     services = []
     for s in corps.services:

@@ -121,8 +121,10 @@ async def supprimer_volume(
     await journaliser(
         ctx, action="volume.suppression", cible_type="volume", cible_id=volumeId, cible=vol.nom
     )
+    vid = await service.volume_id_reel(ctx, volumeId)
+    secrets_espace = await service.identifiants_espace(ctx, vol.espaceId)
+    service.amont_cinder().supprimer(vid, identifiants=secrets_espace)
     await depot_volume.supprimer(ctx, volumeId, logique=True)
-    service.amont_cinder().supprimer(volumeId)
     return Response(status_code=204)
 
 
@@ -338,6 +340,10 @@ async def lister_buckets(
 async def creer_bucket(
     corps: m.BucketCreation, ctx: Contexte = Depends(exige("vm.create_delete"))
 ) -> Any:
+    if not corps.nom or not corps.nom.strip():
+        raise erreurs.validation(
+            "Le nom du bucket est requis.", {"nom": "Champ requis."}
+        )
     await depot_bucket.exiger_nom_libre(ctx, corps.nom)
     amont = service.amont_objet()
     amont.creer_bucket(nom=corps.nom, region=corps.region, classe=corps.classe)
@@ -353,7 +359,7 @@ async def creer_bucket(
         objectLock=conversion(corps.objectLock),
         replication=conversion(corps.replication),
         accessLogs=bool(corps.accessLogs),
-        policy=corps.policy,
+        policy=corps.policy or "prive",
     )
     await depot_bucket.creer(ctx, bucket)
     await journaliser(

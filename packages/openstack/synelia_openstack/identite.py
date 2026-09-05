@@ -28,6 +28,23 @@ class IdentiteSimule:
             "routeur_id": f"rtr-{nouvel_id()[:8]}",
         }
 
+    def supprimer_reseau(self, reseau_id: str, routeur_id: str) -> None:
+        return None
+
+    def creer_reseau_secondaire(self, projet_id: str | None, nom: str, cidr: str) -> dict[str, Any]:
+        """Réseau interne supplémentaire au sein d'un projet déjà existant (pas de routeur)."""
+        ipaddress.ip_network(cidr)
+        return {"reseau_id": f"net-{nouvel_id()[:8]}", "sous_reseau_id": f"sub-{nouvel_id()[:8]}"}
+
+    def supprimer_reseau_secondaire(self, reseau_id: str) -> None:
+        return None
+
+    def creer_ip_flottante(self, projet_id: str | None) -> dict[str, Any]:
+        return {"id": f"fip-{nouvel_id()[:8]}", "adresse": None}
+
+    def supprimer_ip_flottante(self, ip_id: str) -> None:
+        return None
+
     def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         return {"id": f"ac-{nouvel_id()[:8]}", "secret": jeton_opaque(24)}
 
@@ -60,13 +77,16 @@ class IdentiteOpenStack(IdentiteSimule):
         c.set_compute_quotas(projet_id, cores=vcpu, ram=ram_go * 1024, instances=max(10, vcpu))
         c.set_volume_quotas(projet_id, gigabytes=int(stockage_to * 1024), volumes=max(20, vcpu * 2))
 
+    def _reseau_externe(self, c) -> Any:  # type: ignore[no-untyped-def]
+        return next((n for n in c.network.networks(is_router_external=True)), None)
+
     def creer_reseau(self, projet_id: str, nom: str, cidr: str) -> dict[str, Any]:
         c = self._conn()
         net = c.network.create_network(name=nom, project_id=projet_id)
         sub = c.network.create_subnet(
             name=f"{nom}-sub", network_id=net.id, ip_version=4, cidr=cidr, project_id=projet_id
         )
-        ext = next((n for n in c.network.networks(is_router_external=True)), None)
+        ext = self._reseau_externe(c)
         rtr = c.network.create_router(
             name=f"{nom}-rtr",
             project_id=projet_id,
@@ -74,6 +94,45 @@ class IdentiteOpenStack(IdentiteSimule):
         )
         c.network.add_interface_to_router(rtr, subnet_id=sub.id)
         return {"reseau_id": net.id, "sous_reseau_id": sub.id, "routeur_id": rtr.id}
+
+    def supprimer_reseau(self, reseau_id: str, routeur_id: str) -> None:
+        c = self._conn()
+        rtr = c.network.find_router(routeur_id, ignore_missing=True)
+        if rtr is not None:
+            for port in c.network.ports(device_id=rtr.id):
+                if port.device_owner and "router_interface" in port.device_owner:
+                    c.network.remove_interface_from_router(
+                        rtr, subnet_id=port.fixed_ips[0]["subnet_id"]
+                    )
+            c.network.delete_router(rtr, ignore_missing=True)
+        c.network.delete_network(reseau_id, ignore_missing=True)
+
+    def creer_reseau_secondaire(self, projet_id: str | None, nom: str, cidr: str) -> dict[str, Any]:
+        """Réseau interne supplémentaire au sein d'un projet déjà existant : network + subnet
+        seulement, pas de routeur (ce n'est pas une nouvelle sortie externe, juste un réseau
+        privé de plus dans un projet qui en a déjà un via `creer_reseau`)."""
+        c = self._conn()
+        net = c.network.create_network(name=nom, project_id=projet_id)
+        sub = c.network.create_subnet(
+            name=f"{nom}-sub", network_id=net.id, ip_version=4, cidr=cidr, project_id=projet_id
+        )
+        return {"reseau_id": net.id, "sous_reseau_id": sub.id}
+
+    def supprimer_reseau_secondaire(self, reseau_id: str) -> None:
+        self._conn().network.delete_network(reseau_id, ignore_missing=True)
+
+    def creer_ip_flottante(self, projet_id: str | None) -> dict[str, Any]:
+        c = self._conn()
+        ext = self._reseau_externe(c)
+        if ext is None:
+            from synelia_kernel import erreurs
+
+            raise erreurs.amont_indisponible("réseau externe")
+        fip = c.network.create_ip(floating_network_id=ext.id, project_id=projet_id)
+        return {"id": fip.id, "adresse": fip.floating_ip_address}
+
+    def supprimer_ip_flottante(self, ip_id: str) -> None:
+        self._conn().network.delete_ip(ip_id, ignore_missing=True)
 
     def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         """Un utilisateur de service par projet (jamais d'humain dans Keystone), rôle `member`,

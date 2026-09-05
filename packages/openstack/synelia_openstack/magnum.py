@@ -39,15 +39,29 @@ class MagnumOpenStack(MagnumSimule):
 
         return connexion()
 
+    def _modele_tpl(self, c) -> str:
+        """Un seul modèle public existe sur ce lab (`k8s-capi`) ; on prend le premier."""
+        tpl = next(iter(c.container_infra.cluster_templates()), None)
+        if tpl is None:
+            raise RuntimeError("Aucun modèle de cluster Magnum disponible.")
+        return tpl.id
+
     def creer_cluster(self, **kw: Any) -> dict[str, Any]:
         c = self._c()
-        cl = c.container_infra.create_cluster(
-            name=kw["nom"],
-            cluster_template=kw.get("modele_tpl"),
-            keypair=kw.get("cle_ssh"),
-            master_count=kw.get("master_count", 1),
-            node_count=sum(p.get("nodes", 0) for p in kw.get("pools", [])),
-        )
+        attrs: dict[str, Any] = {
+            "name": kw["nom"],
+            "cluster_template_id": kw.get("modele_tpl") or self._modele_tpl(c),
+            "master_count": kw.get("master_count", 1),
+            "node_count": max(1, sum(p.get("nodes", 0) for p in kw.get("pools", []))),
+            "create_timeout": 60,
+        }
+        # Le modèle public fixe un réseau par défaut (`demo-net`) : on le remplace par le
+        # réseau réel de l'Espace Cloud cible, sinon le cluster atterrit sur le mauvais réseau.
+        if kw.get("reseau_id"):
+            attrs["fixed_network"] = kw["reseau_id"]
+        if kw.get("cle_ssh"):
+            attrs["keypair"] = kw["cle_ssh"]
+        cl = c.container_infra.create_cluster(**attrs)
         return {"id": cl.id, "statut": cl.status}
 
     def creer_pool(self, cluster_id: str, **kw: Any) -> None:
