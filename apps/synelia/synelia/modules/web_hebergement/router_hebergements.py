@@ -76,7 +76,7 @@ async def creer_hebergement(
         etapes=[
             {"nom": "Réserver les quotas du palier", "dureeS": 4},
             {"nom": "Créer le serveur d'hébergement (OpenStack)", "dureeS": 40},
-            {"nom": "Allouer et associer l'IP flottante publique", "dureeS": 10},
+            {"nom": "Router le domaine sur le load balancer partagé (Octavia)", "dureeS": 10},
             {"nom": "Provisionner le serveur de bases", "dureeS": 20},
             {"nom": "Activer la surveillance", "dureeS": 6},
         ],

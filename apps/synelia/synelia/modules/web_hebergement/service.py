@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pathlib
 from typing import Any
 
 from synelia_contract import modeles as m
@@ -9,7 +8,7 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 from synelia_openstack import fournisseur
 from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
-from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
+from synelia_openstack.network import NetworkOpenStack, NetworkSimule
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -89,11 +88,28 @@ def amont() -> ComputeSimule:
     return fournisseur(ComputeSimule, ComputeOpenStack)
 
 
-def amont_identite() -> IdentiteSimule:
-    """Keystone/Neutron scopé projet — même amont que `espaces.service.amont()` — pour
-    l'IP flottante publique dont chaque VM d'hébergement a besoin (dev01 ne peut atteindre
-    que le réseau externe du lab, pas les réseaux privés des Espaces)."""
-    return fournisseur(IdentiteSimule, IdentiteOpenStack)
+def amont_network() -> NetworkSimule:
+    """Neutron/Octavia — gestion du load balancer partagé de la zone VPS (pools, membres,
+    règles L7 par hébergement)."""
+    return fournisseur(NetworkSimule, NetworkOpenStack)
+
+
+async def zone_vps_secrets(ctx: Contexte) -> dict[str, Any]:
+    """Secrets de la zone VPS partagée : un unique Espace Cloud admin (réseau privé + load
+    balancer Octavia public), configuré une fois (bootstrap manuel, voir docs/runbooks) et
+    référencé par `SYNELIA_VPS_ZONE_ESPACE_ID`. Toutes les VM d'hébergement sont créées sur
+    ce même réseau et projet OpenStack (jamais celui de l'organisation cliente) — seul le
+    load balancer partagé les expose, chacune isolée par son `Host()` Traefik et sa policy
+    L7 dédiée ; `SYNELIA_VPS_ZONE_ORG_ID` permet de lire ces secrets depuis le contexte de
+    n'importe quelle organisation cliente (l'Espace appartient à l'organisation admin)."""
+    from synelia_kernel.config import reglages
+
+    from synelia.modules.espaces.service import depot as depot_espaces
+
+    r = reglages()
+    if not r.vps_zone_espace_id:
+        return {}
+    return await depot_espaces.secrets(ctx, r.vps_zone_espace_id, org_id=r.vps_zone_org_id)
 
 
 # Le lab ne possède aujourd'hui que deux gabarits Nova réels — taillés pour Kubernetes,
@@ -201,73 +217,8 @@ networks:
     )
 
 
-async def reseau_organisation(ctx: Contexte, site: str) -> dict[str, str]:
-    """Réseau/identifiants OpenStack à utiliser pour le serveur d'hébergement.
-
-    `Hebergement` n'a pas de notion d'Espace Cloud dans le contrat (seulement `orgId`) :
-    on rattache la VM au réseau du premier Espace Cloud actif de l'organisation sur ce
-    site (à défaut, n'importe quel site). Sans Espace Cloud, on retombe sur l'allocation
-    réseau automatique de Nova (identifiants amont par défaut)."""
-    from synelia.modules.espaces.service import depot as depot_espaces
-
-    espaces = await depot_espaces.tous(
-        ctx, filtre=lambda e: e.site == site and e.statut == "active"
-    )
-    if not espaces:
-        espaces = await depot_espaces.tous(ctx, filtre=lambda e: e.statut == "active")
-    if not espaces:
-        return {}
-    return await depot_espaces.secrets(ctx, espaces[0].id)
-
-
 def ip_privee(hebergement_id: str) -> str:
     return f"10.{hash(hebergement_id) % 250}.0.{hash('web') % 250 + 2}"
-
-
-def ip_publique(hebergement_id: str) -> str:
-    """Repli plausible-mais-stable quand l'amont est simulé (pas de vraie IP flottante) —
-    même convention que `vms.service.ip_publique`."""
-    return f"196.202.{hash(hebergement_id) % 250}.{hash('web') % 250 + 2}"
-
-
-_APACHE_CONF_DIR = pathlib.Path("/var/lib/synelia-vhosts-staging")
-
-
-def _chemin_vhost(sous_domaine: str) -> pathlib.Path:
-    return _APACHE_CONF_DIR / f"hebergement-{sous_domaine}.conf"
-
-
-def ecrire_vhost_apache(sous_domaine: str, ip_cible: str, port: int = 80) -> None:
-    """Dépose un vhost Apache dans la zone intermédiaire `/var/lib/synelia-vhosts-staging`
-    (montée dans ce conteneur) qui reverse-proxy `sous_domaine` vers la VM d'hébergement
-    (IP flottante). `/etc/httpd/conf.d` appartient à root sur l'hôte dev01 — c'est le service
-    hôte `apache-vhosts-sync` (docs/runbooks) qui recopie ce dossier vers conf.d et relance
-    Apache (`kill -USR1`, `systemctl reload` échoue sur cet hôte). Best-effort : ce module peut
-    tourner ailleurs que sur dev01 (tests, autre environnement) — une erreur d'écriture ne doit
-    jamais faire échouer la création/suppression de l'hébergement."""
-    conf = (
-        f"<VirtualHost *:80>\n"
-        f"    ServerName {sous_domaine}\n"
-        f"    ProxyPreserveHost On\n"
-        f"    ProxyPass / http://{ip_cible}:{port}/ connectiontimeout=5 timeout=30\n"
-        f"    ProxyPassReverse / http://{ip_cible}:{port}/\n"
-        f"</VirtualHost>\n"
-    )
-    try:
-        if not _APACHE_CONF_DIR.is_dir():
-            return
-        _chemin_vhost(sous_domaine).write_text(conf)
-    except OSError:
-        pass
-
-
-def supprimer_vhost_apache(sous_domaine: str) -> None:
-    try:
-        chemin = _chemin_vhost(sous_domaine)
-        if chemin.exists():
-            chemin.unlink()
-    except OSError:
-        pass
 
 
 async def serveur_id(ctx: Contexte, hebergement_id: str, travail: Travail | None = None) -> str:
@@ -442,46 +393,65 @@ class ExecuteurHebergementCreer(Executeur):
     async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
         if index == 1:
             h = await depot.obtenir(ctx, travail.cible_id or "")
-            secrets_reseau = await reseau_organisation(ctx, h.serveur.site)
+            zone = await zone_vps_secrets(ctx)
             srv = amont().creer_serveur(
                 nom=h.serveur.nom,
                 image_id=image_ubuntu(),
                 gabarit_id=gabarit_pour_palier(h.palier),
-                reseau_id=secrets_reseau.get("reseau_id"),
-                identifiants=secrets_reseau,
+                reseau_id=zone.get("reseau_id"),
+                identifiants=zone,
                 org_id=ctx.org_id_ou_none,
                 espace_id=None,
                 cloud_init=construire_cloud_init(h.domaineProvisoire, h.php.versionDefaut),
             )
             c = dict(travail.contexte)
             c["serveur_id"] = srv["id"]
-            c["projet_id"] = secrets_reseau.get("projet_id")
             await depot.definir_secrets(ctx, h.id, {"serveur_id": srv["id"]})
             c["ip_privee"] = srv.get("ip_privee") or ip_privee(h.id)
             travail.contexte = c
             return f"Serveur amont {srv['id']} créé"
         if index == 2:
-            # IP flottante publique : dev01 (Apache) ne peut atteindre que le réseau externe
-            # du lab, jamais les réseaux privés des Espaces — chaque VM d'hébergement doit
-            # donc être joignable par une vraie IP flottante, pas seulement l'IP privée.
+            # Routage L7 sur le load balancer partagé de la zone VPS (un pool + une policy
+            # `Host()` par hébergement) au lieu d'une IP flottante dédiée : toutes les VM
+            # d'hébergement partagent le même réseau et le même point d'entrée public.
             hid = travail.cible_id or ""
+            h = await depot.obtenir(ctx, hid)
             c = dict(travail.contexte)
-            fip = amont_identite().creer_ip_flottante(c.get("projet_id"))
-            # Tracé en secrets/contexte avant l'association : une IP flottante déjà allouée
-            # mais pas encore associée doit rester libérable par `compenser`.
-            await depot.definir_secrets(ctx, hid, {"ip_flottante_id": fip["id"]})
-            c["ip_flottante_id"] = fip["id"]
+            zone = await zone_vps_secrets(ctx)
+            lb_id = zone.get("lb_id")
+            n = amont_network()
+            pool = n.creer_pool(loadbalancer_id=lb_id, nom=f"pool-{hid[:8]}")
+            await depot.definir_secrets(ctx, hid, {"lb_pool_id": pool["id"]})
+            c["lb_pool_id"] = pool["id"]
+            # `travail.contexte` est réassigné après chaque effet de bord (pas seulement à la
+            # fin) : si l'étape échoue en cours de route, `compenser` doit voir exactement ce
+            # qui a déjà été créé côté amont pour pouvoir le défaire.
             travail.contexte = c
-            adresse = amont_identite().associer_ip_flottante(fip["id"], c["serveur_id"])
-            adresse = adresse or fip.get("adresse") or ip_publique(hid)
-            c["ip_publique"] = adresse
+            membre = n.ajouter_membre(
+                pool_id=pool["id"],
+                adresse=c["ip_privee"],
+                port=80,
+                subnet_id=zone.get("sous_reseau_id"),
+                loadbalancer_id=lb_id,
+            )
+            await depot.definir_secrets(ctx, hid, {"lb_membre_id": membre["id"]})
+            c["lb_membre_id"] = membre["id"]
             travail.contexte = c
-            return f"IP flottante {adresse} associée"
+            regle = n.ajouter_regle_hote(
+                listener_id=zone.get("lb_listener_id"),
+                loadbalancer_id=lb_id,
+                pool_id=pool["id"],
+                hote=h.domaineProvisoire,
+            )
+            await depot.definir_secrets(ctx, hid, {"lb_policy_id": regle["policy_id"]})
+            c["lb_policy_id"] = regle["policy_id"]
+            travail.contexte = c
+            return f"Domaine {h.domaineProvisoire} routé sur le load balancer partagé"
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         h = await depot.obtenir(ctx, travail.cible_id or "")
-        ip = travail.contexte.get("ip_publique") or ip_publique(h.id)
+        ip = travail.contexte.get("ip_privee") or ip_privee(h.id)
         serveur = h.serveur.model_copy(update={"ip": ip, "statut": "en_ligne", "chargeCpuPct": 12.0})
         await depot.modifier(ctx, h.id, {"serveur": serveur.model_dump(mode="json")})
         base = await depot_bases.creer(
@@ -489,30 +459,43 @@ class ExecuteurHebergementCreer(Executeur):
         )
         travail.contexte = {**travail.contexte, "serveur_bases_id": base.id}
         await depot.definir_statut(ctx, travail.cible_id or "", "en_ligne")
-        ecrire_vhost_apache(h.domaineProvisoire, ip)
 
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
-        fip_id = travail.contexte.get("ip_flottante_id")
-        if fip_id:
-            amont_identite().supprimer_ip_flottante(fip_id)
+        n = amont_network()
+        lb_id = (await zone_vps_secrets(ctx)).get("lb_id")
+        policy_id = travail.contexte.get("lb_policy_id")
+        if policy_id:
+            n.supprimer_regle_hote(policy_id, loadbalancer_id=lb_id)
+        pool_id = travail.contexte.get("lb_pool_id")
+        membre_id = travail.contexte.get("lb_membre_id")
+        if pool_id and membre_id:
+            n.supprimer_membre(pool_id, membre_id, loadbalancer_id=lb_id)
+        if pool_id:
+            n.supprimer_pool(pool_id, loadbalancer_id=lb_id)
         await depot.definir_statut(ctx, travail.cible_id or "", "suspendu")
 
 
 @executeur("hebergement.supprimer")
 class ExecuteurHebergementSupprimer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
-        h = await depot.obtenir(ctx, travail.cible_id or "")
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
             amont().supprimer_serveur(sid)
         secrets = await depot.secrets(ctx, travail.cible_id or "")
-        fip_id = secrets.get("ip_flottante_id")
-        if fip_id:
-            amont_identite().supprimer_ip_flottante(fip_id)
-        supprimer_vhost_apache(h.domaineProvisoire)
+        n = amont_network()
+        lb_id = (await zone_vps_secrets(ctx)).get("lb_id")
+        policy_id = secrets.get("lb_policy_id")
+        if policy_id:
+            n.supprimer_regle_hote(policy_id, loadbalancer_id=lb_id)
+        pool_id = secrets.get("lb_pool_id")
+        membre_id = secrets.get("lb_membre_id")
+        if pool_id and membre_id:
+            n.supprimer_membre(pool_id, membre_id, loadbalancer_id=lb_id)
+        if pool_id:
+            n.supprimer_pool(pool_id, loadbalancer_id=lb_id)
         await depot_enfants(ctx, travail.cible_id or "")
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 

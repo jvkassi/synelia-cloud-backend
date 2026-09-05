@@ -56,6 +56,13 @@ class Reglages(BaseSettings):
     os_endpoint_overrides: dict[str, str] = Field(default_factory=dict)
     simulation_duree_etape_ms: int = 0
 
+    # Zone VPS partagée (web_hebergement) : un unique Espace Cloud admin, réseau + load
+    # balancer Octavia partagés par toutes les VM d'hébergement (routage L7 par Host()) —
+    # `vps_zone_org_id` est nécessaire pour lire les secrets de cet Espace depuis un
+    # contexte d'une autre organisation (celle qui commande l'hébergement).
+    vps_zone_espace_id: str | None = None
+    vps_zone_org_id: str | None = None
+
     # Amorçage
     seed_admin_email: str | None = "admin@synelia.cloud"
     seed_admin_mot_de_passe: str | None = "Synelia!2026"

@@ -34,6 +34,9 @@ services:
       SYNELIA_OS_APPLICATION_CREDENTIAL_ID: ${SYNELIA_OS_APPLICATION_CREDENTIAL_ID:?}
       SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET: ${SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET:?}
       SYNELIA_OS_REGION: RegionOne
+      # Zone VPS partagée (web_hebergement) : bootstrap manuel one-shot, voir docs/runbooks.
+      SYNELIA_VPS_ZONE_ESPACE_ID: 01a072e1-e303-76c2-bb8a-c3142f1e8f01
+      SYNELIA_VPS_ZONE_ORG_ID: 01a06d82-5e1a-72d3-913b-f3d2c3f13081
       SYNELIA_TRAVAUX_EN_LIGNE: "false"
       SYNELIA_SEED_DEMO: "false"
       SYNELIA_LITELLM_URL: http://litellm:4000
@@ -46,11 +49,6 @@ services:
       SYNELIA_ZIMBRA_ADMIN_USER: admin@zimbra.synelia.internal
       SYNELIA_ZIMBRA_ADMIN_PASSWORD: ${ZIMBRA_ADMIN_PASSWORD:?}
     ports: ["127.0.0.1:4010:4000"]
-    volumes:
-      # web_hebergement écrit ici les vhosts Apache des VPS (bac à sable *.cloud.dev01.ovh.smile.ci) ;
-      # /etc/httpd/conf.d appartient à root sur l'hôte, donc on passe par une zone intermédiaire
-      # que synchronise apache-vhosts-sync.path/.service côté hôte (voir docs/runbooks).
-      - /var/lib/synelia-cloud/apache-vhosts-staging:/var/lib/synelia-vhosts-staging
     restart: unless-stopped
 
   minio:
