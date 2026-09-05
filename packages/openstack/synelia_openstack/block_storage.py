@@ -52,6 +52,11 @@ class BlockStorageSimule:
     ) -> dict[str, Any]:
         return {"id": f"vol-{nouvel_id()[:8]}", "statut": "available"}
 
+    def statut_snapshot(
+        self, snapshot_id: str, identifiants: dict[str, Any] | None = None
+    ) -> str:
+        return "available"
+
 
 class BlockStorageOpenStack(BlockStorageSimule):
     def _c(self):  # type: ignore[no-untyped-def]
@@ -133,3 +138,8 @@ class BlockStorageOpenStack(BlockStorageSimule):
         v = c.block_storage.create_volume(snapshot_id=snapshot_id, name=nom)
         v = c.block_storage.wait_for_status(v, "available", wait=600)
         return {"id": v.id, "statut": v.status, "taille_go": v.size}
+
+    def statut_snapshot(
+        self, snapshot_id: str, identifiants: dict[str, Any] | None = None
+    ) -> str:
+        return str(self._connexion(identifiants).block_storage.get_snapshot(snapshot_id).status)

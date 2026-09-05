@@ -38,11 +38,25 @@ def point(nombre: str = "1.2 Go", contenu: list[str] | None = None) -> m.Executi
 @executeur("web.backup.run")
 class ExecuteurSauvegardeRun(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        from synelia.modules.web_hebergement.service import amont, serveur_id
+
         s = await depot.obtenir(ctx, travail.cible_id or "")
-        executions = [*s.executions, point()]
+        image_id = None
+        try:
+            sid = await serveur_id(ctx, s.hebergementId)
+            if sid and sid != s.hebergementId:
+                image_id = amont().instantane(sid, f"backup-{s.nomServi}-{nouvel_id()[:8]}")
+        except Exception:  # noqa: BLE001 — hébergement de démo sans serveur réel, ou amont absent
+            image_id = None
+        p = point()
+        if image_id:
+            p = p.model_copy(update={"message": f"Image Glance {image_id}"})
+        executions = [*s.executions, p]
         await depot.modifier(
             ctx, s.id, {"executions": [e.model_dump(mode="json") for e in executions]}
         )
+        if image_id:
+            await depot.definir_secrets(ctx, s.id, {f"image_{p.id}": image_id})
 
 
 @executeur("web.backup.testrestauration")
