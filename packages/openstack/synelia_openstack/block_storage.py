@@ -113,7 +113,24 @@ class BlockStorageOpenStack(BlockStorageSimule):
         self._connexion(identifiants).block_storage.extend_volume(volume_id, taille_go)
 
     def supprimer(self, volume_id: str, identifiants: dict[str, Any] | None = None) -> None:
-        self._connexion(identifiants).block_storage.delete_volume(volume_id, ignore_missing=True)
+        # Même raison que `ComputeOpenStack.supprimer_serveur` : `ignore_missing=True` seul ne
+        # confirme que l'acceptation du DELETE par Cinder, pas la disparition réelle du volume
+        # (ex. déjà en `error`/`error_deleting`) — sans vérification, l'appelant marquerait la
+        # suppression « ok » alors que le volume (et sa facturation) survit.
+        from synelia_openstack.erreurs import traduire
+
+        c = self._connexion(identifiants)
+        try:
+            c.block_storage.delete_volume(volume_id, ignore_missing=True)
+            c.block_storage.wait_for_delete(c.block_storage.get_volume(volume_id), wait=120)
+        except Exception as exc:
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            if type(exc).__name__ == "ResourceNotFound":
+                return  # déjà absent avant même la vérification : succès
+            raise traduire(exc, "Volume") from None
 
     def creer_snapshot(
         self, volume_id: str, nom: str, identifiants: dict[str, Any] | None = None
@@ -126,9 +143,20 @@ class BlockStorageOpenStack(BlockStorageSimule):
     def supprimer_snapshot(
         self, snapshot_id: str, identifiants: dict[str, Any] | None = None
     ) -> None:
-        self._connexion(identifiants).block_storage.delete_snapshot(
-            snapshot_id, ignore_missing=True
-        )
+        from synelia_openstack.erreurs import traduire
+
+        c = self._connexion(identifiants)
+        try:
+            c.block_storage.delete_snapshot(snapshot_id, ignore_missing=True)
+            c.block_storage.wait_for_delete(c.block_storage.get_snapshot(snapshot_id), wait=120)
+        except Exception as exc:
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            if type(exc).__name__ == "ResourceNotFound":
+                return  # déjà absent avant même la vérification : succès
+            raise traduire(exc, "Instantané de volume") from None
 
     def restaurer_snapshot(
         self, snapshot_id: str, nom: str, identifiants: dict[str, Any] | None = None

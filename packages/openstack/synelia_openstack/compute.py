@@ -244,7 +244,28 @@ class ComputeOpenStack(ComputeSimule):
 
             params["user_data"] = base64.b64encode(kw["cloud_init"].encode()).decode()
         s = c.compute.create_server(**params)
-        s = c.compute.wait_for_server(s, wait=600)
+        try:
+            s = c.compute.wait_for_server(s, wait=600)
+        except Exception as exc:
+            from synelia_openstack.erreurs import traduire
+
+            # Nova a accepté la création mais le build a échoué avant que l'appelant ait pu
+            # persister `serveur_id` (ex. `NoValidHost` : mis en ERROR immédiatement, jamais
+            # schedulé) — sans nettoyage ici, cette instance reste orpheline pour toujours,
+            # introuvable par la suite puisqu'aucun identifiant n'a été enregistré côté
+            # application pour la retrouver. On la supprime nous-mêmes, avec la même
+            # connexion que celle qui l'a créée (le bon projet OpenStack, ex. Espace Cloud
+            # scellé par application credential), avant de relayer l'erreur d'origine.
+            try:
+                c.compute.delete_server(s.id, ignore_missing=True)
+                c.compute.wait_for_delete(c.compute.get_server(s.id), wait=120)
+            except Exception:  # noqa: BLE001, S110 — best effort, l'erreur d'origine prime
+                pass
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            raise traduire(exc, "Machine virtuelle") from None
         ip = next((a["addr"] for nets in (s.addresses or {}).values() for a in nets if a.get("version") == 4), None)
         return {"id": s.id, "statut": s.status, "ip_privee": ip}
 
@@ -279,7 +300,26 @@ class ComputeOpenStack(ComputeSimule):
             raise traduire(exc, "Machine virtuelle") from None
 
     def supprimer_serveur(self, serveur_id: str) -> None:
-        self._c().compute.delete_server(serveur_id, ignore_missing=True)
+        # `delete_server(ignore_missing=True)` seul ne confirme que l'acceptation de la
+        # requête par Nova, pas la disparition réelle de l'instance : un serveur déjà en
+        # ERROR (jamais schedulé, hyperviseur injoignable, etc.) peut accepter le DELETE
+        # sans jamais être réellement supprimé — l'appelant marquerait alors la suppression
+        # « ok » alors que la VM (et sa facturation) survit. On attend donc explicitement
+        # sa disparition avant de rendre la main.
+        from synelia_openstack.erreurs import traduire
+
+        c = self._c()
+        try:
+            c.compute.delete_server(serveur_id, ignore_missing=True)
+            c.compute.wait_for_delete(c.compute.get_server(serveur_id), wait=120)
+        except Exception as exc:
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            if type(exc).__name__ == "ResourceNotFound":
+                return  # déjà absent avant même la vérification : succès
+            raise traduire(exc, "Machine virtuelle") from None
 
     def redimensionner(self, serveur_id: str, gabarit_id: str) -> None:
         c = self._c()
