@@ -2910,6 +2910,7 @@ name = "synelia-openstack"
 version = "0.1.0"
 source = { editable = "packages/openstack" }
 dependencies = [
+    { name = "cryptography" },
     { name = "httpx" },
     { name = "kubernetes" },
     { name = "minio" },
@@ -2919,6 +2920,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", specifier = ">=43" },
     { name = "httpx", specifier = ">=0.28" },
     { name = "kubernetes", specifier = ">=31" },
     { name = "minio", specifier = ">=7.2" },

@@ -231,7 +231,23 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
     try:
         await ex.terminer(ctx, travail)
     except Exception as exc:  # noqa: BLE001
-        log.error("travail.terminaison_echouee", travail=travail.id, erreur=str(exc))
+        # Toutes les étapes affichées (progression UI à durée fixe) ont réussi, mais
+        # `terminer()` est l'endroit où l'effet réel a lieu (ex. appliquer un déploiement K8s,
+        # supprimer un namespace) : une erreur ici ne doit jamais être avalée en un simple log
+        # pendant que le travail se déclare quand même « done » — l'appelant croirait l'opération
+        # effectuée alors qu'elle a échoué. Même traitement que l'échec d'une étape.
+        message = exc.message if isinstance(exc, erreurs.AppError) else str(exc) or type(exc).__name__
+        log.error("travail.terminaison_echouee", travail=travail.id, erreur=message)
+        travail.statut = "failed"
+        travail.erreur = {
+            "message": f"Finalisation « {travail.label} » : {message}",
+            "correlationId": ctx.correlation_id,
+            "suggestion": "Corrigez la cause puis relancez.",
+        }
+        travail.termine_le = maintenant()
+        travail.duree_s = int((travail.termine_le - travail.started_at).total_seconds())
+        await ctx.session.flush()
+        return
     travail.statut = "done"
     travail.erreur = None
     travail.termine_le = maintenant()

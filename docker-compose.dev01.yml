@@ -34,6 +34,14 @@ services:
       SYNELIA_OS_APPLICATION_CREDENTIAL_ID: ${SYNELIA_OS_APPLICATION_CREDENTIAL_ID:?}
       SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET: ${SYNELIA_OS_APPLICATION_CREDENTIAL_SECRET:?}
       SYNELIA_OS_REGION: RegionOne
+      # Cluster Magnum désigné pour le PaaS (module applications/k8s_workload) : sans cette
+      # variable, K8sWorkloadReel reste indisponible et le PaaS retombe en simulation (choix
+      # délibéré, voir packages/openstack/synelia_openstack/k8s_workload.py).
+      SYNELIA_PAAS_CLUSTER_ID: ${SYNELIA_PAAS_CLUSTER_ID:?}
+      # Le vhost public de Magnum répond vite sur /clusters mais dépasse 60s (504) sur
+      # /certificates (RPC conductor + Barbican) une fois traversé depuis dev01 — l'endpoint
+      # interne répond en ~1s pour cette même route. Voir k8s_workload.py::_kubeconfig.
+      SYNELIA_OS_ENDPOINT_OVERRIDES: '{"container_infra": "http://192.168.26.234:9511/v1"}'
       # Zone VPS partagée (web_hebergement) : bootstrap manuel one-shot, voir docs/runbooks.
       SYNELIA_VPS_ZONE_ESPACE_ID: 01a072e1-e303-76c2-bb8a-c3142f1e8f01
       SYNELIA_VPS_ZONE_ORG_ID: 01a06d82-5e1a-72d3-913b-f3d2c3f13081
