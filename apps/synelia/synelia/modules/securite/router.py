@@ -248,8 +248,6 @@ async def modifier_politiques_securite(
     if actuelles.get("session", {}).get("dureeMaxMin") != nouvelles.get("session", {}).get(
         "dureeMaxMin"
     ):
-        from synelia_db.modeles import SessionAuth
-
         lignes = (
             (
                 await ctx.session.execute(
