@@ -38,14 +38,18 @@ _PROMQL: dict[str, str] = {
         '/ avg(node_filesystem_size_bytes{fstype!="tmpfs"})))'
     ),
     "reseau_entrant": 'sum(rate(node_network_receive_bytes_total{device!="lo"}[5m])) * 8 / 1e6',
-    "rps": 'sum(rate(http_server_request_duration_seconds_count{job="synelia-api"}[5m]))',
+    # Noms exacts vérifiés en direct sur ce déploiement (`opentelemetry-instrumentation-fastapi`
+    # 0.65b0, sémantique HTTP historique par défaut — pas la nouvelle sémantique stable, qui
+    # nommerait ces séries `http_server_request_duration_seconds*`) : ne pas deviner, revérifier
+    # `curl .../api/v1/label/__name__/values` après toute mise à jour de cette dépendance.
+    "rps": 'sum(rate(http_server_duration_milliseconds_count{job="synelia-api"}[5m]))',
     "latence_p95": (
         "histogram_quantile(0.95, sum(rate("
-        'http_server_request_duration_seconds_bucket{job="synelia-api"}[5m])) by (le)) * 1000'
+        'http_server_duration_milliseconds_bucket{job="synelia-api"}[5m])) by (le))'
     ),
     "erreurs_5xx": (
-        'sum(rate(http_server_request_duration_seconds_count{job="synelia-api",'
-        'http_response_status_code=~"5.."}[5m])) * 60'
+        'sum(rate(http_server_duration_milliseconds_count{job="synelia-api",'
+        'http_status_code=~"5.."}[5m])) * 60'
     ),
 }
 
