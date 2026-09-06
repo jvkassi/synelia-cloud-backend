@@ -22,6 +22,7 @@ from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
 from synelia.modules.web_hebergement.service import (
+    DROP_IN_CONTAINERD,
     amont_network,
     gabarit_pour_palier,
     image_ubuntu,
@@ -137,7 +138,9 @@ networks:
         "    content: |\n" + indenter(compose, 6) + "\n"
         f"  - path: {_RACINE_DOCKER}/traefik-dynamic/drive.yml\n"
         "    content: |\n" + indenter(routage, 6) + "\n"
+        f"{DROP_IN_CONTAINERD}"
         "runcmd:\n"
+        "  - systemctl daemon-reload\n"
         "  - systemctl enable --now docker\n"
         f"  - [sh, -c, 'cd {_RACINE_DOCKER} && docker compose up -d']\n"
     )

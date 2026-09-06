@@ -210,6 +210,22 @@ def image_ubuntu() -> str:
 
 _RACINE_DOCKER = "/srv/synelia"
 
+# `containerd` (paquet `docker.io` d'Ubuntu 24.04) régénère parfois son config.toml en
+# `version = 4` — via une mise à jour de sécurité automatique après le premier démarrage —
+# alors que le binaire installé ne sait lire qu'une config jusqu'à la version 3 : constaté en
+# direct sur deux VM d'hébergement réelles, `containerd.service` boucle en échec au boot
+# suivant (`expected containerd config version equal to or less than 3, got 4`), et avec lui
+# `docker.service` (dépend de son socket). Un `ExecStartPre` corrige la valeur avant chaque
+# démarrage de containerd, pas seulement à la création — c'est justement un redémarrage
+# ultérieur (reboot du lab), pas la création elle-même, qui déclenche le bug.
+DROP_IN_CONTAINERD = (
+    "  - path: /etc/systemd/system/containerd.service.d/synelia-fix-version.conf\n"
+    "    content: |\n"
+    "      [Service]\n"
+    "      ExecStartPre=/bin/sh -c \"sed -i 's/^version = 4/version = 3/' "
+    "/etc/containerd/config.toml || true\"\n"
+)
+
 
 def indenter(bloc: str, colonnes: int) -> str:
     """Réutilisé par `web_drive.service` (même recette cloud-init) plutôt que dupliqué."""
@@ -296,7 +312,9 @@ networks:
         "    content: |\n" + indenter(routage, 6) + "\n"
         f"  - path: {_RACINE_DOCKER}/www/index.php\n"
         "    content: |\n" + indenter(index_php, 6) + "\n"
+        f"{DROP_IN_CONTAINERD}"
         "runcmd:\n"
+        "  - systemctl daemon-reload\n"
         "  - systemctl enable --now docker\n"
         f"  - [sh, -c, 'cd {_RACINE_DOCKER} && docker compose up -d']\n"
     )

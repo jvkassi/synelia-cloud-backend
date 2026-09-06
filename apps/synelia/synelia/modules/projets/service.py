@@ -165,7 +165,9 @@ networks:
         "write_files:\n"
         f"  - path: {RACINE_DOCKER_VM_PROJET}/docker-compose.yml\n"
         "    content: |\n" + web_heb.indenter(compose, 6) + "\n"
+        f"{web_heb.DROP_IN_CONTAINERD}"
         "runcmd:\n"
+        "  - systemctl daemon-reload\n"
         "  - systemctl enable --now docker\n"
         f"  - [sh, -c, 'cd {RACINE_DOCKER_VM_PROJET} && docker compose up -d']\n"
     )
