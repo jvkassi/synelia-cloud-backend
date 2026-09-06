@@ -14525,6 +14525,1298 @@
         }
       }
     },
+    "/ia/cles": {
+      "get": {
+        "tags": [
+          "IA — Clés"
+        ],
+        "operationId": "listerClesIA",
+        "summary": "Lister les clés IA",
+        "x-rbac": "ia.key.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/ParPage"
+          },
+          {
+            "$ref": "#/components/parameters/Tri"
+          },
+          {
+            "$ref": "#/components/parameters/Ordre"
+          },
+          {
+            "$ref": "#/components/parameters/Recherche"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "donnees": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CleIA"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "donnees",
+                    "pagination"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IA — Clés"
+        ],
+        "operationId": "creerCleIA",
+        "summary": "Créer une clé IA",
+        "x-rbac": "ia.key.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleIACreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleIASecret"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/cles/{cleId}": {
+      "get": {
+        "tags": [
+          "IA — Clés"
+        ],
+        "operationId": "obtenirCleIA",
+        "summary": "Obtenir une clé IA",
+        "x-rbac": "ia.key.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "cleId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la clé IA.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cle-prod"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "IA — Clés"
+        ],
+        "operationId": "modifierCleIA",
+        "summary": "Modifier une clé IA",
+        "x-rbac": "ia.key.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "cleId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la clé IA.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cle-prod"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CleIAModification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleIA"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IA — Clés"
+        ],
+        "operationId": "supprimerCleIA",
+        "summary": "Supprimer une clé IA",
+        "description": "Action destructive : le nom exact de la ressource est exigé en confirmation.",
+        "x-rbac": "ia.key.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Confirmation"
+          },
+          {
+            "name": "cleId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la clé IA.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cle-prod"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Supprimé. Aucun corps."
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/connaissances": {
+      "get": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "listerBasesConnaissance",
+        "summary": "Lister les bases de connaissances",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/ParPage"
+          },
+          {
+            "$ref": "#/components/parameters/Tri"
+          },
+          {
+            "$ref": "#/components/parameters/Ordre"
+          },
+          {
+            "$ref": "#/components/parameters/Recherche"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "donnees": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/BaseConnaissance"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "donnees",
+                    "pagination"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "creerBaseConnaissance",
+        "summary": "Créer une base de connaissances",
+        "x-rbac": "ia.knowledge.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaseConnaissanceCreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseConnaissance"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/connaissances/{connaissanceId}": {
+      "get": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "obtenirBaseConnaissance",
+        "summary": "Obtenir une base de connaissances",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "connaissanceId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la base de connaissances.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kb-rh"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseConnaissance"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "modifierBaseConnaissance",
+        "summary": "Modifier une base de connaissances",
+        "x-rbac": "ia.knowledge.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "connaissanceId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la base de connaissances.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kb-rh"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BaseConnaissanceModification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BaseConnaissance"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "supprimerBaseConnaissance",
+        "summary": "Supprimer une base de connaissances",
+        "description": "Action destructive : le nom exact de la ressource est exigé en confirmation.",
+        "x-rbac": "ia.knowledge.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Confirmation"
+          },
+          {
+            "name": "connaissanceId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la base de connaissances.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kb-rh"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Supprimé. Aucun corps."
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/connaissances/{connaissanceId}/documents": {
+      "post": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "ingererDocumentConnaissance",
+        "summary": "Ingérer un document dans une base de connaissances",
+        "description": "Extraction réelle du texte (Docling), découpage en fragments, vectorisation (BGE-M3 via Infinity) puis indexation (Qdrant) — un travail de provisioning comme toute opération longue. Au moins un de `texte`, `contenuBase64` ou `url` est requis.",
+        "x-rbac": "ia.knowledge.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "connaissanceId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la base de connaissances.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kb-rh"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentConnaissanceCreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepté — travail de provisioning créé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravailProvisioning"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "424": {
+            "$ref": "#/components/responses/Degrade"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/connaissances/{connaissanceId}/rechercher": {
+      "post": {
+        "tags": [
+          "IA — Connaissances"
+        ],
+        "operationId": "rechercherConnaissance",
+        "summary": "Rechercher dans une base de connaissances",
+        "description": "Recherche vectorielle réelle (Qdrant) sur les fragments indexés — la requête est vectorisée avec le même modèle d’embedding que les documents. C’est ce point d’entrée qu’une étape `connaissance` d’un flux d’orchestration appelle ; il ne dépend d’aucun état de flux.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "connaissanceId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la base de connaissances.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "kb-rh"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConnaissanceRechercheRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConnaissanceRechercheResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "424": {
+            "$ref": "#/components/responses/Degrade"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/flux": {
+      "get": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "listerFluxOrchestrations",
+        "summary": "Lister les flux d’orchestration",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/ParPage"
+          },
+          {
+            "$ref": "#/components/parameters/Tri"
+          },
+          {
+            "$ref": "#/components/parameters/Ordre"
+          },
+          {
+            "$ref": "#/components/parameters/Recherche"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "donnees": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/FluxOrchestration"
+                      }
+                    },
+                    "pagination": {
+                      "$ref": "#/components/schemas/Pagination"
+                    }
+                  },
+                  "required": [
+                    "donnees",
+                    "pagination"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "creerFluxOrchestration",
+        "summary": "Créer un flux d’orchestration",
+        "x-rbac": "ia.flow.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FluxOrchestrationCreation"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FluxOrchestration"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/flux/{fluxId}": {
+      "get": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "obtenirFluxOrchestration",
+        "summary": "Obtenir un flux d’orchestration",
+        "x-rbac": "org.dashboard.view",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "fluxId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du flux d’orchestration.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "fx-reclamation"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FluxOrchestration"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "modifierFluxOrchestration",
+        "summary": "Modifier un flux d’orchestration",
+        "x-rbac": "ia.flow.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "fluxId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du flux d’orchestration.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "fx-reclamation"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FluxOrchestrationModification"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FluxOrchestration"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "supprimerFluxOrchestration",
+        "summary": "Supprimer un flux d’orchestration",
+        "description": "Action destructive : le nom exact de la ressource est exigé en confirmation.",
+        "x-rbac": "ia.flow.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Confirmation"
+          },
+          {
+            "name": "fluxId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du flux d’orchestration.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "fx-reclamation"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Supprimé. Aucun corps."
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/flux/{fluxId}/executer": {
+      "post": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "executerFlux",
+        "summary": "Exécuter un flux",
+        "description": "Démarre une exécution réelle du flux — moteur natif Python, pas un simulateur : les étapes `agent` appellent réellement la passerelle LiteLLM, les étapes `connaissance` la recherche documentaire réelle. Asynchrone comme toute opération longue : renvoie un `TravailProvisioning` à interroger via `GET /travaux/{id}`. Une étape `humain` en attente laisse le travail `running` avec un message explicite sur la tâche concernée, à débloquer via `reprendreExecutionFlux`.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "fluxId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du flux d’orchestration.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "fx-reclamation"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FluxExecutionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepté — travail de provisioning créé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravailProvisioning"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "424": {
+            "$ref": "#/components/responses/Degrade"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
+    "/ia/flux/{fluxId}/executions/{travailId}/reprendre": {
+      "post": {
+        "tags": [
+          "IA — Orchestration"
+        ],
+        "operationId": "reprendreExecutionFlux",
+        "summary": "Reprendre un flux en attente d’une validation humaine",
+        "description": "Une étape `humain` a mis le travail en pause : ce point d’entrée transmet la décision et reprend l’exécution à l’étape suivante. Un travail qui n’est pas en attente d’une validation humaine renvoie 409.",
+        "x-rbac": "ia.flow.write",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "fluxId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du flux d’orchestration.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "fx-reclamation"
+          },
+          {
+            "name": "travailId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant du travail — l’exécution du flux.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "trv-01"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FluxRepriseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepté — travail de provisioning créé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravailProvisioning"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "424": {
+            "$ref": "#/components/responses/Degrade"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
     "/ia/modeles": {
       "get": {
         "tags": [
@@ -39851,6 +41143,210 @@
           "souverain"
         ]
       },
+      "BaseConnaissance": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceConnaissance"
+          },
+          "documents": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "fragments": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "modeleEmbedding": {
+            "type": "string"
+          },
+          "dimension": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "modeDecoupage": {
+            "type": "string",
+            "enum": [
+              "general",
+              "parent_enfant",
+              "qr"
+            ],
+            "description": "Le choix se fige à la création. Seul `general` est réellement découpé aujourd’hui."
+          },
+          "methodeIndex": {
+            "type": "string",
+            "enum": [
+              "haute_qualite",
+              "economique"
+            ]
+          },
+          "modeRecherche": {
+            "type": "string",
+            "enum": [
+              "vectorielle",
+              "plein_texte",
+              "hybride"
+            ]
+          },
+          "citations": {
+            "type": "boolean",
+            "description": "Renvoyer le document d’origine avec chaque fragment cité."
+          },
+          "tailleMo": {
+            "type": "number"
+          },
+          "frequence": {
+            "type": "string",
+            "enum": [
+              "manuelle",
+              "quotidienne",
+              "horaire"
+            ]
+          },
+          "derniereIndexation": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "a_jour",
+              "indexation",
+              "erreur",
+              "jamais_indexee"
+            ]
+          },
+          "clesAutorisees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Identifiants de `CleIA` autorisées à interroger cette base."
+          },
+          "erreur": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nom",
+          "espaceId",
+          "source",
+          "documents",
+          "fragments",
+          "modeleEmbedding",
+          "dimension",
+          "modeDecoupage",
+          "methodeIndex",
+          "modeRecherche",
+          "citations",
+          "tailleMo",
+          "frequence",
+          "derniereIndexation",
+          "statut"
+        ]
+      },
+      "BaseConnaissanceCreation": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/SourceConnaissance"
+          },
+          "modeDecoupage": {
+            "type": "string",
+            "enum": [
+              "general",
+              "parent_enfant",
+              "qr"
+            ],
+            "default": "general"
+          },
+          "methodeIndex": {
+            "type": "string",
+            "enum": [
+              "haute_qualite",
+              "economique"
+            ],
+            "default": "haute_qualite"
+          },
+          "modeRecherche": {
+            "type": "string",
+            "enum": [
+              "vectorielle",
+              "plein_texte",
+              "hybride"
+            ],
+            "default": "vectorielle"
+          },
+          "citations": {
+            "type": "boolean",
+            "default": true
+          },
+          "frequence": {
+            "type": "string",
+            "enum": [
+              "manuelle",
+              "quotidienne",
+              "horaire"
+            ],
+            "default": "manuelle"
+          }
+        },
+        "required": [
+          "nom",
+          "espaceId",
+          "source"
+        ]
+      },
+      "BaseConnaissanceModification": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "citations": {
+            "type": "boolean"
+          },
+          "frequence": {
+            "type": "string",
+            "enum": [
+              "manuelle",
+              "quotidienne",
+              "horaire"
+            ]
+          },
+          "clesAutorisees": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "a_jour",
+              "indexation",
+              "erreur",
+              "jamais_indexee"
+            ]
+          }
+        }
+      },
       "BaseHebergement": {
         "type": "object",
         "properties": {
@@ -40213,6 +41709,41 @@
         "required": [
           "nom",
           "defaut"
+        ]
+      },
+      "BrancheFlux": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "condition": {
+            "type": "string",
+            "description": "Évaluée en « premier mot-clé de la condition trouvé dans les variables ou la dernière sortie » — pas un langage d’expression complet."
+          },
+          "partPct": {
+            "type": "number"
+          },
+          "parDefaut": {
+            "type": "boolean",
+            "description": "La branche de repli reçoit ce qu’aucune condition n’a retenu."
+          },
+          "etapes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtapeFlux"
+            }
+          }
+        },
+        "required": [
+          "id",
+          "nom",
+          "condition",
+          "partPct",
+          "etapes"
         ]
       },
       "BriqueCanvas": {
@@ -40993,6 +42524,241 @@
           "secret": {
             "type": "string",
             "description": "Renvoyé une seule fois, à la création ou à la rotation."
+          }
+        },
+        "required": [
+          "cle",
+          "secret"
+        ]
+      },
+      "CleIA": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "prefixe": {
+            "type": "string",
+            "description": "Préfixe visible, seul fragment du secret affichable après création."
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "string",
+            "description": "Application ou équipe qui porte la clé — sert au showback."
+          },
+          "modelesAutorises": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Slugs de `ModeleIA` autorisés, ou la valeur unique `tous`."
+          },
+          "quotaJetonsMois": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "jetonsConsommes": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "debitMaxParMinute": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "budgetMensuel": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Montant en FCFA."
+          },
+          "budgetConsomme": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Montant en FCFA."
+          },
+          "auDepassement": {
+            "type": "string",
+            "enum": [
+              "bloquer",
+              "alerter"
+            ],
+            "description": "Comportement au dépassement : couper, ou laisser passer en alertant."
+          },
+          "residenceMax": {
+            "type": "string",
+            "enum": [
+              "publique",
+              "interne",
+              "personnelle",
+              "reglementee"
+            ],
+            "description": "Classe de données maximale que cette clé peut faire sortir vers un modèle externe."
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspendue",
+              "revoquee"
+            ]
+          },
+          "creeeLe": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "creeePar": {
+            "type": "string"
+          },
+          "derniereUtilisation": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "nom",
+          "prefixe",
+          "espaceId",
+          "usage",
+          "modelesAutorises",
+          "quotaJetonsMois",
+          "jetonsConsommes",
+          "debitMaxParMinute",
+          "budgetMensuel",
+          "budgetConsomme",
+          "auDepassement",
+          "residenceMax",
+          "statut",
+          "creeeLe"
+        ]
+      },
+      "CleIACreation": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "string"
+          },
+          "modelesAutorises": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "default": [
+              "tous"
+            ]
+          },
+          "quotaJetonsMois": {
+            "type": "integer",
+            "format": "int32",
+            "default": 1000000
+          },
+          "debitMaxParMinute": {
+            "type": "integer",
+            "format": "int32",
+            "default": 60
+          },
+          "budgetMensuel": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Montant en FCFA."
+          },
+          "auDepassement": {
+            "type": "string",
+            "enum": [
+              "bloquer",
+              "alerter"
+            ],
+            "default": "bloquer"
+          },
+          "residenceMax": {
+            "type": "string",
+            "enum": [
+              "publique",
+              "interne",
+              "personnelle",
+              "reglementee"
+            ],
+            "default": "interne"
+          }
+        },
+        "required": [
+          "nom",
+          "espaceId"
+        ]
+      },
+      "CleIAModification": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "usage": {
+            "type": "string"
+          },
+          "modelesAutorises": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "quotaJetonsMois": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "debitMaxParMinute": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "budgetMensuel": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Montant en FCFA."
+          },
+          "auDepassement": {
+            "type": "string",
+            "enum": [
+              "bloquer",
+              "alerter"
+            ]
+          },
+          "residenceMax": {
+            "type": "string",
+            "enum": [
+              "publique",
+              "interne",
+              "personnelle",
+              "reglementee"
+            ]
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "active",
+              "suspendue",
+              "revoquee"
+            ]
+          }
+        }
+      },
+      "CleIASecret": {
+        "type": "object",
+        "properties": {
+          "cle": {
+            "$ref": "#/components/schemas/CleIA"
+          },
+          "secret": {
+            "type": "string",
+            "description": "Renvoyé une seule fois, à la création."
           }
         },
         "required": [
@@ -41948,6 +43714,38 @@
           "actif"
         ]
       },
+      "ConnaissanceRechercheRequest": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Question ou texte de recherche — vectorisé avec le même modèle que les fragments indexés."
+          },
+          "topK": {
+            "type": "integer",
+            "format": "int32",
+            "description": "Nombre de fragments renvoyés, du plus au moins pertinent.",
+            "default": 5
+          }
+        },
+        "required": [
+          "query"
+        ]
+      },
+      "ConnaissanceRechercheResponse": {
+        "type": "object",
+        "properties": {
+          "fragments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/FragmentRecherche"
+            }
+          }
+        },
+        "required": [
+          "fragments"
+        ]
+      },
       "ConsoleVm": {
         "type": "object",
         "properties": {
@@ -42813,6 +44611,30 @@
         "required": [
           "nom",
           "disponible"
+        ]
+      },
+      "DocumentConnaissanceCreation": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string",
+            "description": "Nom du document — apparaît dans les citations."
+          },
+          "texte": {
+            "type": "string",
+            "description": "Contenu déjà en texte ou Markdown (collé) — évite un aller-retour Docling inutile."
+          },
+          "contenuBase64": {
+            "type": "string",
+            "description": "Fichier encodé en base64 (pdf, docx, html…), réellement extrait par Docling."
+          },
+          "url": {
+            "type": "string",
+            "description": "Document déjà accessible en ligne (source web/git) — Docling va le chercher lui-même."
+          }
+        },
+        "required": [
+          "nom"
         ]
       },
       "Domaine": {
@@ -43808,6 +45630,124 @@
           "devise"
         ]
       },
+      "EtapeFlux": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "declencheur",
+              "agent",
+              "outil",
+              "connaissance",
+              "routeur",
+              "boucle",
+              "humain",
+              "code",
+              "reponse",
+              "anonymisation",
+              "habilitation",
+              "transfert"
+            ]
+          },
+          "nom": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "detail": {
+            "type": "string"
+          },
+          "agentId": {
+            "type": "string"
+          },
+          "outilId": {
+            "type": "string"
+          },
+          "connaissanceId": {
+            "type": "string",
+            "description": "Base de connaissances interrogée — seul un champ dédié permet à l’exécution de savoir où chercher."
+          },
+          "condition": {
+            "type": "string"
+          },
+          "verrouillee": {
+            "type": "boolean"
+          },
+          "executions24h": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "latenceMs": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "coutPourMille": {
+            "type": "number"
+          },
+          "tauxErreurPct": {
+            "type": "number"
+          },
+          "reprise": {
+            "type": "object",
+            "properties": {
+              "tentatives": {
+                "type": "integer",
+                "format": "int32"
+              },
+              "delaiS": {
+                "type": "integer",
+                "format": "int32"
+              }
+            },
+            "required": [
+              "tentatives",
+              "delaiS"
+            ]
+          },
+          "branches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrancheFlux"
+            }
+          },
+          "modeRoutage": {
+            "type": "string",
+            "enum": [
+              "premiere",
+              "toutes"
+            ]
+          },
+          "corps": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtapeFlux"
+            }
+          },
+          "surItems": {
+            "type": "string"
+          },
+          "maxIterations": {
+            "type": "integer",
+            "format": "int32"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "nom",
+          "source",
+          "detail",
+          "executions24h",
+          "latenceMs",
+          "coutPourMille",
+          "tauxErreurPct"
+        ]
+      },
       "EtudeCas": {
         "type": "object",
         "properties": {
@@ -44637,6 +46577,282 @@
           "accroche",
           "description",
           "categorie"
+        ]
+      },
+      "FluxExecutionRequest": {
+        "type": "object",
+        "properties": {
+          "entree": {
+            "type": "string",
+            "description": "Message ou charge utile qui déclenche le flux — ce que le déclencheur aurait reçu."
+          },
+          "variables": {
+            "type": "object",
+            "description": "Valeurs de variables à surcharger pour cette exécution seulement (clé → valeur).",
+            "additionalProperties": true
+          }
+        },
+        "required": [
+          "entree"
+        ]
+      },
+      "FluxOrchestration": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "nom": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "publie",
+              "brouillon",
+              "suspendu"
+            ]
+          },
+          "declencheur": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "message",
+                  "planifie",
+                  "webhook",
+                  "fichier",
+                  "evenement"
+                ]
+              },
+              "libelle": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "libelle",
+              "detail"
+            ]
+          },
+          "etapes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtapeFlux"
+            }
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableFlux"
+            }
+          },
+          "executions7j": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "dureeMedianeS": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "tauxSuccesPct": {
+            "type": "number"
+          },
+          "coutParExecution": {
+            "type": "number"
+          },
+          "memoirePartagee": {
+            "type": "boolean"
+          },
+          "version": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "nom",
+          "description",
+          "espaceId",
+          "statut",
+          "declencheur",
+          "etapes",
+          "variables",
+          "memoirePartagee",
+          "version"
+        ]
+      },
+      "FluxOrchestrationCreation": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "espaceId": {
+            "type": "string"
+          },
+          "declencheur": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "message",
+                  "planifie",
+                  "webhook",
+                  "fichier",
+                  "evenement"
+                ]
+              },
+              "libelle": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "libelle",
+              "detail"
+            ]
+          },
+          "etapes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtapeFlux"
+            }
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableFlux"
+            }
+          },
+          "memoirePartagee": {
+            "type": "boolean",
+            "default": false
+          }
+        },
+        "required": [
+          "nom",
+          "declencheur"
+        ]
+      },
+      "FluxOrchestrationModification": {
+        "type": "object",
+        "properties": {
+          "nom": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "statut": {
+            "type": "string",
+            "enum": [
+              "publie",
+              "brouillon",
+              "suspendu"
+            ]
+          },
+          "declencheur": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "message",
+                  "planifie",
+                  "webhook",
+                  "fichier",
+                  "evenement"
+                ]
+              },
+              "libelle": {
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "libelle",
+              "detail"
+            ]
+          },
+          "etapes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EtapeFlux"
+            }
+          },
+          "variables": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/VariableFlux"
+            }
+          },
+          "memoirePartagee": {
+            "type": "boolean"
+          }
+        }
+      },
+      "FluxRepriseRequest": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approuve",
+              "rejete"
+            ]
+          },
+          "commentaire": {
+            "type": "string",
+            "description": "Motif ou précision laissé par la personne qui valide."
+          }
+        },
+        "required": [
+          "decision"
+        ]
+      },
+      "FragmentRecherche": {
+        "type": "object",
+        "properties": {
+          "texte": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number",
+            "description": "Similarité cosinus, entre 0 et 1."
+          },
+          "document": {
+            "type": "string",
+            "description": "Nom du document source — présent même si `citations` est faux."
+          },
+          "citations": {
+            "type": "string",
+            "description": "Extrait de citation du document d’origine, uniquement si `citations` est vrai sur la base."
+          }
+        },
+        "required": [
+          "texte",
+          "score",
+          "document"
         ]
       },
       "Gabarit": {
@@ -51004,6 +53220,27 @@
           "type"
         ]
       },
+      "SourceConnaissance": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "s3",
+              "drive",
+              "web",
+              "git"
+            ]
+          },
+          "libelle": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "libelle"
+        ]
+      },
       "Souscription": {
         "type": "object",
         "properties": {
@@ -52082,6 +54319,37 @@
           "cle",
           "secret",
           "scope"
+        ]
+      },
+      "VariableFlux": {
+        "type": "object",
+        "properties": {
+          "cle": {
+            "type": "string"
+          },
+          "portee": {
+            "type": "string",
+            "enum": [
+              "environnement",
+              "conversation",
+              "systeme"
+            ]
+          },
+          "valeur": {
+            "type": "string"
+          },
+          "secret": {
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cle",
+          "portee",
+          "valeur",
+          "description"
         ]
       },
       "Ventilation": {
