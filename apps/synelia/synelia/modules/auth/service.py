@@ -11,7 +11,7 @@ from synelia_kernel.config import reglages
 from synelia_kernel.dates import dans, maintenant
 from synelia_kernel.ids import jeton_opaque, nouvel_id
 
-from synelia.securite import emettre_acces, hacher_jeton
+from synelia.securite import emettre_acces, hacher_jeton, politiques_securite
 
 
 def utilisateur_contrat(u: Utilisateur) -> dict[str, Any]:
@@ -75,6 +75,14 @@ async def ouvrir_session(
     apps = await appartenances(session, u)
     org = org_id or u.org_active_id or (apps[0]["orgId"] if apps else None)
     role = role_dans(apps, org, u)
+    politiques_session: dict[str, Any] = {}
+    if org:
+        o = await session.get(Organisation, org)
+        if o:
+            politiques_session = politiques_securite(o.politiques).get("session", {})
+    duree_effective = duree_s
+    if duree_effective is None and politiques_session.get("dureeMaxMin"):
+        duree_effective = politiques_session["dureeMaxMin"] * 60
     brut = jeton_opaque()
     s = SessionAuth(
         id=nouvel_id(),
@@ -85,13 +93,26 @@ async def ouvrir_session(
         rafraichissement_hash=hacher_jeton(brut),
         ip=ip,
         user_agent=(user_agent or "")[:400],
-        expire_le=dans(duree_s or r.rafraichissement_duree_s),
+        expire_le=dans(duree_effective or r.rafraichissement_duree_s),
         derniere_activite_le=maintenant(),
         emprunt=emprunt,
         mfa_validee=mfa_validee,
         mfa_defi=None if mfa_validee else nouvel_id(),
     )
     session.add(s)
+    if mfa_validee and org and politiques_session.get("sessionUniqueParUtilisateur"):
+        # une seule session active par utilisateur (et par organisation) quand exigé
+        for autre in (
+            await session.execute(
+                select(SessionAuth).where(
+                    SessionAuth.utilisateur_id == u.id,
+                    SessionAuth.org_id == org,
+                    SessionAuth.revoquee_le.is_(None),
+                    SessionAuth.id != s.id,
+                )
+            )
+        ).scalars():
+            autre.revoquee_le = maintenant()
     u.dernier_login_le = maintenant()
     if org and not u.org_active_id:
         u.org_active_id = org

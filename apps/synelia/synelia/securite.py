@@ -1,9 +1,10 @@
-"""Mots de passe (argon2id), jetons d'accès (JWT EdDSA), TOTP."""
+"""Mots de passe (argon2id), jetons d'accès (JWT EdDSA), TOTP, politiques de sécurité."""
 
 from __future__ import annotations
 
 import base64
 import hashlib
+import ipaddress
 from functools import lru_cache
 from typing import Any
 
@@ -104,3 +105,47 @@ def hacher_jeton(jeton: str) -> str:
 
 def b64(octets: bytes) -> str:
     return base64.urlsafe_b64encode(octets).decode().rstrip("=")
+
+
+DEFAULT_POLITIQUES: dict[str, Any] = {
+    "mfa": {"obligatoire": False, "methodes": ["totp"]},
+    "session": {"dureeMaxMin": 720, "inactiviteMin": 60},
+    "restrictionIp": {"actif": False, "plages": []},
+}
+
+
+def politiques_securite(brutes: dict[str, Any] | None) -> dict[str, Any]:
+    """Fusionne les `PolitiquesSecurite` stockées sur l'organisation avec les défauts.
+
+    Source unique de vérité : utilisée pour l'affichage (`/securite/politiques`) et pour
+    l'application réelle (MFA obligatoire, durée/inactivité de session, restriction IP)
+    à la connexion et à chaque requête authentifiée.
+    """
+    p = {**DEFAULT_POLITIQUES, **(brutes or {})}
+    p["mfa"] = {**DEFAULT_POLITIQUES["mfa"], **p.get("mfa", {})}
+    p["session"] = {**DEFAULT_POLITIQUES["session"], **p.get("session", {})}
+    p["restrictionIp"] = {**DEFAULT_POLITIQUES["restrictionIp"], **p.get("restrictionIp", {})}
+    p["restrictionIp"]["plages"] = p["restrictionIp"].get("plages", [])
+    p["mfa"]["methodes"] = p["mfa"].get("methodes", ["totp"])
+    return p
+
+
+def ip_autorisee(ip: str | None, plages: list[dict[str, Any]], portee_requise: str) -> bool:
+    """`restrictionIp` réelle : vrai si `ip` tombe dans une plage couvrant `portee_requise`."""
+    if not ip or not plages:
+        return False
+    try:
+        adresse = ipaddress.ip_address(ip)
+    except ValueError:
+        return False
+    for plage in plages:
+        portee = plage.get("portee", "les_deux")
+        if portee not in (portee_requise, "les_deux"):
+            continue
+        try:
+            reseau = ipaddress.ip_network(plage["cidr"], strict=False)
+        except (ValueError, KeyError):
+            continue
+        if adresse in reseau:
+            return True
+    return False

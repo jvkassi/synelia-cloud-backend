@@ -19,6 +19,8 @@ from synelia.securite import (
     emettre_acces,
     hacher_jeton,
     hacher_mot_de_passe,
+    ip_autorisee,
+    politiques_securite,
     verifier_mot_de_passe,
     verifier_totp,
 )
@@ -42,6 +44,25 @@ async def se_connecter(ctx: CtxPublic, corps: m.DemandeConnexion) -> Any:
     if u.statut == "suspendu":
         raise erreurs.interdit("Compte suspendu.", code="compte_suspendu")
     org = u.org_active_id
+    if org:
+        o = await ctx.session.get(Organisation, org)
+        restriction = politiques_securite(o.politiques if o else None).get("restrictionIp", {})
+        if restriction.get("actif") and not ip_autorisee(
+            ctx.ip, restriction.get("plages", []), "portail"
+        ):
+            await journaliser(
+                ctx,
+                action="auth.connexion_refusee_ip",
+                cible_type="utilisateur",
+                cible_id=u.id,
+                cible=u.email,
+                org_id=org,
+                resultat="refus",
+                details={"ip": ctx.ip},
+            )
+            raise erreurs.interdit(
+                "Connexion refusée : adresse IP non autorisée.", code="ip_non_autorisee"
+            )
     mfa = await service.mfa_exigee(ctx.session, u, org)
     rep = await service.ouvrir_session(
         ctx.session,
@@ -79,6 +100,14 @@ async def valider_mfa(ctx: CtxPublic, corps: m.AuthMfaPostRequest) -> Any:
     s.mfa_defi = None
     await ctx.session.flush()
     acces = emettre_acces({"sub": u.id, "org": s.org_id, "role": s.role, "sid": s.id})
+    await journaliser(
+        ctx,
+        action="auth.mfa_validee",
+        cible_type="utilisateur",
+        cible_id=u.id,
+        cible=u.email,
+        org_id=s.org_id,
+    )
     return {
         "accessToken": acces,
         "refreshToken": jeton_opaque(),  # la rotation réelle passe par /auth/rafraichir
@@ -108,11 +137,20 @@ async def rafraichir_session(ctx: CtxPublic, corps: m.AuthRafraichirPostRequest)
             await ctx.session.execute(select(SessionAuth).where(SessionAuth.famille == s.famille))
         ).scalars():
             autre.revoquee_le = maintenant()
+        await journaliser(
+            ctx,
+            action="auth.rafraichissement_reutilisation",
+            cible_type="utilisateur",
+            cible_id=s.utilisateur_id,
+            org_id=s.org_id,
+            resultat="alerte",
+            details={"famille": s.famille},
+        )
         raise erreurs.non_authentifie("Réutilisation détectée : sessions révoquées.")
     u = await ctx.session.get(Utilisateur, s.utilisateur_id)
     assert u is not None
     s.revoquee_le = maintenant()
-    return await service.ouvrir_session(
+    rep = await service.ouvrir_session(
         ctx.session,
         u,
         ip=ctx.ip,
@@ -121,6 +159,15 @@ async def rafraichir_session(ctx: CtxPublic, corps: m.AuthRafraichirPostRequest)
         famille=s.famille,
         emprunt=s.emprunt,
     )
+    await journaliser(
+        ctx,
+        action="auth.rafraichissement",
+        cible_type="utilisateur",
+        cible_id=u.id,
+        cible=u.email,
+        org_id=s.org_id,
+    )
+    return rep
 
 
 @router.post("/deconnexion", response_model=m.AuthDeconnexionPostResponse)
@@ -344,9 +391,13 @@ async def reinitialiser_mot_de_passe(
         )
     ).scalars():
         s.revoquee_le = maintenant()
-    return await service.ouvrir_session(
+    rep = await service.ouvrir_session(
         ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent")
     )
+    await journaliser(
+        ctx, action="auth.reinitialisation", cible_type="utilisateur", cible_id=u.id, cible=u.email
+    )
+    return rep
 
 
 @router.get("/sso/decouverte", response_model=m.DecouverteSso, response_model_exclude_none=True)

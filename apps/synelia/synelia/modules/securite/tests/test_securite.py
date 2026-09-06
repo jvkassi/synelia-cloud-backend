@@ -1,5 +1,13 @@
 """Sécurité & accès : clés d'API, politiques, sessions actives, SSO."""
 
+from datetime import timedelta
+
+from synelia_db.modeles import SessionAuth
+from synelia_db.session import fabrique
+from synelia_kernel.dates import maintenant
+
+from synelia.securite import lire_acces
+
 
 async def test_cycle_cle_api(client):
     r = await client.post(
@@ -106,3 +114,202 @@ async def test_sso(client):
 
     r = await client.post("/v1/securite/sso/test")
     assert r.status_code == 200 and r.json()["succes"] is True
+
+
+async def test_mfa_obligatoire_bloque_la_connexion_sans_enrolement(client):
+    """`mfa.obligatoire` : bloque réellement la connexion (défi jamais résolu sans TOTP)."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": True, "methodes": ["totp"]},
+            "session": {"dureeMaxMin": 720, "inactiviteMin": 60},
+            "restrictionIp": {"actif": False, "plages": []},
+        },
+    )
+    assert r.status_code == 200
+    assert r.json()["sessionsInvalidees"] == 0  # durée inchangée : la session courante survit
+
+    r = await client.post(
+        "/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"}
+    )
+    assert r.status_code == 200
+    corps = r.json()
+    assert corps["mfaRequis"] is True
+    assert corps.get("accessToken") is None
+    assert corps["defiMfa"]
+
+
+async def test_politique_duree_session_appliquee(client):
+    """`session.dureeMaxMin` doit réellement fixer `expire_le`, pas le défaut global (30j)."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": False, "methodes": ["totp"]},
+            "session": {"dureeMaxMin": -5, "inactiviteMin": 60},
+            "restrictionIp": {"actif": False, "plages": []},
+        },
+    )
+    assert r.status_code == 200
+
+    r = await client.post(
+        "/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"}
+    )
+    assert r.status_code == 200
+    jeton = r.json()["accessToken"]
+
+    r = await client.get("/v1/moi", headers={"Authorization": f"Bearer {jeton}"})
+    assert r.status_code == 401
+    assert r.json()["erreur"]["code"] == "non_authentifie"
+
+
+async def test_politique_inactivite_appliquee(client):
+    """`session.inactiviteMin` doit réellement expirer une session inactive."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": False, "methodes": ["totp"]},
+            "session": {"dureeMaxMin": 720, "inactiviteMin": 30},
+            "restrictionIp": {"actif": False, "plages": []},
+        },
+    )
+    assert r.status_code == 200
+
+    r = await client.post(
+        "/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"}
+    )
+    assert r.status_code == 200
+    jeton = r.json()["accessToken"]
+    sid = lire_acces(jeton)["sid"]
+
+    async with fabrique()() as s:
+        session_auth = await s.get(SessionAuth, sid)
+        session_auth.derniere_activite_le = maintenant() - timedelta(minutes=45)
+        await s.commit()
+
+    r = await client.get("/v1/moi", headers={"Authorization": f"Bearer {jeton}"})
+    assert r.status_code == 401
+    assert r.json()["erreur"]["code"] == "non_authentifie"
+
+
+async def test_politique_session_unique_par_utilisateur(client):
+    """`sessionUniqueParUtilisateur` : une nouvelle connexion révoque les précédentes."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": False, "methodes": ["totp"]},
+            "session": {
+                "dureeMaxMin": 720,
+                "inactiviteMin": 60,
+                "sessionUniqueParUtilisateur": True,
+            },
+            "restrictionIp": {"actif": False, "plages": []},
+        },
+    )
+    assert r.status_code == 200
+
+    r1 = await client.post(
+        "/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"}
+    )
+    jeton1 = r1.json()["accessToken"]
+    r2 = await client.post(
+        "/v1/auth/connexion", json={"email": "admin@synelia.cloud", "motDePasse": "Synelia!2026"}
+    )
+    jeton2 = r2.json()["accessToken"]
+
+    r = await client.get("/v1/moi", headers={"Authorization": f"Bearer {jeton1}"})
+    assert r.status_code == 401  # révoquée par la connexion suivante
+
+    r = await client.get("/v1/moi", headers={"Authorization": f"Bearer {jeton2}"})
+    assert r.status_code == 200
+
+
+async def test_politique_restriction_ip_refuse_hors_plage(client):
+    """`restrictionIp` : une requête hors des plages autorisées est réellement refusée."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": False, "methodes": ["totp"]},
+            "session": {"dureeMaxMin": 720, "inactiviteMin": 60},
+            "restrictionIp": {
+                "actif": True,
+                "plages": [{"cidr": "10.0.0.0/8", "portee": "les_deux"}],
+            },
+        },
+    )
+    assert r.status_code == 200
+
+    r = await client.get("/v1/moi")
+    assert r.status_code == 403
+    assert r.json()["erreur"]["code"] == "ip_non_autorisee"
+
+
+async def test_politique_restriction_ip_autorise_plage_couvrante(client):
+    """`restrictionIp` : une plage couvrant l'IP réelle du client laisse passer la requête."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": False, "methodes": ["totp"]},
+            "session": {"dureeMaxMin": 720, "inactiviteMin": 60},
+            "restrictionIp": {
+                "actif": True,
+                "plages": [{"cidr": "127.0.0.1/32", "portee": "les_deux"}],
+            },
+        },
+    )
+    assert r.status_code == 200
+
+    r = await client.get("/v1/moi")
+    assert r.status_code == 200
+
+
+async def test_politique_reauthentification_actions_sensibles(client):
+    """`reauthentificationActionsSensibles` : rotation de clé refusée si la session est ancienne."""
+    r = await client.put(
+        "/v1/securite/politiques",
+        json={
+            "mfa": {"obligatoire": False, "methodes": ["totp"]},
+            "session": {
+                "dureeMaxMin": 720,
+                "inactiviteMin": 60,
+                "reauthentificationActionsSensibles": True,
+            },
+            "restrictionIp": {"actif": False, "plages": []},
+        },
+    )
+    assert r.status_code == 200
+
+    r = await client.post(
+        "/v1/securite/cles-api", json={"nom": "ci-cd", "portee": ["sso.configure"]}
+    )
+    assert r.status_code == 201
+    cid = r.json()["cle"]["id"]
+
+    # session tout juste ouverte (fixture) : dans la fenêtre de réauth, rotation autorisée
+    r = await client.post(f"/v1/securite/cles-api/{cid}/rotation", json={})
+    assert r.status_code == 200
+
+    sid = lire_acces(client.jeton)["sid"]
+    async with fabrique()() as s:
+        session_auth = await s.get(SessionAuth, sid)
+        session_auth.cree_le = maintenant() - timedelta(minutes=30)
+        await s.commit()
+
+    r = await client.post(f"/v1/securite/cles-api/{cid}/rotation", json={})
+    assert r.status_code == 403
+    assert r.json()["erreur"]["code"] == "reauthentification_requise"
+
+
+async def test_cle_api_authentifie_une_requete_reelle(client):
+    """Une `CleApi` doit réellement authentifier une requête via `X-Api-Key`, portée respectée."""
+    r = await client.post(
+        "/v1/securite/cles-api", json={"nom": "script-ci", "portee": ["sso.configure"]}
+    )
+    assert r.status_code == 201
+    secret = r.json()["secret"]
+
+    r = await client.get("/v1/securite/cles-api", headers={"Authorization": "", "X-Api-Key": secret})
+    assert r.status_code == 200
+
+    r = await client.get("/v1/audit", headers={"Authorization": "", "X-Api-Key": secret})
+    assert r.status_code == 403
+    assert r.json()["erreur"]["code"] == "interdit"

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import timedelta
 from typing import Annotated, Any
 
 from fastapi import Depends, Header, Request
@@ -13,7 +14,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from synelia_contract.rbac import ROLES_EQUIPE
 from synelia_db import rls
-from synelia_db.modeles import CleApi, Membership, SessionAuth, Utilisateur
+from synelia_db.modeles import CleApi, Membership, Organisation, SessionAuth, Utilisateur
 from synelia_db.session import fabrique
 from synelia_kernel import erreurs
 from synelia_kernel.config import Reglages, reglages
@@ -21,7 +22,7 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.journal import org_id_courant, utilisateur_id_courant
 
 from synelia.deps import limitation
-from synelia.securite import hacher_jeton, lire_acces
+from synelia.securite import hacher_jeton, ip_autorisee, lire_acces, politiques_securite
 
 
 @dataclass
@@ -108,6 +109,13 @@ async def contexte_public(
     )
 
 
+async def _politiques_org(session: AsyncSession, org_id: str | None) -> dict[str, Any]:
+    if not org_id:
+        return {}
+    o = await session.get(Organisation, org_id)
+    return politiques_securite(o.politiques) if o else {}
+
+
 async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principal:
     claims = lire_acces(jeton)
     sid = claims.get("sid")
@@ -117,6 +125,17 @@ async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principa
             raise erreurs.non_authentifie("Session révoquée ou expirée.")
         if not s.mfa_validee:
             raise erreurs.non_authentifie("Second facteur requis.")
+        inactivite_min = (await _politiques_org(session, s.org_id)).get("session", {}).get(
+            "inactiviteMin"
+        )
+        reference = s.derniere_activite_le or s.cree_le
+        if (
+            inactivite_min
+            and reference
+            and maintenant() - reference > timedelta(minutes=inactivite_min)
+        ):
+            s.revoquee_le = maintenant()
+            raise erreurs.non_authentifie("Session expirée pour inactivité.")
         s.derniere_activite_le = maintenant()
     u = await session.get(Utilisateur, claims["sub"])
     if u is None or u.statut == "suspendu":
@@ -165,6 +184,26 @@ async def _principal_depuis_cle(session: AsyncSession, cle: str) -> Principal:
     )
 
 
+async def _verifier_restriction_ip(
+    session: AsyncSession, request: Request, principal: Principal
+) -> None:
+    """`restrictionIp` réelle : coupe l'accès si l'IP de la requête n'est dans aucune plage
+    autorisée couvrant la portée (portail/API) de ce principal."""
+    politiques = await _politiques_org(session, principal.org_id)
+    restriction = politiques.get("restrictionIp", {})
+    if not restriction.get("actif"):
+        return
+    if restriction.get("appliqueAuxAdmins") is False and principal.est_admin_plateforme:
+        return
+    portee_requise = "api" if principal.cle_api_id else "portail"
+    ip = request.client.host if request.client else None
+    if not ip_autorisee(ip, restriction.get("plages", []), portee_requise):
+        raise erreurs.interdit(
+            "Adresse IP non autorisée par la politique de sécurité de l'organisation.",
+            code="ip_non_autorisee",
+        )
+
+
 async def contexte(
     request: Request,
     session: Annotated[AsyncSession, Depends(_session)],
@@ -196,6 +235,8 @@ async def contexte(
     rls.org_id_transaction.set(principal.org_id)
     org_id_courant.set(principal.org_id)
     utilisateur_id_courant.set(principal.utilisateur_id)
+    if principal.org_id:
+        await _verifier_restriction_ip(session, request, principal)
     request.state.principal = principal
     return Contexte(
         request=request,
