@@ -91,7 +91,9 @@ async def test_cycle_service(client):
 
     sid = r.json()[0]["id"]
     r = await client.get(f"/v1/projets/{pid}/services/{sid}")
-    assert r.status_code == 200 and r.json()["statut"] == "running"
+    # Sans `source`, il n'y a rien de réel à exécuter : le service reste `stopped`
+    # plutôt que d'afficher un faux « running » (cf. `image_service`).
+    assert r.status_code == 200 and r.json()["statut"] == "stopped"
 
     r = await client.patch(
         f"/v1/projets/{pid}/services/{sid}",
@@ -119,6 +121,53 @@ async def test_cycle_service(client):
     assert r.status_code == 202
     r = await client.get(f"/v1/projets/{pid}/services")
     assert len(r.json()) == 0
+
+
+async def test_service_avec_image_reelle_tourne(client):
+    """Une `source` de type `image` a quelque chose de réel à exécuter : `running`."""
+    espace_id = await _espace(client)
+    projet = await _projet(client, espace_id)
+    pid = projet["id"]
+
+    r = await client.post(
+        f"/v1/projets/{pid}/services",
+        json={
+            "nom": "web",
+            "type": "application",
+            "environnement": "production",
+            "ressources": {"cpu": 1, "ramMo": 512, "diskGo": 10},
+            "source": {"type": "image", "ref": "nginx:alpine"},
+        },
+    )
+    assert r.status_code == 202
+    sid = (await client.get(f"/v1/projets/{pid}/services")).json()[0]["id"]
+    r = await client.get(f"/v1/projets/{pid}/services/{sid}")
+    assert r.json()["statut"] == "running"
+
+
+async def test_service_base_moteur_tourne(client):
+    """Un service `base` avec un `moteur` connu se traduit en image officielle : `running`."""
+    espace_id = await _espace(client)
+    projet = await _projet(client, espace_id)
+    pid = projet["id"]
+
+    r = await client.post(
+        f"/v1/projets/{pid}/services",
+        json={
+            "nom": "pg",
+            "type": "base",
+            "environnement": "production",
+            "ressources": {"cpu": 2, "ramMo": 4096, "diskGo": 100},
+            "moteur": "postgresql",
+            "version": "16.4",
+        },
+    )
+    assert r.status_code == 202
+    sid = (await client.get(f"/v1/projets/{pid}/services")).json()[0]["id"]
+    r = await client.get(f"/v1/projets/{pid}/services/{sid}")
+    corps = r.json()
+    assert corps["statut"] == "running"
+    assert corps["base"]["port"] == 5432
 
 
 async def test_execution_cron_et_refus(client):

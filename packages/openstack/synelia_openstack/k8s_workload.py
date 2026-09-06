@@ -111,6 +111,8 @@ class K8sWorkloadSimule:
         replicas: int = 1,
         env: dict[str, str] | None = None,
         ports: list[int] | None = None,
+        cpu: float | None = None,
+        ram_mo: int | None = None,
     ) -> None:
         return None
 
@@ -300,16 +302,26 @@ class K8sWorkloadReel(K8sWorkloadSimule):
         replicas: int = 1,
         env: dict[str, str] | None = None,
         ports: list[int] | None = None,
+        cpu: float | None = None,
+        ram_mo: int | None = None,
     ) -> None:
         from kubernetes import client as k8s_client
 
         api_client = self._api_client()
         ports = ports or [8080]
+        ressources = None
+        if cpu or ram_mo:
+            quantites = {
+                **({"cpu": str(cpu)} if cpu else {}),
+                **({"memory": f"{ram_mo}Mi"} if ram_mo else {}),
+            }
+            ressources = k8s_client.V1ResourceRequirements(requests=quantites, limits=quantites)
         conteneur = k8s_client.V1Container(
             name=nom,
             image=image,
             env=[k8s_client.V1EnvVar(name=k, value=v) for k, v in (env or {}).items()],
             ports=[k8s_client.V1ContainerPort(container_port=p) for p in ports],
+            resources=ressources,
         )
         gabarit = k8s_client.V1PodTemplateSpec(
             metadata=k8s_client.V1ObjectMeta(labels={"app": nom}),

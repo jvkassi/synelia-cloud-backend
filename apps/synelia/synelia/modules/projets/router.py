@@ -163,6 +163,12 @@ async def supprimer_projet(
     )
 
 
+def _source(from_: m.Source2 | None) -> m.Source1 | None:
+    if from_ is None or not from_.type or not from_.ref:
+        return None
+    return m.Source1(type=from_.type, ref=from_.ref, branche=from_.branche)
+
+
 def _cron(from_: m.Cron1 | None) -> m.Cron | None:
     if from_ is None:
         return None
@@ -242,6 +248,7 @@ async def creer_service_projet(
             if modele
             else None
         )
+        or (s.MOTEUR_PORT.get(corps.moteur or "") if corps.type == "base" else None)
         or PORT_DEFAUT
     )
     service_id = nouvel_id()
@@ -258,7 +265,7 @@ async def creer_service_projet(
         coutMensuel=_cout(ressources),
         modeleSlug=corps.modeleSlug,
         sieges=m.Sieges(attribues=0, souscrits=0),
-        source=corps.source,
+        source=_source(corps.source),
         portConteneur=port,
         moteur=corps.moteur,
         version=corps.version or (modele.version if modele else None),
@@ -280,7 +287,7 @@ async def creer_service_projet(
                 ),
                 projet,
             ),
-            port=5432,
+            port=s.MOTEUR_PORT.get(corps.moteur or "", 5432),
         )
         if corps.type == "base" and corps.moteur
         else None,
@@ -359,10 +366,11 @@ async def modifier_service_projet(
         )
         changements["ressources"] = ressources
         changements["coutMensuel"] = _cout(ressources)
+    if corps.source is not None:
+        changements["source"] = _source(corps.source)
     for champ in (
         "type",
         "environnement",
-        "source",
         "portConteneur",
         "version",
         "moteur",
