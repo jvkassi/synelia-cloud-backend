@@ -297,10 +297,13 @@ async def demander_reinitialisation(ctx: CtxPublic, corps: m.AuthMotDePasseOubli
         await courriel.envoyer(
             u.email,
             "Réinitialiser votre mot de passe Synelia Cloud",
-            f"Bonjour {u.nom},\n\n"
-            f"Une réinitialisation de mot de passe a été demandée pour votre compte. "
-            f"Ce lien est valable une heure :\n\n{lien}\n\n"
-            f"Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.",
+            f"Bonjour {u.nom},",
+            [
+                "Une réinitialisation de mot de passe a été demandée pour votre compte. "
+                "Ce lien est valable une heure.",
+            ],
+            bouton_texte="Réinitialiser mon mot de passe",
+            bouton_url=lien,
         )
         await journaliser(
             ctx,

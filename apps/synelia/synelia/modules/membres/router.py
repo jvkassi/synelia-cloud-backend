@@ -273,12 +273,18 @@ async def inviter_membre(
     await ctx.session.flush()
     org = await ctx.session.get(Organisation, ctx.org_id)
     lien = f"{ctx.reglages.url_frontend}/invitation/{jeton_brut}"
+    org_nom = org.nom if org else "une organisation"
+    paragraphes = [f"Vous avez été invité·e à rejoindre {org_nom} en tant que {corps.role}."]
+    if corps.message:
+        paragraphes.append(corps.message)
+    paragraphes.append("Ce lien est valable 7 jours.")
     await courriel.envoyer(
         email,
-        f"Invitation à rejoindre {org.nom if org else 'une organisation'} sur Synelia Cloud",
-        f"Vous avez été invité·e à rejoindre {org.nom if org else ''} en tant que {corps.role}.\n\n"
-        f"{corps.message + chr(10) + chr(10) if corps.message else ''}"
-        f"Ce lien est valable 7 jours :\n\n{lien}",
+        f"Invitation à rejoindre {org_nom} sur Synelia Cloud",
+        f"Rejoignez {org_nom}",
+        paragraphes,
+        bouton_texte="Accepter l'invitation",
+        bouton_url=lien,
     )
     await journaliser(
         ctx,
