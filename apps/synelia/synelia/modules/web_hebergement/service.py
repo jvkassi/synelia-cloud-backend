@@ -335,6 +335,15 @@ async def serveur_id(ctx: Contexte, hebergement_id: str, travail: Travail | None
     return str(sec.get("serveur_id") or hebergement_id)
 
 
+async def hebergement_pour_domaine(ctx: Contexte, domaine: str) -> m.Hebergement | None:
+    """Résout le VPS (hébergement) déjà en service pour un domaine — un domaine n'a qu'un
+    seul serveur (`domaine`, le nom de domaine réel du client, jamais `domaineProvisoire`
+    qui est propre à Synelia) : c'est sur cette même VM que Drive et les Applications
+    s'installent, jamais sur une VM séparée."""
+    tous = await depot.tous(ctx)
+    return next((h for h in tous if h.domaine == domaine), None)
+
+
 async def ip_gestion_hebergement(ctx: Contexte, hebergement: m.Hebergement) -> str | None:
     """Adresse à laquelle SSH peut joindre la VM d'hébergement : l'IP flottante de gestion
     (`ssh_fip_id`/`ssh_ip`, posée à la création — voir `amont_identite()`), sinon l'IP privée
@@ -607,6 +616,39 @@ def construire_site_stack(
     networks:
       - synelia
 """
+    elif application == "nextcloud":
+        services = f"""  {db_svc}:
+    image: mariadb:11
+    restart: unless-stopped
+    environment:
+      - MARIADB_ROOT_PASSWORD={mot_de_passe}
+      - MARIADB_DATABASE=nextcloud
+      - MARIADB_USER=nextcloud
+      - MARIADB_PASSWORD={mot_de_passe}
+    volumes:
+      - {racine}/db:/var/lib/mysql
+    networks:
+      - synelia
+
+  {app_svc}:
+    image: nextcloud:apache
+    restart: unless-stopped
+    depends_on:
+      - {db_svc}
+    environment:
+      - MYSQL_HOST={db_svc}
+      - MYSQL_DATABASE=nextcloud
+      - MYSQL_USER=nextcloud
+      - MYSQL_PASSWORD={mot_de_passe}
+      - NEXTCLOUD_ADMIN_USER=admin
+      - NEXTCLOUD_ADMIN_PASSWORD={mot_de_passe}
+      - NEXTCLOUD_TRUSTED_DOMAINS={hote}
+      - OVERWRITEPROTOCOL=http
+    volumes:
+      - {racine}/www:/var/www/html
+    networks:
+      - synelia
+"""
     elif application == "statique":
         fichiers[f"{racine}/www/index.html"] = (
             f"<!doctype html><html><head><title>{hote}</title></head><body>"
@@ -876,7 +918,10 @@ class ExecuteurSiteInstaller(Executeur):
             zone = await zone_vps_secrets(ctx)
             cle_privee = zone.get("ssh_prive")
             ip = await ip_gestion_hebergement(ctx, hebergement)
-            if not cle_privee or not ip:
+            # `SshSimule` est un no-op qui n'a besoin d'aucun identifiant réel : cette exigence
+            # ne s'applique qu'au vrai SSH, sinon le mode simulé (aucune zone VPS n'existe dans
+            # les tests) échoue systématiquement sur une contrainte purement réelle.
+            if isinstance(amont_ssh(), SshReel) and (not cle_privee or not ip):
                 raise erreurs.amont_indisponible(
                     "hébergement (SSH)",
                     "Aucune IP de gestion SSH backend disponible pour cette VM : soit la "
