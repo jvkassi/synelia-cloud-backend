@@ -6,8 +6,9 @@ obtient sa **propre VM Nova** dans la zone VPS partagée, avec exactement la mê
 `web_hebergement.service.ExecuteurHebergementCreer` : cloud-init Docker + Traefik (provider
 fichier, pas Docker — même bug de compat API contourné là-bas) + conteneurs applicatifs,
 routée sur le load balancer partagé par un `Host(drive.<domaine>)` dédié. On réutilise
-directement `zone_vps_secrets`, `image_ubuntu`, `gabarit_pour_palier` et `amont_network()` de
-`web_hebergement` plutôt que de les dupliquer — même zone, mêmes secrets, même load balancer.
+directement `zone_vps_secrets`, `image_ubuntu`, `gabarit_pour_palier`, `indenter` et
+`amont_network()` de `web_hebergement` plutôt que de les dupliquer — même zone, mêmes secrets,
+même load balancer.
 """
 
 from __future__ import annotations
@@ -24,6 +25,7 @@ from synelia.modules.web_hebergement.service import (
     amont_network,
     gabarit_pour_palier,
     image_ubuntu,
+    indenter,
     ip_privee,
     zone_vps_secrets,
 )
@@ -54,11 +56,6 @@ def amont() -> ComputeSimule:
 
 def palier(cle: str) -> dict:
     return PALIERS.get(cle, PALIERS["starter"])
-
-
-def _indenter(bloc: str, colonnes: int) -> str:
-    prefixe = " " * colonnes
-    return "\n".join(f"{prefixe}{ligne}" for ligne in bloc.splitlines())
 
 
 def construire_cloud_init(hote: str, mot_de_passe: str) -> str:
@@ -137,9 +134,9 @@ networks:
         "  - docker-compose-v2\n"
         "write_files:\n"
         f"  - path: {_RACINE_DOCKER}/docker-compose.yml\n"
-        "    content: |\n" + _indenter(compose, 6) + "\n"
+        "    content: |\n" + indenter(compose, 6) + "\n"
         f"  - path: {_RACINE_DOCKER}/traefik-dynamic/drive.yml\n"
-        "    content: |\n" + _indenter(routage, 6) + "\n"
+        "    content: |\n" + indenter(routage, 6) + "\n"
         "runcmd:\n"
         "  - systemctl enable --now docker\n"
         f"  - [sh, -c, 'cd {_RACINE_DOCKER} && docker compose up -d']\n"

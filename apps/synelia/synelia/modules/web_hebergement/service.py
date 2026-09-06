@@ -211,7 +211,8 @@ def image_ubuntu() -> str:
 _RACINE_DOCKER = "/srv/synelia"
 
 
-def _indenter(bloc: str, colonnes: int) -> str:
+def indenter(bloc: str, colonnes: int) -> str:
+    """Réutilisé par `web_drive.service` (même recette cloud-init) plutôt que dupliqué."""
     prefixe = " " * colonnes
     return "\n".join(f"{prefixe}{ligne}" for ligne in bloc.splitlines())
 
@@ -290,11 +291,11 @@ networks:
         "  - docker-compose-v2\n"
         "write_files:\n"
         f"  - path: {_RACINE_DOCKER}/docker-compose.yml\n"
-        "    content: |\n" + _indenter(compose, 6) + "\n"
+        "    content: |\n" + indenter(compose, 6) + "\n"
         f"  - path: {_RACINE_DOCKER}/traefik-dynamic/site.yml\n"
-        "    content: |\n" + _indenter(routage, 6) + "\n"
+        "    content: |\n" + indenter(routage, 6) + "\n"
         f"  - path: {_RACINE_DOCKER}/www/index.php\n"
-        "    content: |\n" + _indenter(index_php, 6) + "\n"
+        "    content: |\n" + indenter(index_php, 6) + "\n"
         "runcmd:\n"
         "  - systemctl enable --now docker\n"
         f"  - [sh, -c, 'cd {_RACINE_DOCKER} && docker compose up -d']\n"
