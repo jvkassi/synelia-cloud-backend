@@ -5,19 +5,14 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
 from synelia_contract import modeles as m
-from synelia_openstack import fournisseur
-from synelia_openstack.victoria import VictoriaReel, VictoriaSimule
 
 from synelia.audit import journaliser
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
 from synelia.modules.observabilite import service
 from synelia.modules.observabilite.service import depot
+from synelia.modules.observabilite.service import victoria as _victoria
 
 router = APIRouter(prefix="/observabilite", tags=["Observabilité"])
-
-
-def _victoria() -> VictoriaSimule:
-    return fournisseur(VictoriaSimule, VictoriaReel)
 
 
 @router.get(
@@ -48,6 +43,8 @@ async def creer_regle_alerte(
 ) -> Any:
     regle = service.regle_vers_modele(corps, ctx)
     await depot.creer(ctx, regle)
+    if regle.actif:
+        service.appliquer_regle_k8s(regle)
     await journaliser(
         ctx,
         action="observabilite.alerte.creation",
@@ -83,6 +80,10 @@ async def modifier_regle_alerte(
     if corps.actif is not None:
         patch["actif"] = corps.actif
     updated = await depot.modifier(ctx, alerteId, patch)
+    if updated.actif:
+        service.appliquer_regle_k8s(updated)
+    else:
+        service.supprimer_regle_k8s(alerteId)
     await journaliser(
         ctx,
         action="observabilite.alerte.modification",
@@ -99,6 +100,7 @@ async def supprimer_regle_alerte(
 ) -> Response:  # noqa: N803
     regle = await depot.obtenir(ctx, alerteId)
     exiger_confirmation(regle.cible, confirmation)
+    service.supprimer_regle_k8s(alerteId)
     await depot.supprimer(ctx, alerteId, logique=True)
     await journaliser(
         ctx,

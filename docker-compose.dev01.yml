@@ -62,6 +62,20 @@ services:
       SYNELIA_SMTP_ADMIN_HOTE: ${SYNELIA_SMTP_ADMIN_HOTE:?}
       SYNELIA_SMTP_ADMIN_UTILISATEUR: ${SYNELIA_SMTP_ADMIN_UTILISATEUR:?}
       SYNELIA_SMTP_ADMIN_MOT_DE_PASSE: ${SYNELIA_SMTP_ADMIN_MOT_DE_PASSE:?}
+      # IA — bases de connaissances (module ia_agents/connaissances.py) : Docling extrait,
+      # Infinity vectorise (BGE-M3), Qdrant indexe. `SYNELIA_QDRANT_URL` est le seul signal
+      # « réel » — les deux autres ont des valeurs par défaut docker-compose, données ici pour
+      # que ce soit explicite.
+      SYNELIA_DOCLING_URL: http://docling:5001
+      SYNELIA_EMBEDDINGS_URL: http://infinity:7997
+      SYNELIA_EMBEDDINGS_MODELE: BAAI/bge-m3
+      SYNELIA_QDRANT_URL: http://qdrant:6333
+      # Observabilité réelle (victoria-metrics-k8s-stack + OTel Collector, cluster PaaS
+      # kube-37urf) : NodePort + IP flottante 192.168.20.245, voir packages/openstack/
+      # synelia_openstack/victoria.py et synelia/otel.py. No-op si absentes.
+      SYNELIA_VICTORIAMETRICS_URL: ${SYNELIA_VICTORIAMETRICS_URL:?}
+      SYNELIA_GRAFANA_URL: ${SYNELIA_GRAFANA_URL:?}
+      SYNELIA_OTEL_ENDPOINT: ${SYNELIA_OTEL_ENDPOINT:?}
     ports: ["127.0.0.1:4010:4000"]
     restart: unless-stopped
 
@@ -89,6 +103,32 @@ services:
     ports: ["127.0.0.1:4001:4000"]
     restart: unless-stopped
 
+  # Docling (extraction PDF/DOCX/HTML/Markdown → texte structuré), appelé uniquement au moment
+  # de l'ingestion d'un document — pas sur chaque requête, pas besoin de rester chaud.
+  docling:
+    image: quay.io/docling-project/docling-serve:latest
+    ports: ["127.0.0.1:5001:5001"]
+    restart: unless-stopped
+
+  # Infinity (michaelfeil/infinity) : sert BGE-M3 avec une API compatible OpenAI /embeddings.
+  # Image `-cpu` : dev01 n'a pas de GPU. Volume pour ne pas retélécharger le modèle (~2,2 Go)
+  # à chaque redémarrage.
+  infinity:
+    image: michaelf34/infinity:0.0.77-cpu
+    command: ["v2", "--model-id", "BAAI/bge-m3", "--port", "7997", "--engine", "torch"]
+    volumes: [infinity-dev01:/app/.cache]
+    ports: ["127.0.0.1:7997:7997"]
+    restart: unless-stopped
+
+  # Qdrant : une collection par base de connaissances (`kb_<connaissanceId>`).
+  qdrant:
+    image: qdrant/qdrant:v1.15.5
+    volumes: [qdrant-dev01:/qdrant/storage]
+    ports: ["127.0.0.1:6333:6333"]
+    restart: unless-stopped
+
 volumes:
   pgdata-dev01: {}
   minio-dev01: {}
+  infinity-dev01: {}
+  qdrant-dev01: {}

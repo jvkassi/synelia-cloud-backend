@@ -29,6 +29,11 @@ from typing import Any
 from synelia_kernel import erreurs
 
 ENV_CLUSTER_ID = "SYNELIA_PAAS_CLUSTER_ID"
+ENV_OBSERVABILITE_NAMESPACE = "SYNELIA_OBSERVABILITE_NAMESPACE"
+
+_GROUPE_VMRULE = "operator.victoriametrics.com"
+_VERSION_VMRULE = "v1beta1"
+_PLURIEL_VMRULE = "vmrules"
 
 # kubeconfig assemblé (CA + certificat client signé) mis en cache par cluster : chaque appel
 # à `_kubeconfig` fait deux allers-retours vers Magnum (`GET`/`POST /certificates`) qui, sur ce
@@ -110,6 +115,22 @@ class K8sWorkloadSimule:
         return None
 
     def supprimer_deployment(self, namespace: str, nom: str) -> None:
+        return None
+
+    def appliquer_regle_alerte(
+        self,
+        regle_id: str,
+        *,
+        groupe: str,
+        alerte: str,
+        expr: str,
+        duree: str,
+        labels: dict[str, str],
+        annotations: dict[str, str],
+    ) -> None:
+        return None
+
+    def supprimer_regle_alerte(self, regle_id: str) -> None:
         return None
 
 
@@ -358,6 +379,86 @@ class K8sWorkloadReel(K8sWorkloadSimule):
             _attendre_disparition(
                 lambda: core.read_namespaced_service(nom, namespace), attente_s=30.0
             )
+
+    def _nom_vmrule(self, regle_id: str) -> str:
+        import re
+
+        slug = re.sub(r"[^a-z0-9-]", "-", regle_id.lower()).strip("-") or "regle"
+        return f"synelia-regle-{slug}"[:253]
+
+    def appliquer_regle_alerte(
+        self,
+        regle_id: str,
+        *,
+        groupe: str,
+        alerte: str,
+        expr: str,
+        duree: str,
+        labels: dict[str, str],
+        annotations: dict[str, str],
+    ) -> None:
+        """Crée/remplace un `VMRule` (opérateur victoria-metrics-k8s-stack) : `vmalert` le
+        sélectionne automatiquement (`selectAllByDefault: true`) sans redéploiement."""
+        from kubernetes import client as k8s_client
+
+        namespace = os.environ.get(ENV_OBSERVABILITE_NAMESPACE, "observability")
+        nom = self._nom_vmrule(regle_id)
+        corps = {
+            "apiVersion": f"{_GROUPE_VMRULE}/{_VERSION_VMRULE}",
+            "kind": "VMRule",
+            "metadata": {
+                "name": nom,
+                "namespace": namespace,
+                "labels": {"synelia.cloud/regle-alerte": regle_id},
+            },
+            "spec": {
+                "groups": [
+                    {
+                        "name": groupe,
+                        "rules": [
+                            {
+                                "alert": alerte,
+                                "expr": expr,
+                                "for": duree,
+                                "labels": labels,
+                                "annotations": annotations,
+                            }
+                        ],
+                    }
+                ]
+            },
+        }
+        custom = k8s_client.CustomObjectsApi(self._api_client())
+        try:
+            custom.create_namespaced_custom_object(
+                _GROUPE_VMRULE, _VERSION_VMRULE, namespace, _PLURIEL_VMRULE, corps
+            )
+        except k8s_client.exceptions.ApiException as exc:
+            if exc.status != 409:
+                raise erreurs.amont_indisponible("kubernetes", str(exc)) from exc
+            try:
+                custom.replace_namespaced_custom_object(
+                    _GROUPE_VMRULE, _VERSION_VMRULE, namespace, _PLURIEL_VMRULE, nom, corps
+                )
+            except k8s_client.exceptions.ApiException as exc2:
+                raise erreurs.amont_indisponible("kubernetes", str(exc2)) from exc2
+
+    def supprimer_regle_alerte(self, regle_id: str) -> None:
+        from kubernetes import client as k8s_client
+
+        namespace = os.environ.get(ENV_OBSERVABILITE_NAMESPACE, "observability")
+        custom = k8s_client.CustomObjectsApi(self._api_client())
+        try:
+            custom.delete_namespaced_custom_object(
+                _GROUPE_VMRULE,
+                _VERSION_VMRULE,
+                namespace,
+                _PLURIEL_VMRULE,
+                self._nom_vmrule(regle_id),
+            )
+        except k8s_client.exceptions.ApiException as exc:
+            if exc.status != 404:
+                raise erreurs.amont_indisponible("kubernetes", str(exc)) from exc
 
 
 _SIMULE = K8sWorkloadSimule()
