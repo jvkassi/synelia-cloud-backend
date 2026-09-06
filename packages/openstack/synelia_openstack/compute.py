@@ -346,8 +346,12 @@ class ComputeOpenStack(ComputeSimule):
 
             if isinstance(exc, _e.AppError):
                 raise
-            if type(exc).__name__ == "ResourceNotFound":
-                return  # déjà absent avant même la vérification : succès
+            if "NotFound" in type(exc).__name__:
+                # Couvre `ResourceNotFound` (helpers `find_*`) et `NotFoundException` (`get_*`
+                # direct, ex. lors d'une reprise de travail qui rejoue cette étape après un
+                # premier passage déjà réussi — la VM n'existe alors plus du tout, ce qui est
+                # justement le succès recherché, pas un échec).
+                return
             raise traduire(exc, "Machine virtuelle") from None
 
     def redimensionner(self, serveur_id: str, gabarit_id: str) -> None:

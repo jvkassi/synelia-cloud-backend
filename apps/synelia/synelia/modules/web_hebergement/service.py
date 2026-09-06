@@ -877,13 +877,17 @@ class ExecuteurHebergementSupprimer(Executeur):
         policy_id = secrets.get("lb_policy_id")
         if policy_id:
             n.supprimer_regle_hote(policy_id, loadbalancer_id=lb_id)
+        # Avant de supprimer le pool : chaque application installée dessus (`site.installer`)
+        # porte sa propre règle L7 sur ce même pool — Octavia refuse de le supprimer tant
+        # qu'une policy le référence encore (vécu en direct, `Pool ... is in use by L7
+        # policy ...`). `depot_enfants` les retire toutes avant qu'on tente `supprimer_pool`.
+        await depot_enfants(ctx, travail.cible_id or "")
         pool_id = secrets.get("lb_pool_id")
         membre_id = secrets.get("lb_membre_id")
         if pool_id and membre_id:
             n.supprimer_membre(pool_id, membre_id, loadbalancer_id=lb_id)
         if pool_id:
             n.supprimer_pool(pool_id, loadbalancer_id=lb_id)
-        await depot_enfants(ctx, travail.cible_id or "")
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
@@ -1094,5 +1098,35 @@ class ExecuteurTacheExecution(Executeur):
 async def depot_enfants(ctx: Contexte, hebergement_id: str) -> None:
     await depot_comptes.supprimer_enfants(ctx, hebergement_id)
     await depot_taches.supprimer_enfants(ctx, hebergement_id)
+    # Chaque application (`site.installer`) posée sur cet hébergement porte sa propre règle
+    # L7 sur le pool partagé de la VM — Octavia refuse de supprimer un pool encore référencé
+    # par une policy (`Pool ... is in use by L7 policy ...`, vécu en direct). Les retirer
+    # d'abord est ce qui débloque la suppression du pool par `ExecuteurHebergementSupprimer`
+    # juste après. La VM elle-même étant sur le point d'être détruite, inutile d'y faire un
+    # `docker compose down` en plus : seule la policy compte ici.
+    zone = await zone_vps_secrets(ctx)
     for s in await depot_sites.tous(ctx, filtre=lambda x: x.hebergementId == hebergement_id):
+        try:
+            secrets = await depot_sites.secrets(ctx, s.id)
+        except Exception:  # noqa: BLE001
+            secrets = {}
+        policy_id = secrets.get("lb_policy_id")
+        if policy_id:
+            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
         await depot_sites.supprimer(ctx, s.id, logique=True)
+    # Drive n'est pas un enfant au sens du dépôt (pas de `hebergementId`, résolu par domaine) :
+    # import tardif pour éviter le cycle (web_drive importe déjà web_hebergement). Même raison
+    # de le faire ici — sa policy L7 vit sur ce même pool.
+    from synelia.modules.web_drive.service import depot as depot_drive
+
+    h = await depot.trouver(ctx, hebergement_id)
+    if h and h.domaine:
+        for d in await depot_drive.tous(ctx, filtre=lambda x: x.domaine == h.domaine):
+            try:
+                secrets = await depot_drive.secrets(ctx, d.id)
+            except Exception:  # noqa: BLE001
+                secrets = {}
+            policy_id = secrets.get("lb_policy_id")
+            if policy_id:
+                amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+            await depot_drive.supprimer(ctx, d.id, logique=True)
