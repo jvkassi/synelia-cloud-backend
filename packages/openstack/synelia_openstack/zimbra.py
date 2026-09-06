@@ -2,8 +2,9 @@
 
 Paire `ZimbraSimule` / `ZimbraReel`. Le réel n'est appelé que si `SYNELIA_ZIMBRA_URL`
 est défini (+ `SYNELIA_ZIMBRA_ADMIN_USER` / `SYNELIA_ZIMBRA_ADMIN_PASSWORD`) ; sinon le
-simulé répond instantanément. Les méthodes reprennent exactement les signatures de
-`synelia_openstack.stalwart.StalwartSimule` : seul l'import change côté `service.py`."""
+simulé répond instantanément. Les méthodes reprennent exactement les signatures de l'ancienne
+intégration Stalwart (abandonnée au profit de Zimbra) : seul l'import a changé côté
+`service.py`."""
 
 from __future__ import annotations
 
