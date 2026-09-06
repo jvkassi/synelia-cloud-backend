@@ -267,6 +267,9 @@ async def ouvrir_console_vm(vmId: str, ctx: Contexte = Depends(exige("vm.power")
         raise
     except Exception as exc:  # noqa: BLE001
         raise traduire(exc, "Machine virtuelle") from None
+    await journaliser(
+        ctx, action="vm.console_ouverte", cible_type="vm", cible_id=vmId, cible=vm.nom
+    )
     return m.ConsoleVm(url=url, protocole="vnc", expire=maintenant() + timedelta(hours=2))
 
 
@@ -462,6 +465,9 @@ async def supprimer_instantane_vm(
 ) -> Any:  # noqa: N803
     await instantane_depot.obtenir(ctx, instantaneId)
     await instantane_depot.supprimer(ctx, instantaneId, logique=False)
+    await journaliser(
+        ctx, action="vm.instantane.suppression", cible_type="instantane_vm", cible_id=instantaneId
+    )
     return Response(status_code=204)
 
 

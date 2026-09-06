@@ -9,6 +9,7 @@ from synelia_db.modeles import Travail
 from synelia_kernel import erreurs
 from synelia_kernel.dates import depuis_iso
 
+from synelia.audit import journaliser
 from synelia.deps import Ctx, Page
 from synelia.deps.contexte import Contexte
 from synelia.deps.pagination import filtrer_trier_paginer
@@ -58,7 +59,11 @@ async def obtenir_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
     response_model_exclude_none=True,
 )
 async def relancer_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
-    return vers_contrat(await moteur.relancer(ctx, await _travail(ctx, travailId)))
+    t = await moteur.relancer(ctx, await _travail(ctx, travailId))
+    await journaliser(
+        ctx, action="travail.relance", cible_type="travail", cible_id=t.id, cible=t.label
+    )
+    return vers_contrat(t)
 
 
 @router.post(
@@ -68,4 +73,8 @@ async def relancer_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
     response_model_exclude_none=True,
 )
 async def annuler_travail(ctx: Ctx, travailId: str) -> Any:  # noqa: N803
-    return vers_contrat(await moteur.annuler(ctx, await _travail(ctx, travailId)))
+    t = await moteur.annuler(ctx, await _travail(ctx, travailId))
+    await journaliser(
+        ctx, action="travail.annulation", cible_type="travail", cible_id=t.id, cible=t.label
+    )
+    return vers_contrat(t)

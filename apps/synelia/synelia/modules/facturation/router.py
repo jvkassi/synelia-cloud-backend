@@ -57,6 +57,13 @@ async def exporter_consommation(
             {"nom": "Publier l'URL de téléchargement", "dureeS": 2},
         ],
     )
+    await journaliser(
+        ctx,
+        action="facturation.export",
+        cible_type="travail",
+        cible_id=travail["id"],
+        details={"format": corps.format, "periode": corps.periode},
+    )
     return {"url": f"/v1/travaux/{travail['id']}/export", "expire": None}
 
 
@@ -222,6 +229,9 @@ async def modifier_moyen_paiement(
             if autre.id != moyenId and autre.defaut:
                 await depot.modifier(ctx, autre.id, {"defaut": False})
     m_ = await depot.modifier(ctx, moyenId, corps)
+    await journaliser(
+        ctx, action="moyen_paiement.modification", cible_type="moyen_paiement", cible_id=moyenId
+    )
     return m_
 
 
@@ -250,6 +260,13 @@ async def recharger_prepaye(
         )
     await crediter(ctx, ctx.org_id, f"Rechargement prépayé {corps.montant} FCFA", corps.montant)
     solde = await service.solde_credit(ctx)
+    await journaliser(
+        ctx,
+        action="prepaye.rechargement",
+        cible_type="organisation",
+        cible_id=ctx.org_id,
+        details={"montant": corps.montant},
+    )
     return {"solde": solde, "urlRedirection": None, "statut": "credite"}
 
 
@@ -336,7 +353,11 @@ async def modifier_souscription(
     corps: m.FacturationSouscriptionsSouscriptionIdPatchRequest,
     ctx: Contexte = Depends(exige("payment.update")),
 ) -> Any:  # noqa: N803
-    return await Depot("souscription", m.Souscription).modifier(ctx, souscriptionId, corps)
+    s = await Depot("souscription", m.Souscription).modifier(ctx, souscriptionId, corps)
+    await journaliser(
+        ctx, action="souscription.modification", cible_type="souscription", cible_id=souscriptionId
+    )
+    return s
 
 
 @router.delete(
@@ -358,6 +379,13 @@ async def resilier_souscription(
     fin = date.today().isoformat()
     await depot.modifier(ctx, souscriptionId, {"fin": fin})
     s = await depot.obtenir(ctx, souscriptionId)
+    await journaliser(
+        ctx,
+        action="souscription.resiliation",
+        cible_type="souscription",
+        cible_id=souscriptionId,
+        details={"finEffet": fin},
+    )
     return {"souscription": s, "finEffet": fin}
 
 

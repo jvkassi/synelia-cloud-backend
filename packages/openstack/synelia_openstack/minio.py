@@ -35,11 +35,23 @@ _ACTIONS_PAR_DROITS = {
 
 
 class MinioSimule:
+    # Stockage en mémoire du processus, partagé entre toutes les instances (chaque appelant
+    # recrée un `MinioSimule()` via `choisir_minio()`) : suffisant pour qu'un job simulé écrive
+    # un objet et qu'une route de téléchargement le relise ensuite dans le même processus.
+    _OBJETS: dict[tuple[str, str], bytes] = {}
+
     def creer_bucket(self, nom: str, region: str | None = None) -> dict[str, Any]:
         return {"id": nom, "taille_go": 0.0, "objets": 0}
 
     def supprimer_bucket(self, nom: str) -> None:
         return None
+
+    def deposer_objet(self, bucket: str, cle: str, contenu: bytes, content_type: str) -> None:
+        self.creer_bucket(bucket)
+        MinioSimule._OBJETS[(bucket, cle)] = contenu
+
+    def recuperer_objet(self, bucket: str, cle: str) -> bytes | None:
+        return MinioSimule._OBJETS.get((bucket, cle))
 
     def usage(self, nom: str) -> dict[str, Any]:
         return {"taille_go": 0.0, "objets": 0, "requetes": 0, "egress_go": 0.0}
@@ -109,6 +121,39 @@ class MinioReel(MinioSimule):
             "requetes": 0,
             "egress_go": 0.0,
         }
+
+    def deposer_objet(self, bucket: str, cle: str, contenu: bytes, content_type: str) -> None:
+        import io
+
+        c = self._client()
+        try:
+            if not c.bucket_exists(bucket):
+                c.make_bucket(bucket)
+            c.put_object(
+                bucket, cle, io.BytesIO(contenu), length=len(contenu), content_type=content_type
+            )
+        except Exception as exc:  # noqa: BLE001
+            raise erreurs.amont_indisponible("minio", str(exc)) from exc
+
+    def recuperer_objet(self, bucket: str, cle: str) -> bytes | None:
+        c = self._client()
+        try:
+            if not c.bucket_exists(bucket):
+                return None
+            reponse = c.get_object(bucket, cle)
+        except Exception as exc:  # noqa: BLE001
+            from minio.error import (
+                S3Error,
+            )  # import paresseux : dépendance non nécessaire en simulé
+
+            if isinstance(exc, S3Error) and exc.code == "NoSuchKey":
+                return None
+            raise erreurs.amont_indisponible("minio", str(exc)) from exc
+        try:
+            return reponse.read()
+        finally:
+            reponse.close()
+            reponse.release_conn()
 
     # ── IAM (utilisateurs, policies) via `mc admin` ───────────────────────
     def _config_dir(self) -> str:

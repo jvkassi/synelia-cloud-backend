@@ -25,6 +25,9 @@ dependencies = [
   "python-multipart>=0.0.20",
   "openstacksdk>=4.0",
   "aiosmtpd>=1.4.6",
+  "opentelemetry-sdk>=1.44.0",
+  "opentelemetry-exporter-otlp>=1.44.0",
+  "opentelemetry-instrumentation-fastapi>=0.65b0",
 ]
 
 [project.optional-dependencies]

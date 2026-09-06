@@ -689,6 +689,9 @@ async def lancer_campagne_maj(
             "La campagne ne peut pas être lancée dans son état actuel.", code="etat_invalide"
         )
     await depot_campagne_maj.definir_statut(ctx, c.id, "en_cours")
+    await journaliser(
+        ctx, action="campagne_maj.lancement", cible_type="campagne_maj", cible_id=c.id, cible=c.nom
+    )
     return await demarrer_travail(
         ctx, "admin.maj.lancement", c.nom, cible_type="campagne_maj", cible_id=c.id, entree={}
     )
@@ -709,6 +712,9 @@ async def suspendre_campagne_maj(
             "La campagne ne peut pas être suspendue dans son état actuel.", code="etat_invalide"
         )
     await depot_campagne_maj.definir_statut(ctx, c.id, "suspendue")
+    await journaliser(
+        ctx, action="campagne_maj.suspension", cible_type="campagne_maj", cible_id=c.id, cible=c.nom
+    )
     return await demarrer_travail(
         ctx, "admin.suspension", c.nom, cible_type="campagne_maj", cible_id=c.id, entree={}
     )
@@ -839,6 +845,13 @@ async def lancer_campagne_migration(
             "La campagne ne peut pas être lancée dans son état actuel.", code="etat_invalide"
         )
     await depot_campagne_migration.definir_statut(ctx, c.id, "en_cours")
+    await journaliser(
+        ctx,
+        action="campagne_migration.lancement",
+        cible_type="campagne_migration",
+        cible_id=c.id,
+        cible=c.nom,
+    )
     return await demarrer_travail(
         ctx,
         "admin.migration.lancement",
@@ -862,6 +875,13 @@ async def annuler_campagne_migration(
 ) -> Any:  # noqa: N803
     c = await _campagne_migration(ctx, campagneId)
     exiger_confirmation(c.nom, confirmation)
+    await journaliser(
+        ctx,
+        action="campagne_migration.rollback",
+        cible_type="campagne_migration",
+        cible_id=c.id,
+        cible=c.nom,
+    )
     return await demarrer_travail(
         ctx,
         "admin.migration.rollback",
@@ -887,6 +907,13 @@ async def suspendre_campagne_migration(
             "La campagne ne peut pas être suspendue dans son état actuel.", code="etat_invalide"
         )
     await depot_campagne_migration.definir_statut(ctx, c.id, "suspendue")
+    await journaliser(
+        ctx,
+        action="campagne_migration.suspension",
+        cible_type="campagne_migration",
+        cible_id=c.id,
+        cible=c.nom,
+    )
     return await demarrer_travail(
         ctx, "admin.suspension", c.nom, cible_type="campagne_migration", cible_id=c.id, entree={}
     )

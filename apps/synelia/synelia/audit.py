@@ -14,6 +14,28 @@ if TYPE_CHECKING:
     from synelia.deps.contexte import Contexte
 
 
+def _empreinte(precedent: str | None, org: str | None, ligne: Audit) -> str:
+    """Empreinte SHA-256 d'une ligne, chaînée à l'empreinte précédente. Utilisée à l'écriture
+    (`journaliser`) comme à la vérification (`verifier_chaine`) : les deux doivent recalculer
+    exactement le même hash à partir des mêmes champs pour que la chaîne ait un sens."""
+    charge = json.dumps(
+        [
+            precedent,
+            org,
+            iso(ligne.date),
+            ligne.acteur,
+            ligne.action,
+            ligne.cible_type,
+            ligne.cible_id,
+            ligne.resultat,
+            ligne.details or {},
+        ],
+        sort_keys=True,
+        default=str,
+    )
+    return hashlib.sha256(charge.encode()).hexdigest()
+
+
 async def journaliser(
     ctx: Contexte,
     *,
@@ -47,25 +69,55 @@ async def journaliser(
         details=details or {},
         hash_precedent=precedent,
     )
-    charge = json.dumps(
-        [
-            precedent,
-            org,
-            iso(ligne.date),
-            ligne.acteur,
-            action,
-            cible_type,
-            cible_id,
-            resultat,
-            ligne.details,
-        ],
-        sort_keys=True,
-        default=str,
-    )
-    ligne.hash = hashlib.sha256(charge.encode()).hexdigest()
+    ligne.hash = _empreinte(precedent, org, ligne)
     ctx.session.add(ligne)
     await ctx.session.flush()
     return ligne
+
+
+async def verifier_chaine(ctx: Contexte, org_id: str | None = None) -> dict[str, Any]:
+    """Rejoue la chaîne de hachage d'une organisation (par date croissante) et recalcule chaque
+    empreinte à partir des champs enregistrés : une ligne modifiée, supprimée ou insérée hors
+    séquence casse la chaîne à partir de ce point, et c'est immédiatement détectable — c'est tout
+    l'intérêt d'un hash chaîné plutôt qu'une simple empreinte par ligne."""
+    p = ctx.principal
+    org = org_id or (p.org_id if p else None)
+    lignes = (
+        (await ctx.session.execute(select(Audit).where(Audit.org_id == org).order_by(Audit.date)))
+        .scalars()
+        .all()
+    )
+    precedent: str | None = None
+    for n, ligne in enumerate(lignes, start=1):
+        if ligne.hash_precedent != precedent:
+            return {
+                "intacte": False,
+                "entreesVerifiees": n - 1,
+                "totalEntrees": len(lignes),
+                "ruptureId": ligne.id,
+                "ruptureDate": ligne.date,
+                "raison": "hash_precedent ne correspond pas à l'empreinte de la ligne antérieure",
+            }
+        attendu = _empreinte(precedent, org, ligne)
+        if ligne.hash != attendu:
+            return {
+                "intacte": False,
+                "entreesVerifiees": n - 1,
+                "totalEntrees": len(lignes),
+                "ruptureId": ligne.id,
+                "ruptureDate": ligne.date,
+                "raison": "empreinte recalculée différente de l'empreinte enregistrée",
+            }
+        precedent = ligne.hash
+    return {
+        "intacte": True,
+        "entreesVerifiees": len(lignes),
+        "totalEntrees": len(lignes),
+        "ruptureId": None,
+        "ruptureDate": None,
+        "raison": None,
+        "empreinteFinale": precedent,
+    }
 
 
 def vers_contrat(a: Audit) -> dict[str, Any]:
@@ -83,5 +135,6 @@ def vers_contrat(a: Audit) -> dict[str, Any]:
         "ip": a.ip,
         "correlationId": a.correlation_id,
         "details": a.details or {},
+        "hashPrecedent": a.hash_precedent,
         "hash": a.hash,
     }

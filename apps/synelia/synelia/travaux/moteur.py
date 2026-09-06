@@ -35,11 +35,33 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 from synelia_kernel.journal import journal
 
+from synelia import otel
 from synelia.deps.contexte import Contexte
 
 log = journal("travaux")
 
+
+def _enregistrer_metriques(travail: Travail) -> None:
+    """Émission temps réel (OTel) en plus de la ligne `travaux` en base — no-op tant que
+    `SYNELIA_OTEL_ENDPOINT` n'est pas configuré (cf. `synelia.otel`)."""
+    otel.compteur_travaux.add(1, {"type": travail.type, "statut": travail.statut})
+    if travail.duree_s is not None:
+        otel.histogramme_duree_travaux.record(travail.duree_s, {"type": travail.type})
+
+
 _EXECUTEURS: dict[str, type[Executeur]] = {}
+
+
+class PauseHumaine(Exception):
+    """Une étape lève ceci pour mettre le travail en pause — pas un échec, une attente réelle
+    d'une décision humaine (validation d'un flux d'orchestration, par exemple). `_executer` la
+    traite à part : le travail reste `running`, la tâche courante ne passe ni `ok` ni `failed`,
+    et rien n'avance tant que `reprendre_apres_pause` n'est pas appelé."""
+
+    def __init__(self, message: str, donnees: dict[str, Any] | None = None) -> None:
+        super().__init__(message)
+        self.message = message
+        self.donnees = donnees or {}
 
 
 class Executeur:
@@ -192,7 +214,17 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
             travail.taches = copy.deepcopy(taches)
             travail.statut = "rolled_back"
             await ctx.session.flush()
+            _enregistrer_metriques(travail)
             raise
+        except PauseHumaine as pause:
+            # Ni un succès ni un échec : le travail reste `running`, la tâche courante affiche
+            # le message d'attente, et `attente` (interne, absent du contrat `TravailProvisioning`)
+            # porte de quoi reprendre exactement là où l'exécution s'est arrêtée.
+            taches[i]["message"] = pause.message
+            travail.taches = copy.deepcopy(taches)
+            travail.contexte = {**travail.contexte, "attente": {"etapeIndex": i, **pause.donnees}}
+            await ctx.session.flush()
+            return
         except Exception as exc:  # noqa: BLE001
             message = (
                 exc.message if isinstance(exc, erreurs.AppError) else str(exc) or type(exc).__name__
@@ -222,6 +254,7 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
             travail.termine_le = maintenant()
             travail.duree_s = int((travail.termine_le - debut).total_seconds())
             await ctx.session.flush()
+            _enregistrer_metriques(travail)
             return
         taches[i]["statut"] = "ok"
         if message:
@@ -247,12 +280,14 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
         travail.termine_le = maintenant()
         travail.duree_s = int((travail.termine_le - travail.started_at).total_seconds())
         await ctx.session.flush()
+        _enregistrer_metriques(travail)
         return
     travail.statut = "done"
     travail.erreur = None
     travail.termine_le = maintenant()
     travail.duree_s = int((travail.termine_le - travail.started_at).total_seconds())
     await ctx.session.flush()
+    _enregistrer_metriques(travail)
 
 
 async def relancer(ctx: Contexte, travail: Travail) -> Travail:
@@ -269,6 +304,23 @@ async def relancer(ctx: Contexte, travail: Travail) -> Travail:
     travail.erreur = None
     travail.statut = "queued"
     await ctx.session.flush()
+    if reglages().temporal_adresse:
+        from synelia.travaux import temporal
+
+        await temporal.relancer(travail)
+        return travail
+    if _en_ligne():
+        await _executer(ctx, travail, depuis=depuis)
+    else:
+        await ctx.session.commit()
+        asyncio.get_running_loop().create_task(_executer_detache(travail.id, ctx))
+    return travail
+
+
+async def reprendre_apres_pause(ctx: Contexte, travail: Travail, depuis: int) -> Travail:
+    """Ré-entre dans l'étape `depuis` après une `PauseHumaine` — contrairement à `relancer`, le
+    travail n'est pas en échec : il est resté `running`. L'appelant (le domaine, pas le moteur)
+    a déjà écrit la décision quelque part que l'étape saura relire pour ne pas se repauser."""
     if reglages().temporal_adresse:
         from synelia.travaux import temporal
 
@@ -306,4 +358,5 @@ async def annuler(ctx: Contexte, travail: Travail) -> Travail:
     }
     travail.termine_le = maintenant()
     await ctx.session.flush()
+    _enregistrer_metriques(travail)
     return travail

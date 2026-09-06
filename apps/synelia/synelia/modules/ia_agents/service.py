@@ -205,7 +205,11 @@ SEMENCES: list[m.ModeleIA] = [
         unite="jeton",
         statut="disponible",
         usages=["Bases de connaissances", "Recherche sémantique"],
-        description="Modèle d'embedding : hors périmètre de la passerelle chat de ce MVP.",
+        description=(
+            "Modèle d'embedding : hors périmètre de la passerelle **chat** (`invoquer`), mais "
+            "réellement appelé par le pipeline d'ingestion/recherche des bases de connaissances "
+            "via Infinity (`SYNELIA_EMBEDDINGS_URL`) — voir `modules/ia_agents/connaissances.py`."
+        ),
         invocable=False,
     ),
     m.ModeleIA(
@@ -288,17 +292,10 @@ def _cle() -> str:
     return os.environ.get(ENV_CLE, "")
 
 
-async def invoquer(ctx: Contexte, agent: m.AgentIA, message: str) -> dict[str, Any]:
-    modele = await obtenir_modele_par_slug(ctx, agent.modele)
-    if modele is None or not modele.invocable:
-        raise erreurs.non_porte("Ce modèle n'est pas disponible sur cette passerelle.")
-
+async def _completer(modele: m.ModeleIA, agent: m.AgentIA, messages: list[dict[str, str]]) -> dict[str, Any]:
     corps = {
         "model": modele.slug,
-        "messages": [
-            {"role": "system", "content": agent.consigne},
-            {"role": "user", "content": message},
-        ],
+        "messages": messages,
         "temperature": agent.temperature,
         "top_p": agent.topP,
         "max_tokens": agent.jetonsMax,
@@ -340,6 +337,32 @@ async def invoquer(ctx: Contexte, agent: m.AgentIA, message: str) -> dict[str, A
         "coutFcfa": round(cout_fcfa, 4),
         "latenceMs": latence_ms,
     }
+
+
+async def invoquer(ctx: Contexte, agent: m.AgentIA, message: str) -> dict[str, Any]:
+    modele = await obtenir_modele_par_slug(ctx, agent.modele)
+    if modele is None or not modele.invocable:
+        raise erreurs.non_porte("Ce modèle n'est pas disponible sur cette passerelle.")
+    return await _completer(
+        modele,
+        agent,
+        [
+            {"role": "system", "content": agent.consigne},
+            {"role": "user", "content": message},
+        ],
+    )
+
+
+async def invoquer_messages(
+    ctx: Contexte, agent: m.AgentIA, messages: list[dict[str, str]]
+) -> dict[str, Any]:
+    """Comme `invoquer`, mais avec un historique de tours complet — la « mémoire partagée »
+    d'un flux d'orchestration : chaque appel d'agent voit les tours précédents, pas seulement
+    le dernier message."""
+    modele = await obtenir_modele_par_slug(ctx, agent.modele)
+    if modele is None or not modele.invocable:
+        raise erreurs.non_porte("Ce modèle n'est pas disponible sur cette passerelle.")
+    return await _completer(modele, agent, [{"role": "system", "content": agent.consigne}, *messages])
 
 
 @peupleur

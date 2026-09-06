@@ -10,6 +10,7 @@ from synelia_contract import modeles as m
 from synelia_contract import rbac
 from synelia_db.modeles import Organisation, Ressource
 
+from synelia.audit import journaliser
 from synelia.deps import Ctx, CtxPublic
 
 router = APIRouter(tags=["Compte & organisation active"])
@@ -126,6 +127,9 @@ async def modifier_onboarding(ctx: Ctx, corps: m.OnboardingPatchRequest) -> Any:
         (faites.add if corps.faite is not False else faites.discard)(corps.etape)
         etat["faites"] = sorted(faites)
     o.onboarding = etat
+    await journaliser(
+        ctx, action="onboarding.modification", cible_type="organisation", cible_id=ctx.org_id
+    )
     return await obtenir_onboarding(ctx)
 
 

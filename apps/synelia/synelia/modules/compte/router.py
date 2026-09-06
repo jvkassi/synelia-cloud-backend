@@ -43,7 +43,9 @@ async def obtenir_mon_compte(ctx: Ctx) -> Any:
     role = ctx.role
     p = ctx.principal
     if p and p.est_admin_plateforme:
-        role = p.role_equipe or role  # l'équipe Synelia voit ses droits plateforme, pas ceux du rôle d'org
+        role = (
+            p.role_equipe or role
+        )  # l'équipe Synelia voit ses droits plateforme, pas ceux du rôle d'org
     perms = [a for a, perm in permissions_effectives(role).items() if perm != "none"]
     return {
         "utilisateur": auth.utilisateur_contrat(u),
@@ -63,6 +65,7 @@ async def modifier_mon_compte(ctx: Ctx, corps: m.MoiPatchRequest) -> Any:
         u.fonction = corps.fonction
     if corps.telephone is not None:
         u.preferences = {**(u.preferences or {}), "telephone": corps.telephone}
+    await journaliser(ctx, action="compte.modification", cible_type="utilisateur", cible_id=u.id)
     return auth.utilisateur_contrat(u)
 
 
@@ -86,9 +89,17 @@ async def choisir_organisation_active(ctx: Ctx, corps: m.MoiOrganisationActivePu
         )
     if corps.memoriser:
         u.org_active_id = corps.orgId
-    return await auth.ouvrir_session(
+    rep = await auth.ouvrir_session(
         ctx.session, u, ip=ctx.ip, user_agent=ctx.entete("user-agent"), org_id=corps.orgId
     )
+    await journaliser(
+        ctx,
+        action="compte.organisation_active_changee",
+        cible_type="organisation",
+        cible_id=corps.orgId,
+        org_id=corps.orgId,
+    )
+    return rep
 
 
 @router.get("/preferences", response_model=m.Preferences, response_model_exclude_none=True)
