@@ -62,14 +62,38 @@ class ExecuteurSauvegardeRun(Executeur):
 @executeur("web.backup.testrestauration")
 class ExecuteurSauvegardeTestRestauration(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
+        from synelia.modules.web_hebergement.service import amont
+
         s = await depot.obtenir(ctx, travail.cible_id or "")
+        derniere = s.executions[-1] if s.executions else None
+        resultat = "ok"
+        if derniere is not None:
+            try:
+                secrets = await depot.secrets(ctx, s.id)
+                image_id = secrets.get(f"image_{derniere.id}")
+                if image_id:
+                    # Une restauration ne vaut que ce que vaut l'image qu'elle restaurerait :
+                    # on vérifie que le snapshot Glande de la dernière exécution existe
+                    # toujours et est réellement utilisable, pas seulement qu'il l'était
+                    # au moment de la sauvegarde.
+                    statut = amont().statut_image(image_id)
+                    resultat = "ok" if statut == "active" else "echec"
+                else:
+                    # Aucune image réelle associée (hébergement de démo, ou sauvegarde
+                    # antérieure au câblage réel) : rien à vérifier, pas d'échec inventé.
+                    resultat = "ok"
+            except Exception:  # noqa: BLE001
+                resultat = "echec"
+        else:
+            # Pas de sauvegarde du tout : un test de restauration n'a rien à restaurer.
+            resultat = "echec"
         await depot.modifier(
             ctx,
             s.id,
             {
                 "dernierTestRestauration": {
                     "date": maintenant().date().isoformat(),
-                    "resultat": "ok",
+                    "resultat": resultat,
                     "dureeMin": 3,
                 }
             },

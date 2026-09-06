@@ -170,6 +170,9 @@ class ComputeSimule:
     def instantane(self, serveur_id: str, nom: str) -> str:
         return f"img-{nouvel_id()[:8]}"
 
+    def statut_image(self, image_id: str, identifiants: dict[str, Any] | None = None) -> str:
+        return "active"
+
     def console(self, serveur_id: str) -> str:
         return f"https://console.synelia.cloud/novnc/{serveur_id}?token={nouvel_id()}"
 
@@ -357,6 +360,14 @@ class ComputeOpenStack(ComputeSimule):
 
     def instantane(self, serveur_id: str, nom: str) -> str:
         return self._c().compute.create_server_image(serveur_id, nom, wait=True).id
+
+    def statut_image(self, image_id: str, identifiants: dict[str, Any] | None = None) -> str:
+        """Statut Glance réel de l'image : `active` seulement si le snapshot est réellement
+        restaurable — `queued`/`saving` (encore en cours), `killed`/`deleted` (perdue),
+        `absente` si Glance ne la connaît plus du tout (purge de rétention, suppression)."""
+        c = self._connexion_pour(identifiants)
+        img = c.image.find_image(image_id, ignore_missing=True)
+        return str(img.status) if img else "absente"
 
     def console(self, serveur_id: str) -> str:
         return self._c().compute.create_console(serveur_id, console_type="novnc")["url"]
