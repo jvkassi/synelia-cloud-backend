@@ -15,9 +15,7 @@ et par `POST /v1/web/smtp/cles`.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import hmac
-import json
 import os
 import smtplib
 import ssl
@@ -165,10 +163,20 @@ def _authentifier(
 
 
 # ── journal d'audit (même schéma haché que `synelia.audit.journaliser`, sans `Contexte`) ──────
+#
+# Bug réel trouvé en vérifiant la chaîne (`synelia.audit.verifier_chaine`) sur ce lab : cette
+# fonction recalculait sa propre empreinte à la main, avec une charge qui omettait `cible_type`/
+# `cible_id` — présente ici dans `Audit.cible_type` mais jamais dans le hash. Le commentaire
+# promettait « même schéma », le code avait divergé : toute ligne posée par le relais SMTP
+# échouait la revérification, pas parce qu'elle avait été altérée mais parce que sa propre
+# empreinte n'était pas correcte dès l'écriture. Corrigé en réutilisant `synelia.audit.empreinte`,
+# la même fonction que `journaliser`, pour ne plus avoir deux formules qui peuvent diverger.
 async def _journaliser(
     s: Any, *, org_id: str | None, action: str, resultat: str, details: dict[str, Any]
 ) -> None:
     from sqlalchemy import desc
+
+    from synelia.audit import empreinte
 
     precedent = (
         await s.execute(
@@ -185,12 +193,7 @@ async def _journaliser(
         details=details,
         hash_precedent=precedent,
     )
-    charge = json.dumps(
-        [precedent, org_id, iso(ligne.date), ligne.acteur, action, resultat, details],
-        sort_keys=True,
-        default=str,
-    )
-    ligne.hash = hashlib.sha256(charge.encode()).hexdigest()
+    ligne.hash = empreinte(precedent, org_id, ligne)
     s.add(ligne)
 
 
@@ -207,14 +210,18 @@ async def _verifier_et_incrementer_quota(cred: dict[str, Any]) -> tuple[bool, st
             if donnees.get("statut") != "active":
                 return False, "clé révoquée"
             relais = (
-                await s.execute(
-                    select(Ressource).where(
-                        Ressource.type == "smtp_relais",
-                        Ressource.org_id == r.org_id,
-                        Ressource.supprime_le.is_(None),
+                (
+                    await s.execute(
+                        select(Ressource).where(
+                            Ressource.type == "smtp_relais",
+                            Ressource.org_id == r.org_id,
+                            Ressource.supprime_le.is_(None),
+                        )
                     )
                 )
-            ).scalars().first()
+                .scalars()
+                .first()
+            )
             if relais is None or not (relais.donnees or {}).get("actif"):
                 return False, "relais inactif"
             plafond = donnees.get("quotaJour") or 0

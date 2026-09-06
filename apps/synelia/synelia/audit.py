@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from synelia.deps.contexte import Contexte
 
 
-def _empreinte(precedent: str | None, org: str | None, ligne: Audit) -> str:
+def empreinte(precedent: str | None, org: str | None, ligne: Audit) -> str:
     """Empreinte SHA-256 d'une ligne, chaînée à l'empreinte précédente. Utilisée à l'écriture
     (`journaliser`) comme à la vérification (`verifier_chaine`) : les deux doivent recalculer
     exactement le même hash à partir des mêmes champs pour que la chaîne ait un sens."""
@@ -69,7 +69,7 @@ async def journaliser(
         details=details or {},
         hash_precedent=precedent,
     )
-    ligne.hash = _empreinte(precedent, org, ligne)
+    ligne.hash = empreinte(precedent, org, ligne)
     ctx.session.add(ligne)
     await ctx.session.flush()
     return ligne
@@ -98,7 +98,7 @@ async def verifier_chaine(ctx: Contexte, org_id: str | None = None) -> dict[str,
                 "ruptureDate": ligne.date,
                 "raison": "hash_precedent ne correspond pas à l'empreinte de la ligne antérieure",
             }
-        attendu = _empreinte(precedent, org, ligne)
+        attendu = empreinte(precedent, org, ligne)
         if ligne.hash != attendu:
             return {
                 "intacte": False,
