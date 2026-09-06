@@ -64,4 +64,10 @@ async def amorcer() -> None:
 
                 await peupler(s, org, admin)
                 await s.commit()
+        # Catalogue plateforme réel (Offres) : indépendant de SYNELIA_SEED_DEMO, rejoué à
+        # chaque démarrage — idempotent, cf. `admin_catalogue.service.semer_catalogue_reel`.
+        from synelia.modules.admin_catalogue.service import semer_catalogue_reel
+
+        await semer_catalogue_reel(s)
+        await s.commit()
     _AMORCE = True

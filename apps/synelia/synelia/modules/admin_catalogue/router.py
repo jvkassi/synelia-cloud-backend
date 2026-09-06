@@ -160,6 +160,12 @@ async def supprimer_offre(
     offreId: str, ctx: Contexte = Depends(exige_admin("catalog.edit"))
 ) -> Response:  # noqa: N803
     offre = await depot_offre.obtenir(ctx, offreId, org_id=None)
+    if offre.statut != "brouillon":
+        raise erreurs.conflit(
+            "Une offre publiée ne se supprime pas, elle se déprécie — elle a été vendue. "
+            "Seul un brouillon jamais souscrit se supprime.",
+            code="offre_publiee",
+        )
     if offre.souscriptionsActives > 0:
         raise erreurs.conflit(
             "Cette offre a des souscriptions actives, elle ne peut être supprimée.",
