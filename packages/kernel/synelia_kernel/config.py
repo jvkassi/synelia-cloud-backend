@@ -26,6 +26,7 @@ class Reglages(BaseSettings):
     prefixe_api: str = "/v1"
     docs_actives: bool = True
     url_publique: str = "http://localhost:4000"
+    url_frontend: str = "http://localhost:3000"
     cors_origines: list[str] = Field(default_factory=lambda: ["*"])
 
     database_url: str = Field(default_factory=_url_base_par_defaut)

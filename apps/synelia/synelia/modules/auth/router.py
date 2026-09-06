@@ -6,7 +6,7 @@ from fastapi import APIRouter, Body, status
 from sqlalchemy import select
 from synelia_contract import modeles as m
 from synelia_db.modeles import Invitation, Membership, Organisation, SessionAuth, Utilisateur
-from synelia_kernel import erreurs
+from synelia_kernel import courriel, erreurs
 from synelia_kernel.chiffrement import dechiffrer
 from synelia_kernel.dates import dans, maintenant
 from synelia_kernel.ids import jeton_opaque
@@ -293,7 +293,15 @@ async def demander_reinitialisation(ctx: CtxPublic, corps: m.AuthMotDePasseOubli
         brut = jeton_opaque()
         u.reinit_jeton_hash = hacher_jeton(brut)
         u.reinit_expire_le = dans(3600)
-        # ponytail: pas d'envoi de courriel encore — le jeton est journalisé côté serveur (dev)
+        lien = f"{ctx.reglages.url_frontend}/reinitialiser-mot-de-passe?jeton={brut}"
+        await courriel.envoyer(
+            u.email,
+            "Réinitialiser votre mot de passe Synelia Cloud",
+            f"Bonjour {u.nom},\n\n"
+            f"Une réinitialisation de mot de passe a été demandée pour votre compte. "
+            f"Ce lien est valable une heure :\n\n{lien}\n\n"
+            f"Si vous n'êtes pas à l'origine de cette demande, ignorez ce message.",
+        )
         await journaliser(
             ctx,
             action="auth.reinitialisation_demandee",

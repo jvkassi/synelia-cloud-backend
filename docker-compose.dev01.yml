@@ -25,6 +25,7 @@ services:
     environment:
       SYNELIA_ENV: production
       SYNELIA_URL_PUBLIQUE: https://api.synelia.dev01.ovh.smile.ci
+      SYNELIA_URL_FRONTEND: https://app.synelia.dev01.ovh.smile.ci
       SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:${POSTGRES_PASSWORD}@postgres:5432/synelia
       SYNELIA_SECRET: ${SYNELIA_SECRET:?}
       SYNELIA_SEED_ADMIN_MOT_DE_PASSE: ${SYNELIA_SEED_ADMIN_MOT_DE_PASSE:?}
@@ -56,6 +57,11 @@ services:
       SYNELIA_ZIMBRA_URL: https://zimbra:7071
       SYNELIA_ZIMBRA_ADMIN_USER: admin@zimbra.synelia.internal
       SYNELIA_ZIMBRA_ADMIN_PASSWORD: ${ZIMBRA_ADMIN_PASSWORD:?}
+      # Compte SMTP administratif réel (courriels transactionnels : reset mdp, invitations, MFA) —
+      # distinct du Zimbra ci-dessus (mailboxes clientes) et du relais SMTP produit.
+      SYNELIA_SMTP_ADMIN_HOTE: ${SYNELIA_SMTP_ADMIN_HOTE:?}
+      SYNELIA_SMTP_ADMIN_UTILISATEUR: ${SYNELIA_SMTP_ADMIN_UTILISATEUR:?}
+      SYNELIA_SMTP_ADMIN_MOT_DE_PASSE: ${SYNELIA_SMTP_ADMIN_MOT_DE_PASSE:?}
     ports: ["127.0.0.1:4010:4000"]
     restart: unless-stopped
 

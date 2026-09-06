@@ -7,7 +7,7 @@ from sqlalchemy import func, select
 from synelia_contract import modeles as m
 from synelia_contract.rbac import ROLES_ORDRE
 from synelia_db.modeles import Invitation, Membership, Organisation, Utilisateur
-from synelia_kernel import erreurs
+from synelia_kernel import courriel, erreurs
 from synelia_kernel.dates import dans
 from synelia_kernel.ids import jeton_opaque, nouvel_id
 
@@ -255,6 +255,7 @@ async def inviter_membre(
         )
     if corps.role not in ROLES_ORDRE:
         raise erreurs.validation("Rôle inconnu.", {"role": "invalide"})
+    jeton_brut = jeton_opaque()
     inv = Invitation(
         id=nouvel_id(),
         org_id=ctx.org_id,
@@ -262,7 +263,7 @@ async def inviter_membre(
         role=corps.role,
         scope_type=corps.scopeType or "org",
         scope_id=corps.scopeId,
-        jeton_hash=hacher_jeton(jeton_opaque()),
+        jeton_hash=hacher_jeton(jeton_brut),
         invite_par=ctx.utilisateur_id,
         statut="en_attente",
         expire_le=dans(DUREE_INVITATION_S),
@@ -270,6 +271,15 @@ async def inviter_membre(
     )
     ctx.session.add(inv)
     await ctx.session.flush()
+    org = await ctx.session.get(Organisation, ctx.org_id)
+    lien = f"{ctx.reglages.url_frontend}/invitation/{jeton_brut}"
+    await courriel.envoyer(
+        email,
+        f"Invitation à rejoindre {org.nom if org else 'une organisation'} sur Synelia Cloud",
+        f"Vous avez été invité·e à rejoindre {org.nom if org else ''} en tant que {corps.role}.\n\n"
+        f"{corps.message + chr(10) + chr(10) if corps.message else ''}"
+        f"Ce lien est valable 7 jours :\n\n{lien}",
+    )
     await journaliser(
         ctx,
         action="membre.invitation",
