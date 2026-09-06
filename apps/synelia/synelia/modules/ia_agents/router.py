@@ -509,6 +509,14 @@ async def rechercher_connaissance(
         )
         cout_fcfa = jetons * ((modele_embed.prixEntree if modele_embed else 45) / 1_000_000)
         await cles.crediter_apres_appel(ctx, cle_ia, jetons=jetons, cout_fcfa=cout_fcfa)
+    await journaliser(
+        ctx,
+        action="connaissance_ia.recherche",
+        cible_type="connaissance_ia",
+        cible_id=connaissanceId,
+        cible=base.nom,
+        details={"jetons": jetons},
+    )
     return {"fragments": fragments}
 
 
