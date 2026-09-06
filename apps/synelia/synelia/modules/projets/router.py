@@ -95,9 +95,17 @@ async def creer_projet(
         cree=maintenant(),
         environnements=corps.environnements or ["production"],
         variables=[],
+        cible=corps.cible or "k8s",
     )
     await s.depot_projet.creer(ctx, projet, parent_id=corps.espaceId)
-    s.k8s().creer_namespace(s.namespace_projet(projet))
+    if projet.cible == "vm":
+        # Provisionnement paresseux : contrairement à un namespace Kubernetes (objet API sans
+        # coût réel propre, créé ici sans attendre un premier service), la VM Nova dédiée
+        # d'un projet en cible `vm` a un coût réel — elle n'est provisionnée qu'au premier
+        # service ayant réellement quelque chose à exécuter (`_assurer_vm_projet`).
+        pass
+    else:
+        s.k8s().creer_namespace(s.namespace_projet(projet))
     await journaliser(
         ctx, action="projet.creation", cible_type="projet", cible_id=projet.id, cible=projet.nom
     )
@@ -271,7 +279,7 @@ async def creer_service_projet(
         version=corps.version or (modele.version if modele else None),
         base=m.Base1(
             nom=corps.nom,
-            utilisateur=f"{corps.nom}_user",
+            utilisateur=s.utilisateur_base(corps.nom),
             hoteInterne=s.hote_interne(
                 m.ServiceProjet(
                     id=service_id,
@@ -297,11 +305,12 @@ async def creer_service_projet(
     )
     secrets = {"motDePasse": _mot_de_passe()}
     if corps.type == "base":
+        utilisateur_bd = s.utilisateur_base(corps.nom)
         secrets.update(
             {
-                "utilisateur": f"{corps.nom}_user",
+                "utilisateur": utilisateur_bd,
                 "base": corps.nom,
-                "uri": f"{corps.moteur or 'postgresql'}://{corps.nom}_user:{secrets['motDePasse']}@{service.base.hoteInterne}:{service.base.port}/{corps.nom}"
+                "uri": f"{corps.moteur or 'postgresql'}://{utilisateur_bd}:{secrets['motDePasse']}@{service.base.hoteInterne}:{service.base.port}/{corps.nom}"
                 if service.base
                 else "",
             }

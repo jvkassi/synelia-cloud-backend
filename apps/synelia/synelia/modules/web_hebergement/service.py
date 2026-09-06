@@ -6,7 +6,7 @@ from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel import erreurs
 from synelia_kernel.dates import maintenant
-from synelia_kernel.ids import jeton_opaque, nouvel_id
+from synelia_kernel.ids import jeton_opaque, nouvel_id, slug_court
 from synelia_openstack import fournisseur
 from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
 from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
@@ -449,17 +449,11 @@ def application_pour_site(site_type: str, hote: str) -> str:
 
 
 def _slug_site(site_id: str) -> str:
-    """Nom court, mais réellement unique, du site sur la VM partagée : `site_id` est un
-    UUIDv7 (`nouvel_id()`) dont les 8 premiers caractères hex n'encodent que les 32 bits de
-    poids fort d'un timestamp milliseconde sur 48 bits — ils sont donc **identiques pour
-    tous les sites créés dans la même fenêtre d'environ 65 secondes** (2**16 ms), un cas
-    fréquent en usage réel (plusieurs applications installées à la suite sur une même VM).
-    Bug vécu en le vérifiant en direct : Dolibarr et le site statique installés à ~25s
-    d'intervalle ont tous deux reçu le nom `app-01a07704`, chacun écrasant la route Traefik
-    de l'autre. Les 12 derniers caractères hex (sans tirets) tombent dans `rand_b`/`var` de
-    l'UUIDv7 — la partie réellement aléatoire — et restent donc uniques même à la même
-    milliseconde."""
-    return site_id.replace("-", "")[-12:]
+    """Nom court, mais réellement unique, du site sur la VM partagée — voir
+    `synelia_kernel.ids.slug_court` pour le bug de collision que ce choix évite (vécu et
+    corrigé ici en premier, réutilisé depuis par `projets.service` pour le même besoin sur
+    une VM de projet en cible `vm`)."""
+    return slug_court(site_id)
 
 
 def construire_site_stack(

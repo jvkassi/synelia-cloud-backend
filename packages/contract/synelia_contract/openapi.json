@@ -50806,6 +50806,15 @@
               "type": "string"
             }
           },
+          "cible": {
+            "type": "string",
+            "enum": [
+              "vm",
+              "k8s"
+            ],
+            "description": "Cible de calcul du projet : `k8s` (namespace sur le cluster PaaS partagé, par défaut) ou `vm` (une VM Nova dédiée, ses services en conteneurs Docker Compose). Fixée à la création.",
+            "default": "k8s"
+          },
           "variables": {
             "type": "array",
             "items": {
@@ -50872,6 +50881,14 @@
               "type": "string"
             },
             "description": "Par défaut `production`."
+          },
+          "cible": {
+            "type": "string",
+            "enum": [
+              "vm",
+              "k8s"
+            ],
+            "description": "Par défaut `k8s`. Ignoré en modification (non modifiable après création)."
           }
         },
         "required": [

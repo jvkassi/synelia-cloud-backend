@@ -2886,6 +2886,12 @@ class Projet(BaseModel):
     espaceId: str
     cree: AwareDatetime
     environnements: list[str]
+    cible: Annotated[
+        Literal["vm", "k8s"] | None,
+        Field(
+            description="Cible de calcul du projet : `k8s` (namespace sur le cluster PaaS partagé, par défaut) ou `vm` (une VM Nova dédiée, ses services en conteneurs Docker Compose). Fixée à la création."
+        ),
+    ] = "k8s"
     variables: Annotated[
         list[Variable1],
         Field(
@@ -2901,6 +2907,12 @@ class ProjetCreation(BaseModel):
     environnements: Annotated[list[str] | None, Field(description="Par défaut `production`.")] = (
         None
     )
+    cible: Annotated[
+        Literal["vm", "k8s"] | None,
+        Field(
+            description="Par défaut `k8s`. Ignoré en modification (non modifiable après création)."
+        ),
+    ] = None
 
 
 class Contexte(BaseModel):
