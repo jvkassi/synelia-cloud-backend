@@ -6,6 +6,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import unicodedata
 from datetime import UTC, datetime
 from typing import Any
 
@@ -171,5 +172,10 @@ async def telecharger_export(ctx: Contexte, travail: Travail) -> tuple[bytes, st
     if contenu is None:
         return None
     org = await ctx.session.get(Organisation, travail.org_id) if travail.org_id else None
-    nom = f"audit-{(org.nom if org else travail.org_id or 'plateforme')}-{travail.id[:8]}.{format_}"
+    brut = org.nom if org else travail.org_id or "plateforme"
+    # Un `Content-Disposition: filename="..."` n'est pas censé porter du texte hors ASCII : un nom
+    # d'organisation accentué ("Synelia (démo)") corromprait l'en-tête pour un client strict.
+    ascii_ = unicodedata.normalize("NFKD", brut).encode("ascii", "ignore").decode("ascii")
+    slug = "".join(c if c.isalnum() else "-" for c in ascii_).strip("-")
+    nom = f"audit-{slug or 'export'}-{travail.id[:8]}.{format_}"
     return contenu, CONTENT_TYPES[format_], nom
