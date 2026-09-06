@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import random
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -8,7 +7,7 @@ from fastapi import APIRouter, Depends, Response, status
 from synelia_contract import modeles as m
 from synelia_kernel import erreurs
 from synelia_kernel.dates import maintenant
-from synelia_kernel.ids import nouvel_id
+from synelia_kernel.ids import jeton_opaque, nouvel_id
 
 from synelia.audit import journaliser
 from synelia.depot import Depot
@@ -31,8 +30,9 @@ PORT_DEFAUT = 8080
 
 
 def _mot_de_passe() -> str:
-    alpha = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789"
-    return "".join(random.choice(alpha) for _ in range(16))
+    # `random` n'est pas un générateur cryptographique : un mot de passe de service réel
+    # doit sortir de `secrets` (via `jeton_opaque`, même convention que `bases`/`web_smtp`).
+    return jeton_opaque(16)
 
 
 def _cout(ressources: m.Ressources2) -> int:
