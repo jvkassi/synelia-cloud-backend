@@ -129,8 +129,9 @@ async def construire_facture(ctx: Contexte, org_id: str, periode: str) -> dict[s
         }
     )
     sous_total = sum(ligne["total"] for ligne in lignes)
+    facture_id = nouvel_id()
     facture = {
-        "id": nouvel_id(),
+        "id": facture_id,
         "orgId": org_id,
         "numero": numero,
         "periode": periode,
@@ -140,7 +141,9 @@ async def construire_facture(ctx: Contexte, org_id: str, periode: str) -> dict[s
         "total": argent.ttc(sous_total),
         "devise": "XOF",
         "statut": "emise",
-        "pdfUrl": f"/v1/facturation/factures/{nouvel_id()}/pdf",
+        # Bug réel corrigé : un `nouvel_id()` frais ici pointait vers un id inexistant, le
+        # téléchargement PDF de toute facture générée par un cycle rendait 404.
+        "pdfUrl": f"/v1/facturation/factures/{facture_id}/pdf",
         "echeance": (
             date(int(periode.split("-", maxsplit=1)[0]), int(periode.split("-")[1]), 1)
             + timedelta(days=31)
