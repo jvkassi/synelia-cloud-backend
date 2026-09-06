@@ -448,7 +448,17 @@ def application_pour_site(site_type: str, hote: str) -> str:
 
 
 def _slug_site(site_id: str) -> str:
-    return site_id[:8]
+    """Nom court, mais réellement unique, du site sur la VM partagée : `site_id` est un
+    UUIDv7 (`nouvel_id()`) dont les 8 premiers caractères hex n'encodent que les 32 bits de
+    poids fort d'un timestamp milliseconde sur 48 bits — ils sont donc **identiques pour
+    tous les sites créés dans la même fenêtre d'environ 65 secondes** (2**16 ms), un cas
+    fréquent en usage réel (plusieurs applications installées à la suite sur une même VM).
+    Bug vécu en le vérifiant en direct : Dolibarr et le site statique installés à ~25s
+    d'intervalle ont tous deux reçu le nom `app-01a07704`, chacun écrasant la route Traefik
+    de l'autre. Les 12 derniers caractères hex (sans tirets) tombent dans `rand_b`/`var` de
+    l'UUIDv7 — la partie réellement aléatoire — et restent donc uniques même à la même
+    milliseconde."""
+    return site_id.replace("-", "")[-12:]
 
 
 def construire_site_stack(
@@ -572,8 +582,15 @@ def construire_site_stack(
       - DOLI_ADMIN_PASSWORD={mot_de_passe}
       - DOLI_INSTALL_AUTO=1
     volumes:
-      - {racine}/html:/var/www/html
+      # Jamais `/var/www/html` en entier : contrairement à l'image `wordpress`/`prestashop`
+      # (dont l'entrypoint re-remplit un volume vide avec le cœur applicatif au premier
+      # démarrage), l'image `dolibarr/dolibarr` embarque son code sous `/var/www/html` sans
+      # jamais le recopier ailleurs — un bind mount y écrase silencieusement l'installeur
+      # (`install/mysql/*.sql` introuvable, vu en direct via `docker logs`). Seuls
+      # `documents` (données) et `html/custom` (modules) sont prévus pour être montés,
+      # comme documenté par l'image officielle.
       - {racine}/doc:/var/www/documents
+      - {racine}/custom:/var/www/html/custom
     networks:
       - synelia
 """
