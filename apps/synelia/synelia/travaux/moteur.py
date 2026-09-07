@@ -206,7 +206,16 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
     for i in range(depuis, len(taches)):
         taches[i]["statut"] = "running"
         travail.taches = copy.deepcopy(taches)
-        await ctx.session.flush()
+        # `commit`, pas `flush` : ce travail tourne dans sa propre transaction/session
+        # (`_executer_detache`) qui ne se termine qu'à la toute fin de `_executer` — sans
+        # commit intermédiaire, un `GET /travaux/{id}` sur une autre connexion (tout appelant
+        # HTTP normal) ne voit RIEN bouger tant que le travail entier n'est pas fini : un
+        # redimensionnement ou une création de cluster de plusieurs minutes affiche « queued »
+        # figé de bout en bout, sans la progression étape par étape pourtant promise par
+        # l'écran (constaté en direct via `vm.resize`). `expire_on_commit=False` sur la
+        # session (`synelia_db.session.fabrique`) rend ce commit sûr : les attributs déjà
+        # chargés sur `travail`/`ctx` restent lisibles ensuite sans requête implicite.
+        await ctx.session.commit()
         try:
             message = await ex.etape(ctx, travail, i, taches[i]["nom"])
         except asyncio.CancelledError:
@@ -260,7 +269,7 @@ async def _executer(ctx: Contexte, travail: Travail, depuis: int) -> None:
         if message:
             taches[i]["message"] = message
         travail.taches = copy.deepcopy(taches)
-        await ctx.session.flush()
+        await ctx.session.commit()  # même motif que ci-dessus : rend l'étape « ok » visible tout de suite.
     try:
         await ex.terminer(ctx, travail)
     except Exception as exc:  # noqa: BLE001
