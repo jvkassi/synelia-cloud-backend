@@ -113,6 +113,36 @@ async def modifier_messagerie(
     return await depot.obtenir(ctx, messagerieId)
 
 
+@router.delete(
+    "/{messagerieId}",
+    response_model=m.TravailProvisioning,
+    status_code=status.HTTP_202_ACCEPTED,
+    response_model_exclude_none=True,
+)
+async def supprimer_messagerie(
+    messagerieId: str,
+    confirmation: str | None = None,
+    ctx: Contexte = Depends(exige("marketplace.subscribe")),
+) -> Any:  # noqa: N803
+    mess = await depot.obtenir(ctx, messagerieId)
+    exiger_confirmation(mess.domaine, confirmation)
+    await journaliser(
+        ctx,
+        action="web.emails.suppression",
+        cible_type="web_messagerie",
+        cible_id=messagerieId,
+        cible=mess.domaine,
+    )
+    return await demarrer_travail(
+        ctx,
+        "web.email.deactivate",
+        mess.domaine,
+        cible_type="web_messagerie",
+        cible_id=messagerieId,
+        etapes=service.ETAPES_SUPPRESSION,
+    )
+
+
 @router.put("/{messagerieId}/alias", response_model=m.Messagerie, response_model_exclude_none=True)
 async def modifier_alias_messagerie(
     messagerieId: str,

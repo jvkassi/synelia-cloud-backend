@@ -35629,6 +35629,72 @@
             "$ref": "#/components/responses/Serveur"
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Web Cloud — emails"
+        ],
+        "operationId": "supprimerMessagerie",
+        "summary": "Supprimer une messagerie",
+        "description": "Action destructive : le domaine Zimbra et ses boîtes sont détruits ; le nom exact de la ressource est exigé en confirmation.",
+        "x-rbac": "marketplace.subscribe",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "$ref": "#/components/parameters/Confirmation"
+          },
+          {
+            "name": "messagerieId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la messagerie.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "mail-dba-africa"
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Accepté — travail de provisioning créé.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TravailProvisioning"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "422": {
+            "$ref": "#/components/responses/Invalidee"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
       }
     },
     "/web/emails/{messagerieId}/alias": {
