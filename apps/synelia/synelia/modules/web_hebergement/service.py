@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from synelia_contract import modeles as m
@@ -134,13 +135,19 @@ async def assurer_cle_ssh_zone(ctx: Contexte) -> dict[str, str]:
         # seule présence dans les secrets — un keypair Nova peut disparaître (recréation du
         # projet, erreur d'appel initiale) sans que les secrets ne bougent.
         nom = zone.get("ssh_cle_nom") or NOM_KEYPAIR_ZONE
-        amont().assurer_keypair(nom, zone["ssh_publique"], identifiants=zone)
+        # `amont().assurer_keypair`/`amont_ssh().generer_cle` (openstacksdk/SSH, synchrones)
+        # sont déchargés via `asyncio.to_thread` : même garde que `vms.service`, sans quoi un
+        # appel amont lent gèlerait la boucle asyncio — donc l'API entière, tous tenants
+        # confondus.
+        await asyncio.to_thread(amont().assurer_keypair, nom, zone["ssh_publique"], identifiants=zone)
         return {"ssh_prive": zone["ssh_prive"], "ssh_publique": zone["ssh_publique"], "ssh_cle_nom": nom}
     r = reglages()
     if not r.vps_zone_espace_id:
         return {}
-    cle = amont_ssh().generer_cle()
-    amont().assurer_keypair(NOM_KEYPAIR_ZONE, cle["publique"], identifiants=zone)
+    cle = await asyncio.to_thread(amont_ssh().generer_cle)
+    await asyncio.to_thread(
+        amont().assurer_keypair, NOM_KEYPAIR_ZONE, cle["publique"], identifiants=zone
+    )
     secrets = {
         "ssh_cle_nom": NOM_KEYPAIR_ZONE,
         "ssh_prive": cle["prive"],
@@ -755,10 +762,18 @@ class ExecuteurHebergementCreer(Executeur):
             h = await depot.obtenir(ctx, travail.cible_id or "")
             zone = await zone_vps_secrets(ctx)
             cle = await assurer_cle_ssh_zone(ctx)
-            srv = amont().creer_serveur(
+            # `image_ubuntu`/`gabarit_pour_palier` (openstacksdk, synchrones — même fonctions
+            # utilisées telles quelles par `projets.service._assurer_vm_projet`, signature
+            # inchangée ici pour ne pas les casser) et `amont().creer_serveur` sont déchargés
+            # via `asyncio.to_thread` : même garde que `vms.service`, sans quoi un appel amont
+            # lent gèlerait la boucle asyncio — donc l'API entière, tous tenants confondus.
+            image_id = await asyncio.to_thread(image_ubuntu)
+            gabarit_id = await asyncio.to_thread(gabarit_pour_palier, h.palier)
+            srv = await asyncio.to_thread(
+                amont().creer_serveur,
                 nom=h.serveur.nom,
-                image_id=image_ubuntu(),
-                gabarit_id=gabarit_pour_palier(h.palier),
+                image_id=image_id,
+                gabarit_id=gabarit_id,
                 reseau_id=zone.get("reseau_id"),
                 identifiants=zone,
                 org_id=ctx.org_id_ou_none,
@@ -777,9 +792,11 @@ class ExecuteurHebergementCreer(Executeur):
             # passe que par le load balancer partagé) : sans elle, `router_sites` ne peut pas
             # joindre cette VM après coup pour y installer une application supplémentaire —
             # le réseau privé de la zone VPS n'est routable que depuis l'intérieur du lab.
-            fip = amont_identite().creer_ip_flottante(zone.get("projet_id"))
-            ip_gestion = amont_identite().associer_ip_flottante(fip.get("id"), srv["id"])
-            amont_network().assurer_regle_ssh(srv["id"])
+            fip = await asyncio.to_thread(amont_identite().creer_ip_flottante, zone.get("projet_id"))
+            ip_gestion = await asyncio.to_thread(
+                amont_identite().associer_ip_flottante, fip.get("id"), srv["id"]
+            )
+            await asyncio.to_thread(amont_network().assurer_regle_ssh, srv["id"])
             c["ssh_fip_id"] = fip.get("id")
             c["ssh_ip"] = ip_gestion or fip.get("adresse")
             travail.contexte = c
@@ -797,14 +814,15 @@ class ExecuteurHebergementCreer(Executeur):
             zone = await zone_vps_secrets(ctx)
             lb_id = zone.get("lb_id")
             n = amont_network()
-            pool = n.creer_pool(loadbalancer_id=lb_id, nom=f"pool-{hid[:8]}")
+            pool = await asyncio.to_thread(n.creer_pool, loadbalancer_id=lb_id, nom=f"pool-{hid[:8]}")
             await depot.definir_secrets(ctx, hid, {"lb_pool_id": pool["id"]})
             c["lb_pool_id"] = pool["id"]
             # `travail.contexte` est réassigné après chaque effet de bord (pas seulement à la
             # fin) : si l'étape échoue en cours de route, `compenser` doit voir exactement ce
             # qui a déjà été créé côté amont pour pouvoir le défaire.
             travail.contexte = c
-            membre = n.ajouter_membre(
+            membre = await asyncio.to_thread(
+                n.ajouter_membre,
                 pool_id=pool["id"],
                 adresse=c["ip_privee"],
                 port=80,
@@ -814,7 +832,8 @@ class ExecuteurHebergementCreer(Executeur):
             await depot.definir_secrets(ctx, hid, {"lb_membre_id": membre["id"]})
             c["lb_membre_id"] = membre["id"]
             travail.contexte = c
-            regle = n.ajouter_regle_hote(
+            regle = await asyncio.to_thread(
+                n.ajouter_regle_hote,
                 listener_id=zone.get("lb_listener_id"),
                 loadbalancer_id=lb_id,
                 pool_id=pool["id"],
@@ -840,21 +859,23 @@ class ExecuteurHebergementCreer(Executeur):
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
-            amont().supprimer_serveur(sid)
+            await asyncio.to_thread(amont().supprimer_serveur, sid)
         fip_id = travail.contexte.get("ssh_fip_id")
         if fip_id:
-            amont_identite().supprimer_ip_flottante(fip_id)
+            await asyncio.to_thread(amont_identite().supprimer_ip_flottante, fip_id)
         n = amont_network()
         lb_id = (await zone_vps_secrets(ctx)).get("lb_id")
         policy_id = travail.contexte.get("lb_policy_id")
         if policy_id:
-            n.supprimer_regle_hote(policy_id, loadbalancer_id=lb_id)
+            await asyncio.to_thread(n.supprimer_regle_hote, policy_id, loadbalancer_id=lb_id)
         pool_id = travail.contexte.get("lb_pool_id")
         membre_id = travail.contexte.get("lb_membre_id")
         if pool_id and membre_id:
-            n.supprimer_membre(pool_id, membre_id, loadbalancer_id=lb_id)
+            await asyncio.to_thread(
+                n.supprimer_membre, pool_id, membre_id, loadbalancer_id=lb_id
+            )
         if pool_id:
-            n.supprimer_pool(pool_id, loadbalancer_id=lb_id)
+            await asyncio.to_thread(n.supprimer_pool, pool_id, loadbalancer_id=lb_id)
         await depot.definir_statut(ctx, travail.cible_id or "", "suspendu")
 
 
@@ -867,16 +888,16 @@ class ExecuteurHebergementSupprimer(Executeur):
             secrets_avant = {}
         fip_id = secrets_avant.get("ssh_fip_id")
         if fip_id:
-            amont_identite().supprimer_ip_flottante(fip_id)
+            await asyncio.to_thread(amont_identite().supprimer_ip_flottante, fip_id)
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
-            amont().supprimer_serveur(sid)
+            await asyncio.to_thread(amont().supprimer_serveur, sid)
         secrets = await depot.secrets(ctx, travail.cible_id or "")
         n = amont_network()
         lb_id = (await zone_vps_secrets(ctx)).get("lb_id")
         policy_id = secrets.get("lb_policy_id")
         if policy_id:
-            n.supprimer_regle_hote(policy_id, loadbalancer_id=lb_id)
+            await asyncio.to_thread(n.supprimer_regle_hote, policy_id, loadbalancer_id=lb_id)
         # Avant de supprimer le pool : chaque application installée dessus (`site.installer`)
         # porte sa propre règle L7 sur ce même pool — Octavia refuse de le supprimer tant
         # qu'une policy le référence encore (vécu en direct, `Pool ... is in use by L7
@@ -885,9 +906,11 @@ class ExecuteurHebergementSupprimer(Executeur):
         pool_id = secrets.get("lb_pool_id")
         membre_id = secrets.get("lb_membre_id")
         if pool_id and membre_id:
-            n.supprimer_membre(pool_id, membre_id, loadbalancer_id=lb_id)
+            await asyncio.to_thread(
+                n.supprimer_membre, pool_id, membre_id, loadbalancer_id=lb_id
+            )
         if pool_id:
-            n.supprimer_pool(pool_id, loadbalancer_id=lb_id)
+            await asyncio.to_thread(n.supprimer_pool, pool_id, loadbalancer_id=lb_id)
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
@@ -895,7 +918,8 @@ class ExecuteurHebergementSupprimer(Executeur):
 class ExecuteurHebergementRedemarrer(Executeur):
     async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
         if index == 1:
-            amont().action(await serveur_id(ctx, travail.cible_id or "", travail), "redemarrage")
+            sid = await serveur_id(ctx, travail.cible_id or "", travail)
+            await asyncio.to_thread(amont().action, sid, "redemarrage")
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
@@ -934,7 +958,7 @@ class ExecuteurSiteInstaller(Executeur):
                 )
             if isinstance(amont_ssh(), SshReel):
                 sid = await serveur_id(ctx, hebergement.id)
-                if amont().statut_serveur(sid) == "absente":
+                if await asyncio.to_thread(amont().statut_serveur, sid) == "absente":
                     raise erreurs.amont_indisponible(
                         "hébergement (VM)",
                         "La VM de cet hébergement n'existe plus côté OpenStack (supprimée hors "
@@ -945,17 +969,29 @@ class ExecuteurSiteInstaller(Executeur):
             compose, routage, fichiers = construire_site_stack(
                 application, site.hote, site.phpVersion, mdp, site.id
             )
+            # SSH réel (`SshReel.executer`/`.ecrire_fichier`) : appels bloquants déchargés via
+            # `asyncio.to_thread`, sans quoi l'installation Docker Compose sur la VM cible (par
+            # nature lente) gèlerait la boucle asyncio — donc l'API entière, tous tenants
+            # confondus.
             ssh = amont_ssh()
             racine = f"{_RACINE_DOCKER}/sites/{site.id}"
-            ssh.ecrire_fichier(ip, cle_privee, f"{racine}/docker-compose.yml", compose)
+            await asyncio.to_thread(
+                ssh.ecrire_fichier, ip, cle_privee, f"{racine}/docker-compose.yml", compose
+            )
             for chemin, contenu in fichiers.items():
-                ssh.ecrire_fichier(ip, cle_privee, chemin, contenu)
-            ssh.ecrire_fichier(
-                ip, cle_privee, f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml", routage
+                await asyncio.to_thread(ssh.ecrire_fichier, ip, cle_privee, chemin, contenu)
+            await asyncio.to_thread(
+                ssh.ecrire_fichier,
+                ip,
+                cle_privee,
+                f"{_RACINE_DOCKER}/traefik-dynamic/site-{site.id}.yml",
+                routage,
             )
             # MariaDB (le cas échéant) est créée par ce même `docker compose up -d`, avec
             # l'application : pas d'étape séparée à distinguer côté SSH.
-            ssh.executer(ip, cle_privee, f"cd {racine} && docker compose up -d")
+            await asyncio.to_thread(
+                ssh.executer, ip, cle_privee, f"cd {racine} && docker compose up -d"
+            )
             await depot_sites.definir_secrets(
                 ctx, site.id, {"application": application, "mot_de_passe": mdp}
             )
@@ -967,7 +1003,8 @@ class ExecuteurSiteInstaller(Executeur):
             hebergement = await depot.obtenir(ctx, site.hebergementId)
             heb_secrets = await depot.secrets(ctx, hebergement.id)
             zone = await zone_vps_secrets(ctx)
-            regle = amont_network().ajouter_regle_hote(
+            regle = await asyncio.to_thread(
+                amont_network().ajouter_regle_hote,
                 listener_id=zone.get("lb_listener_id"),
                 loadbalancer_id=zone.get("lb_id"),
                 pool_id=heb_secrets.get("lb_pool_id"),
@@ -992,13 +1029,16 @@ class ExecuteurSiteInstaller(Executeur):
         zone = await zone_vps_secrets(ctx)
         policy_id = travail.contexte.get("lb_policy_id") or secrets.get("lb_policy_id")
         if policy_id:
-            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+            await asyncio.to_thread(
+                amont_network().supprimer_regle_hote, policy_id, loadbalancer_id=zone.get("lb_id")
+            )
         hebergement = await depot.trouver(ctx, site.hebergementId)
         cle_privee = zone.get("ssh_prive")
         ip = hebergement and await ip_gestion_hebergement(ctx, hebergement)
         if hebergement and cle_privee and ip:
             racine = f"{_RACINE_DOCKER}/sites/{site.id}"
-            amont_ssh().executer(
+            await asyncio.to_thread(
+                amont_ssh().executer,
                 ip,
                 cle_privee,
                 f"cd {racine} && docker compose down -v; rm -rf {racine} "
@@ -1018,13 +1058,16 @@ class ExecuteurSiteSupprimer(Executeur):
         zone = await zone_vps_secrets(ctx)
         policy_id = secrets.get("lb_policy_id")
         if policy_id:
-            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+            await asyncio.to_thread(
+                amont_network().supprimer_regle_hote, policy_id, loadbalancer_id=zone.get("lb_id")
+            )
         hebergement = await depot.trouver(ctx, site.hebergementId)
         cle_privee = zone.get("ssh_prive")
         ip = hebergement and await ip_gestion_hebergement(ctx, hebergement)
         if hebergement and cle_privee and ip:
             racine = f"{_RACINE_DOCKER}/sites/{site.id}"
-            amont_ssh().executer(
+            await asyncio.to_thread(
+                amont_ssh().executer,
                 ip,
                 cle_privee,
                 f"cd {racine} && docker compose down -v; rm -rf {racine} "
@@ -1120,7 +1163,9 @@ async def depot_enfants(ctx: Contexte, hebergement_id: str) -> None:
             secrets = {}
         policy_id = secrets.get("lb_policy_id")
         if policy_id:
-            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+            await asyncio.to_thread(
+                amont_network().supprimer_regle_hote, policy_id, loadbalancer_id=zone.get("lb_id")
+            )
         await depot_sites.supprimer(ctx, s.id, logique=True)
     # Drive n'est pas un enfant au sens du dépôt (pas de `hebergementId`, résolu par domaine) :
     # import tardif pour éviter le cycle (web_drive importe déjà web_hebergement). Même raison
@@ -1136,5 +1181,9 @@ async def depot_enfants(ctx: Contexte, hebergement_id: str) -> None:
                 secrets = {}
             policy_id = secrets.get("lb_policy_id")
             if policy_id:
-                amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+                await asyncio.to_thread(
+                    amont_network().supprimer_regle_hote,
+                    policy_id,
+                    loadbalancer_id=zone.get("lb_id"),
+                )
             await depot_drive.supprimer(ctx, d.id, logique=True)
