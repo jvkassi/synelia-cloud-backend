@@ -93,30 +93,83 @@ class ExecuteurVmCreate(Executeur):
 
 @executeur("vm.compose")
 class ExecuteurVmCompose(Executeur):
+    """Déploie plusieurs serveurs en une passe (`/vms/lot`, écran de composition) — un vrai
+    serveur Nova par machine du plan (`amont().creer_serveur`, gabarit déjà résolu par le
+    routeur dans `entree["gabarits"]`), pas une simple insertion en base : la même classe de
+    bug (« faux succès ») que `vm.create`/`vm.resize` avant leurs fixes respectifs."""
+
+    compensable = True
+
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 0:
+            entre = travail.entree or {}
+            espace_id = entre.get("espaceId")
+            from synelia.modules.espaces.service import depot as depot_espaces
+
+            secrets_espace = await depot_espaces.secrets(ctx, espace_id) if espace_id else {}
+            gabarits = entre.get("gabarits") or {}
+            serveurs = []
+            for mac in entre.get("machines") or []:
+                quantite = mac.get("quantite") or 1
+                for i in range(quantite):
+                    machine_nom = mac["nom"] if quantite == 1 else f"{mac['nom']}{i + 1}"
+                    srv = amont().creer_serveur(
+                        nom=machine_nom,
+                        image_id=mac["imageId"],
+                        gabarit_id=gabarits.get(mac["nom"]),
+                        reseau_id=entre.get("reseauId") or secrets_espace.get("reseau_id"),
+                        identifiants=secrets_espace,
+                        org_id=ctx.org_id_ou_none,
+                        espace_id=espace_id,
+                        cle_ssh=entre.get("cleSsh"),
+                    )
+                    serveurs.append(
+                        {
+                            "nom": machine_nom,
+                            "serveur_id": srv["id"],
+                            "image_id": mac["imageId"],
+                            "vcpu": mac["vcpu"],
+                            "ramGo": mac["ramGo"],
+                            "diskGo": mac["diskGo"],
+                            "nics": mac.get("nics") or 1,
+                            "ip_privee": srv.get("ip_privee") or ip_privee_mac(machine_nom, mac["imageId"]),
+                        }
+                    )
+            c = dict(travail.contexte)
+            c["serveurs"] = serveurs
+            travail.contexte = c
+            return f"{len(serveurs)} serveurs amont créés"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         entre = travail.entree or {}
         espace_id = entre.get("espaceId")
         site = entre.get("site") or "ABJ"
-        for mac in entre.get("machines") or []:
-            quantite = mac.get("quantite") or 1
-            for i in range(quantite):
-                nom = mac["nom"] if quantite == 1 else f"{mac['nom']}{i + 1}"
-                vm = m.Vm(
-                    id=nouvel_id(),
-                    espaceId=espace_id,
-                    nom=nom,
-                    os=mac["imageId"],
-                    vcpu=mac["vcpu"],
-                    ramGo=mac["ramGo"],
-                    diskGo=mac["diskGo"],
-                    ips=[m.Ip(adresse=ip_privee_mac(nom, mac["imageId"]), type="privee")],
-                    statut="running",
-                    hardware=m.MateielVirtuel(
-                        scsiControllers=1, nics=mac.get("nics") or 1, usb=False, secureBoot=False
-                    ),
-                    site=site,
-                )
-                await depot.creer(ctx, vm, parent_id=espace_id)
+        for srv in travail.contexte.get("serveurs") or []:
+            vm = m.Vm(
+                id=nouvel_id(),
+                espaceId=espace_id,
+                nom=srv["nom"],
+                os=srv["image_id"],
+                vcpu=srv["vcpu"],
+                ramGo=srv["ramGo"],
+                diskGo=srv["diskGo"],
+                ips=[m.Ip(adresse=srv["ip_privee"], type="privee")],
+                statut="running",
+                hardware=m.MateielVirtuel(
+                    scsiControllers=1, nics=srv["nics"], usb=False, secureBoot=False
+                ),
+                site=site,
+            )
+            await depot.creer(ctx, vm, parent_id=espace_id)
+            await depot.definir_secrets(ctx, vm.id, {"serveur_id": srv["serveur_id"]})
+
+    async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
+        for srv in travail.contexte.get("serveurs") or []:
+            try:
+                amont().supprimer_serveur(srv["serveur_id"])
+            except Exception:  # noqa: BLE001, S110 — best effort, une machine du lot ne bloque pas les autres
+                pass
 
 
 def ip_privee_mac(nom: str, image_id: str) -> str:

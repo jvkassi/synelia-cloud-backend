@@ -28,6 +28,27 @@ _SERIES = [
 ]
 
 
+def _gabarit_pour_specs(vcpu: int, ram_go: int, disk_go: int, flore: dict[str, Any]) -> str:
+    # Nova ne sait créer un serveur que vers un gabarit existant (pas de vcpu/ram/disque
+    # arbitraires) : sans cette résolution, l'amont réel recevait un `flavorRef` vide et
+    # rejetait la requête en pleine exécution du job (`flavorRef: None is not of type
+    # 'string'`), au lieu d'un rejet propre à la validation — constaté en direct.
+    correspondant = next(
+        (
+            g
+            for g in flore.values()
+            if g["vcpu"] == vcpu and g["ramGo"] == ram_go and g["diskGo"] == disk_go
+        ),
+        None,
+    )
+    if correspondant is None:
+        raise erreurs.validation(
+            "Aucun gabarit du catalogue ne correspond à ce vcpu/ramGo/diskGo.",
+            champs={"gabarit": "Indiquez un gabarit existant du catalogue."},
+        )
+    return str(correspondant["id"])
+
+
 def _specs(corps: m.VmCreation) -> tuple[str | None, int, int, int]:
     flore = {g["id"]: g for g in amont().gabarits()}
     if corps.gabarit:
@@ -38,26 +59,8 @@ def _specs(corps: m.VmCreation) -> tuple[str | None, int, int, int]:
             )
         return corps.gabarit, g["vcpu"], g["ramGo"], g["diskGo"]
     if corps.vcpu is not None and corps.ramGo is not None and corps.diskGo is not None:
-        # Nova ne sait créer un serveur que vers un gabarit existant (pas de vcpu/ram/disque
-        # arbitraires) : sans cette résolution, l'amont réel recevait un `flavorRef` vide et
-        # rejetait la requête en pleine exécution du job (`flavorRef: None is not of type
-        # 'string'`), au lieu d'un rejet propre à la validation — constaté en direct.
-        correspondant = next(
-            (
-                g
-                for g in flore.values()
-                if g["vcpu"] == corps.vcpu
-                and g["ramGo"] == corps.ramGo
-                and g["diskGo"] == corps.diskGo
-            ),
-            None,
-        )
-        if correspondant is None:
-            raise erreurs.validation(
-                "Aucun gabarit du catalogue ne correspond à ce vcpu/ramGo/diskGo.",
-                champs={"gabarit": "Indiquez un gabarit existant du catalogue."},
-            )
-        return correspondant["id"], corps.vcpu, corps.ramGo, corps.diskGo
+        flavor = _gabarit_pour_specs(corps.vcpu, corps.ramGo, corps.diskGo, flore)
+        return flavor, corps.vcpu, corps.ramGo, corps.diskGo
     raise erreurs.validation(
         "Indiquez un gabarit ou vcpu/ramGo/diskGo.",
         champs={"gabarit": "ou vcpu/ramGo/diskGo requis."},
@@ -427,19 +430,24 @@ async def creer_vms_en_lot(
     total_disk = sum((mac.diskGo or 0) * (mac.quantite or 1) for mac in corps.machines)
     await verifier_quota(ctx, corps.espaceId, total_vcpu, total_ram, total_disk)
     images = {i["id"] for i in amont().images()}
+    flore = {g["id"]: g for g in amont().gabarits()}
+    gabarits: dict[str, str] = {}
     for mac in corps.machines:
         if mac.imageId not in images:
             raise erreurs.validation(
                 "Image système inconnue.", champs={"imageId": "Identifiant inexistant."}
             )
+        gabarits[mac.nom] = _gabarit_pour_specs(mac.vcpu, mac.ramGo, mac.diskGo, flore)
     await journaliser(ctx, action="vm.compose", cible_type="espace", cible_id=corps.espaceId)
+    entree = corps.model_dump(mode="json")
+    entree["gabarits"] = gabarits
     return await demarrer_travail(
         ctx,
         "vm.compose",
         f"{len(corps.machines)} machines",
         cible_type="espace",
         cible_id=corps.espaceId,
-        entree=corps.model_dump(mode="json"),
+        entree=entree,
     )
 
 
