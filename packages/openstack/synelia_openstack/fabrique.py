@@ -9,6 +9,14 @@ T = TypeVar("T")
 
 _instances: dict[type, Any] = {}
 
+# Sans timeout explicite, keystoneauth1/requests attend indéfiniment une réponse : une seule
+# connexion TCP bloquée (constaté en direct — un `stop_server` resté accroché a gelé tout le
+# process, toutes les requêtes HTTP confondues, jusqu'au redémarrage manuel du conteneur) peut
+# alors figer tout le processus (un seul worker, les appels amont sont synchrones). Chaque appel
+# HTTP individuel vers l'amont (Nova/Neutron/Cinder/Keystone) est déjà bref : `wait_for_server` et
+# consorts répètent de courtes requêtes en boucle, pas une seule requête tenue ouverte longtemps.
+_TIMEOUT_API_S = 45
+
 
 def mode() -> str:
     r = reglages()
@@ -32,7 +40,9 @@ def connexion(region: str | None = None) -> Any:
 
     r = reglages()
     if r.os_cloud:
-        conn = openstack.connect(cloud=r.os_cloud, region_name=region or r.os_region)
+        conn = openstack.connect(
+            cloud=r.os_cloud, region_name=region or r.os_region, api_timeout=_TIMEOUT_API_S
+        )
     else:
         conn = openstack.connect(
             load_yaml_config=False,
@@ -42,6 +52,7 @@ def connexion(region: str | None = None) -> Any:
             application_credential_id=r.os_application_credential_id,
             application_credential_secret=r.os_application_credential_secret,
             region_name=region or r.os_region,
+            api_timeout=_TIMEOUT_API_S,
         )
     for service, url in r.os_endpoint_overrides.items():
         conn.config.config[f"{service}_endpoint_override"] = url
@@ -61,6 +72,7 @@ def connexion_avec(application_credential_id: str, secret: str, region: str | No
         application_credential_id=application_credential_id,
         application_credential_secret=secret,
         region_name=region or r.os_region,
+        api_timeout=_TIMEOUT_API_S,
     )
     for service, url in r.os_endpoint_overrides.items():
         conn.config.config[f"{service}_endpoint_override"] = url
