@@ -70,3 +70,29 @@ Règles :
   Besoin d'une table dédiée ? Utiliser `Depot` avec un nouveau `type`.
 - Vérifier : `uv run ruff check --fix apps/synelia/synelia/modules/<module> && uv run pytest -q apps/synelia/synelia/modules/<module>`
   puis `uv run python tools/contrat_diff.py | grep -i <tag>` doit montrer le domaine complet.
+
+## Invariants durs (tout écart a déjà coûté une panne réelle)
+
+- **Tout appel SDK OpenStack synchrone va dans `asyncio.to_thread`.** Les exécuteurs de travaux tournent sur la
+  boucle asyncio de l'API elle-même : un `amont().creer_serveur(...)` nu y fige l'API **pour tous les tenants**
+  pendant toute la durée de l'appel (constaté en direct : un `vm.resize` a gelé même `/public/offres` non
+  authentifié 10+ minutes). Motif obligatoire : `srv = await asyncio.to_thread(amont().creer_serveur, nom=..., image_id=...)`.
+  Valable aussi pour le SSH réel (`SshReel`) et les clients synchrones (`httpx.post` des connecteurs — Designate,
+  Zimbra, ACME — sont bloquants eux aussi, le nom « httpx » ne suffit pas à les rendre asynchrones).
+  Balayage complet fait dans `cf8d38f`, `3a90696`, `4f8e850`..`6696a0d` : ne réintroduisez pas le bug.
+- **Le statut écrit dans une ressource vient du Literal du contrat.** Écrire `statut="erreur"` alors que
+  `ClusterK8s.statut` n'admet que `running|degraded|provisioning|updating` explose à la lecture suivante dans
+  `Depot._vers_modele` (validation Pydantic) — vécu en direct dans `ExecuteurK8sCreate.compenser`. Vérifier
+  l'union exacte dans `synelia_contract.modeles` avant d'écrire.
+- **L'id d'une réponse 202 est celui du travail, pas de la ressource.** Pour retrouver la ressource créée :
+  re-lister ou re-lecture par un attribut unique. Ce piège a coûté des 404 à chaque session de test.
+- **Réconcilier à la lecture plutôt que laisser mentir.** Une ligne en base peut survivre à son infra réelle
+  (VM Nova supprimée hors bande) et continuer de s'afficher `en_ligne`/`running`. Motif établi :
+  `ComputeOpenStack.statut_serveur()` / `MagnumOpenStack.cluster_statut()` (`"absente"` si l'amont ne
+  connaît plus la ressource) + `reconcilier_statut()` branché sur le GET détail **et** la liste, ne touchant
+  que les lignes en statut non terminal (`3675796`). Nouveau type adossé à de l'infra réelle = même motif.
+- **Une paire `Simule`/`Reel` ne suffit pas : encore faut-il l'appeler.** La classe de bug la plus fréquente
+  de ce dépôt : un exécuteur qui ne touche que `depot.*` et rapporte `done` sans un seul appel amont —
+  faux succès indistinguable d'un vrai (vu sur `vm.compose`, `vm.resize`, `/vms/lot`, web_dns, web_ssl,
+  `web.backup.restore`…). Toute nouvelle opération de provisioning se vérifie en mode réel : la ressource
+  existe-t-elle côté OpenStack après le job ?
