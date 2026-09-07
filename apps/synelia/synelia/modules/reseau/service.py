@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
 from synelia_openstack import fournisseur
@@ -51,7 +53,7 @@ async def creer_reseau_amont(ctx: Contexte, espace_id: str, nom: str, cidr: str)
     """Crée le réseau/sous-réseau amont (sans routeur : c'est un réseau interne de plus dans un
     projet qui en a déjà un) et renvoie les identifiants à poser en secrets sur la ressource."""
     projet_id = await _projet_id(ctx, espace_id)
-    r = amont_identite().creer_reseau_secondaire(projet_id, nom, cidr)
+    r = await asyncio.to_thread(amont_identite().creer_reseau_secondaire, projet_id, nom, cidr)
     return {"reseau_id": r["reseau_id"], "sous_reseau_id": r.get("sous_reseau_id") or ""}
 
 
@@ -59,14 +61,14 @@ async def supprimer_reseau_amont(ctx: Contexte, reseau_id_local: str) -> None:
     secrets = await depot_reseau.secrets(ctx, reseau_id_local)
     rid = secrets.get("reseau_id")
     if rid:
-        amont_identite().supprimer_reseau_secondaire(rid)
+        await asyncio.to_thread(amont_identite().supprimer_reseau_secondaire, rid)
 
 
 async def reserver_ip_amont(ctx: Contexte, espace_id: str) -> dict[str, str]:
     """Alloue une IP flottante amont ; le simulé ne renvoie pas d'adresse plausible-mais-stable
     (pas d'accès à la base), on retombe alors sur l'allocation séquentielle locale."""
     projet_id = await _projet_id(ctx, espace_id)
-    fip = amont_identite().creer_ip_flottante(projet_id)
+    fip = await asyncio.to_thread(amont_identite().creer_ip_flottante, projet_id)
     adresse = fip.get("adresse") or await prochaine_ip(ctx, espace_id)
     return {"id": fip["id"], "adresse": adresse}
 
@@ -75,7 +77,7 @@ async def liberer_ip_amont(ctx: Contexte, ip_id_local: str) -> None:
     secrets = await depot_ip.secrets(ctx, ip_id_local)
     fid = secrets.get("ip_flottante_id")
     if fid:
-        amont_identite().supprimer_ip_flottante(fid)
+        await asyncio.to_thread(amont_identite().supprimer_ip_flottante, fid)
 
 
 async def associer_ip_amont(ctx: Contexte, ip_id_local: str, vm_id: str) -> str | None:
@@ -89,14 +91,14 @@ async def associer_ip_amont(ctx: Contexte, ip_id_local: str, vm_id: str) -> str 
     if not fid:
         return None
     sid = await serveur_id(ctx, vm_id)
-    return amont_identite().associer_ip_flottante(fid, sid)
+    return await asyncio.to_thread(amont_identite().associer_ip_flottante, fid, sid)
 
 
 async def dissocier_ip_amont(ctx: Contexte, ip_id_local: str) -> None:
     secrets = await depot_ip.secrets(ctx, ip_id_local)
     fid = secrets.get("ip_flottante_id")
     if fid:
-        amont_identite().dissocier_ip_flottante(fid)
+        await asyncio.to_thread(amont_identite().dissocier_ip_flottante, fid)
 
 
 def _regle_neutron(regle: m.RegleSecurite) -> dict[str, object]:
@@ -134,14 +136,14 @@ def _regle_neutron(regle: m.RegleSecurite) -> dict[str, object]:
 
 async def creer_groupe_amont(ctx: Contexte, espace_id: str, nom: str, description: str | None) -> str:
     projet_id = await _projet_id(ctx, espace_id)
-    return amont().creer_groupe(nom, description, projet_id)
+    return await asyncio.to_thread(amont().creer_groupe, nom, description, projet_id)
 
 
 async def supprimer_groupe_amont(ctx: Contexte, groupe_id_local: str) -> None:
     secrets = await depot_groupe.secrets(ctx, groupe_id_local)
     gid = secrets.get("groupe_id")
     if gid:
-        amont().supprimer_groupe(gid)
+        await asyncio.to_thread(amont().supprimer_groupe, gid)
 
 
 async def ajouter_regle_amont(ctx: Contexte, groupe_id_local: str, regle: m.RegleSecurite) -> None:
@@ -149,7 +151,7 @@ async def ajouter_regle_amont(ctx: Contexte, groupe_id_local: str, regle: m.Regl
     gid = secrets.get("groupe_id")
     if not gid:
         return
-    rid = amont().ajouter_regle_securite(gid, **_regle_neutron(regle))
+    rid = await asyncio.to_thread(amont().ajouter_regle_securite, gid, **_regle_neutron(regle))
     await depot_groupe.definir_secrets(ctx, groupe_id_local, {f"regle_{regle.id}": rid})
 
 
@@ -157,7 +159,7 @@ async def supprimer_regle_amont(ctx: Contexte, groupe_id_local: str, regle_id: s
     secrets = await depot_groupe.secrets(ctx, groupe_id_local)
     rid = secrets.get(f"regle_{regle_id}")
     if rid:
-        amont().supprimer_regle_securite(rid)
+        await asyncio.to_thread(amont().supprimer_regle_securite, rid)
 
 
 async def attacher_groupe_amont(ctx: Contexte, groupe_id_local: str, cibles: list[str]) -> None:
@@ -174,11 +176,11 @@ async def attacher_groupe_amont(ctx: Contexte, groupe_id_local: str, cibles: lis
     nouveaux_ids = set(cibles)
     for retire in anciens_ids - nouveaux_ids:
         sid = await serveur_id(ctx, retire)
-        amont().detacher_groupe_serveur(gid, sid)
+        await asyncio.to_thread(amont().detacher_groupe_serveur, gid, sid)
     nouveaux_secrets: dict[str, str] = {}
     for ajoute in nouveaux_ids - anciens_ids:
         sid = await serveur_id(ctx, ajoute)
-        amont().attacher_groupe_serveur(gid, sid)
+        await asyncio.to_thread(amont().attacher_groupe_serveur, gid, sid)
         nouveaux_secrets[f"attache_{ajoute}"] = "1"
     if nouveaux_secrets:
         await depot_groupe.definir_secrets(ctx, groupe_id_local, nouveaux_secrets)
@@ -191,14 +193,14 @@ async def supprimer_lb_amont(ctx: Contexte, lb_id_local: str) -> None:
         # `cascade=True` (côté NetworkOpenStack.supprimer_load_balancer) fait tomber avec lui
         # listeners, pools, membres et moniteur de santé amont : pas besoin de les défaire un
         # par un ici.
-        amont().supprimer_load_balancer(oid)
+        await asyncio.to_thread(amont().supprimer_load_balancer, oid)
     fip_id = secrets.get("octavia_fip_id")
     if fip_id:
         # L'IP flottante d'un LB `exposure=public` n'est pas défaite par la suppression
         # cascade du load balancer (ressource Neutron indépendante) : sans cet appel elle
         # fuit à chaque suppression (constaté en direct : IP flottante encore allouée au
         # projet, `port_id` à `null`, après suppression du LB public qui la portait).
-        amont().supprimer_ip_flottante_lb(fip_id)
+        await asyncio.to_thread(amont().supprimer_ip_flottante_lb, fip_id)
 
 
 def _ip_privee(vm: m.Vm) -> str | None:
@@ -225,7 +227,9 @@ async def synchroniser_pool_amont(
         for retire in anciens_ids - nouveaux_ids:
             membre_id = secrets.get(f"membre_{retire}")
             if membre_id:
-                amont().supprimer_membre(pool_id, membre_id, loadbalancer_id=octavia_lb_id)
+                await asyncio.to_thread(
+                    amont().supprimer_membre, pool_id, membre_id, loadbalancer_id=octavia_lb_id
+                )
                 # Efface la trace du membre défait : sinon une cible retirée puis reposée
                 # plus tard serait prise pour "déjà membre" (secret encore présent) et ne
                 # recréerait jamais de membre Octavia réel.
@@ -239,7 +243,8 @@ async def synchroniser_pool_amont(
         if pool_id and not membre_id and vm is not None:
             adresse = _ip_privee(vm)
             if adresse:
-                membre = amont().ajouter_membre(
+                membre = await asyncio.to_thread(
+                    amont().ajouter_membre,
                     pool_id=pool_id,
                     adresse=adresse,
                     port=port,
@@ -254,7 +259,7 @@ async def synchroniser_pool_amont(
                 from synelia.modules.vms.service import serveur_id
 
                 sid = await serveur_id(ctx, c.targetId)
-                amont().assurer_regle_port(sid, port)
+                await asyncio.to_thread(amont().assurer_regle_port, sid, port)
         items.append(
             m.PoolItem(
                 targetId=c.targetId,
@@ -289,7 +294,10 @@ class ExecuteurLbCreate(Executeur):
             from synelia.modules.espaces.service import depot as depot_espaces
 
             secrets_espace = await depot_espaces.secrets(ctx, lb.espaceId)
-            res = amont().creer_load_balancer(
+            # Octavia (création d'amphore incluse) : appel openstacksdk synchrone, souvent
+            # lent — déchargé via `asyncio.to_thread` pour ne pas geler la boucle asyncio.
+            res = await asyncio.to_thread(
+                amont().creer_load_balancer,
                 projet_id=secrets_espace.get("projet_id"),
                 nom=lb.nom,
                 reseau_id=secrets_espace.get("reseau_id"),
@@ -311,7 +319,8 @@ class ExecuteurLbCreate(Executeur):
                 # (constaté en testant en direct : sans moniteur, le pool continue d'envoyer
                 # du trafic à un membre arrêté).
                 hc = sante_defaut()
-                mon = amont().creer_moniteur_sante(
+                mon = await asyncio.to_thread(
+                    amont().creer_moniteur_sante,
                     pool_id=res["pool_id"],
                     type_=hc.protocole.upper(),
                     delay=hc.intervalleS,
@@ -330,7 +339,7 @@ class ExecuteurLbCreate(Executeur):
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         lb = await depot_lb.obtenir(ctx, travail.cible_id or "")
-        vip = travail.contexte.get("vip") or amont().allouer_vip()
+        vip = travail.contexte.get("vip") or await asyncio.to_thread(amont().allouer_vip)
         await depot_lb.modifier(ctx, lb.id, {"vip": vip})
 
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
