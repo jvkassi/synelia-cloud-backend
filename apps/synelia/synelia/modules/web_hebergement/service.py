@@ -359,10 +359,11 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
     hébergement en statut contrôlé, vérifie que Nova connaît encore son serveur et persiste
     l'écart.
 
-    Orphelin confirmé (Nova ignore le serveur référencé, alors que la ligne a passé la fenêtre de
-    grâce de la création — statuts contrôlés seulement) : décision propriétaire, la ligne est
-    **supprimée** par le même chemin métier que DELETE /web/hebergements/{id} (exécuteur
-    `hebergement.supprimer`, cf. `_traiter_orphelin`), pas seulement marquée `suspendu`. Le
+    Orphelin confirmé (Nova ignore le serveur référencé — purgé ou soft-delete `DELETED` pas
+    encore purgé — alors que la ligne a passé la fenêtre de grâce de la création — statuts
+    contrôlés seulement) : décision propriétaire, la ligne est **supprimée** par le même chemin
+    métier que DELETE /web/hebergements/{id} (exécuteur `hebergement.supprimer`, cf.
+    `_traiter_orphelin`), pas seulement marquée `suspendu`. Le
     marquage historique reste `suspendu` — celui que `ExecuteurHebergementCreer.compenser` pose
     déjà quand l'amont a disparu en cours de création, le seul des trois états du contrat
     (`en_ligne|maintenance|suspendu`) qui ne promette ni un service en ligne, ni une reprise
@@ -386,9 +387,13 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
     # qu'on sait avoir existé.
     if not sid:
         return h
-    if await asyncio.to_thread(amont().statut_serveur, sid) != "absente":
-        return h
-    return await _traiter_orphelin(ctx, h)
+    statut_amont = await asyncio.to_thread(amont().statut_serveur, sid)
+    if statut_amont.upper() in ("ABSENTE", "DELETED"):
+        # `ABSENTE` : Nova ignore le serveur (purgé) ; `DELETED` : ligne soft-delete encore
+        # visible de Nova (purge asynchrone) — dans les deux cas l'objet n'existe plus
+        # réellement (pas d'hyperviseur, pas d'IP) : c'est un orphelin confirmé.
+        return await _traiter_orphelin(ctx, h)
+    return h
 
 
 # Statuts contrôlés à la lecture : `en_ligne` (peut avoir dérivé d'un serveur disparu) et

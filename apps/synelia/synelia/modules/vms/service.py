@@ -92,10 +92,11 @@ async def reconcilier_statut(ctx: Contexte, vm: m.Vm) -> m.Vm:
     lecture d'une VM en statut contrôlé, relit le statut réel Nova et persiste l'écart s'il est
     cassé (cf. `_mapper_statut_nova`), avant de renvoyer la ressource.
 
-    Orphelin confirmé (Nova ignore le serveur référencé, alors que la ligne a passé la fenêtre de
-    grâce de la création — statuts contrôlés seulement) : décision propriétaire, la ligne est
-    **supprimée** par le même chemin métier que DELETE /vms/{id} (exécuteur `vm.delete`, cf.
-    `_traiter_orphelin`), pas seulement marquée `error`."""
+    Orphelin confirmé (Nova ignore le serveur référencé — purgé ou soft-delete `DELETED` pas
+    encore purgé — alors que la ligne a passé la fenêtre de grâce de la création — statuts
+    contrôlés seulement) : décision propriétaire, la ligne est **supprimée** par le même chemin
+    métier que DELETE /vms/{id} (exécuteur `vm.delete`, cf. `_traiter_orphelin`), pas seulement
+    marquée `error`."""
     if vm.statut not in STATUTS_A_CONTROLER:
         return vm
     try:
@@ -111,7 +112,10 @@ async def reconcilier_statut(ctx: Contexte, vm: m.Vm) -> m.Vm:
     if not sid:
         return vm
     statut_amont = await asyncio.to_thread(amont().statut_serveur, sid)
-    if statut_amont.upper() == "ABSENTE":
+    if statut_amont.upper() in ("ABSENTE", "DELETED"):
+        # `ABSENTE` : Nova ignore le serveur (purgé) ; `DELETED` : ligne soft-delete encore
+        # visible de Nova (purge asynchrone) — dans les deux cas l'objet n'existe plus
+        # réellement (pas d'hyperviseur, pas d'IP) : c'est un orphelin confirmé.
         return await _traiter_orphelin(ctx, vm)
     nouveau = _mapper_statut_nova(statut_amont)
     if nouveau and nouveau != vm.statut:

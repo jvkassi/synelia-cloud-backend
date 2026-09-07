@@ -283,6 +283,35 @@ async def test_reconciliation_statut_vm_orpheline(client, monkeypatch):
     assert r.status_code == 404
 
 
+async def test_reconciliation_vm_orpheline_nova_deleted_pas_supprimee_attendu(client, monkeypatch):
+    # Un serveur fraîchement supprimé reste un temps visible de Nova (ligne soft-delete,
+    # statut `DELETED`, purge asynchrone) : c'est déjà un orphelin confirmé (pas
+    # d'hyperviseur, pas d'IP) — la suppression réelle part sans attendre la purge.
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-nova-deleted")
+
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "DELETED",
+    )
+    supprime = []
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "supprimer_serveur",
+        lambda self, serveur_id: supprime.append(serveur_id),
+    )
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "error"
+    assert len(supprime) == 1
+    r = await client.get("/v1/vms", params={"statut": "error"})
+    assert all(v["id"] != vid for v in r.json()["donnees"])
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 404
+
+
 async def test_reconciliation_vm_orpheline_nova_error_pas_supprimee(client, monkeypatch):
     # Nova `ERROR` : le serveur existe toujours (build raté, hyperviseur) — ce n'est PAS un
     # orphelin : la ligne est marquée `error` mais jamais supprimée automatiquement.
