@@ -13,7 +13,7 @@ from synelia.audit import journaliser
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
 from synelia.modules.espaces.service import verifier_quota
 from synelia.modules.vms import service
-from synelia.modules.vms.service import amont, depot, instantane_depot
+from synelia.modules.vms.service import amont, depot, instantane_depot, reconcilier_statut
 from synelia.travaux import demarrer_travail
 
 router = APIRouter(prefix="/vms", tags=["Machines virtuelles"])
@@ -91,7 +91,7 @@ async def lister_vms(  # noqa: PLR0917
     applicationId: str | None = None,
     ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True)),
 ) -> Any:
-    return await depot.lister(
+    resultat = await depot.lister(
         ctx,
         page,
         filtre=lambda v: (
@@ -103,6 +103,11 @@ async def lister_vms(  # noqa: PLR0917
         ),
         tri_defaut="nom",
     )
+    # Reconcile-on-read : sans ça une VM resterait affichée `running` dans la liste même après
+    # la disparition de son serveur Nova (supprimé hors bande, ex. nettoyage du lab — cf.
+    # `reconcilier_statut`).
+    resultat["donnees"] = [await reconcilier_statut(ctx, v) for v in resultat["donnees"]]
+    return resultat
 
 
 @router.post(
@@ -150,7 +155,7 @@ async def creer_vm(corps: m.VmCreation, ctx: Contexte = Depends(exige("vm.create
 async def obtenir_vm(
     vmId: str, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))
 ) -> Any:  # noqa: N803
-    return await _vm(ctx, vmId)
+    return await reconcilier_statut(ctx, await _vm(ctx, vmId))
 
 
 @router.patch("/{vmId}", response_model=m.Vm, response_model_exclude_none=True)

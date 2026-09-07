@@ -43,6 +43,69 @@ async def serveur_id(ctx: Contexte, vm_id: str, travail: Travail | None = None) 
     return str(sec.get("serveur_id") or vm_id)
 
 
+# États stables : une VM dans l'un de ces statuts **doit** avoir un serveur Nova derrière elle,
+# qui peut avoir disparu depuis le dernier relevé — elle vaut la peine d'être vérifiée en direct
+# (cf. `reconcilier_statut`). `creating` en est exclu volontairement : entre la création de la
+# ligne et l'étape 1 du travail, le serveur Nova n'existe pas encore (le secret `serveur_id` non
+# plus) — une relecture dans cette fenêtre croirait à un orphelin. `migrating`/`error` sont portés
+# par leur travail ou déjà sincères.
+STATUTS_STABLES = {"running", "stopped"}
+
+
+def _mapper_statut_nova(statut_amont: str) -> str | None:
+    """Statut sincère à écrire quand l'amont Nova contredit la ligne, `None` sinon (on ne touche
+    alors pas la ressource).
+
+    Le contrôle est volontairement restreint aux états **cassés** — `absente` (Nova ne connaît
+    plus le serveur : supprimé hors bande, ex. nettoyage manuel du lab ; la VM et ses disques
+    n'existent plus, `error` est le seul statut sincère du contrat, `stopped` ferait croire à une
+    machine simplement arrêtée, redémarrable) et `ERROR` — pas à une synchronisation complète :
+    les transitions vivantes (ACTIVE/SHUTOFF/BUILDING…) sont déjà portées par les propres travaux
+    de l'application à chaque mutation (`vm.create`, `vm.power.*`, `vm.resize`), et l'amont
+    simulé, lui, ne retient aucun état (son `action("arret")` est un no-op, `statut_serveur`
+    répond toujours `ACTIVE`) — une relecture qui y traduirait `ACTIVE` en `running` annulerait
+    l'arrêt que le travail vient de poser (cassé au premier essai dans la suite de tests).
+    `SHUTOFF` en particulier n'est **pas** un orphelin : les invités du lab s'éteignent la nuit
+    et sont redémarrés."""
+    s = statut_amont.upper()
+    if s in ("ABSENTE", "ERROR"):
+        return "error"
+    return None
+
+
+async def reconcilier_statut(ctx: Contexte, vm: m.Vm) -> m.Vm:
+    """Relit l'existence et l'état réel du serveur côté Nova et rend la ligne sincère si le
+    serveur a disparu ou est mort depuis le dernier relevé, avant de la renvoyer.
+
+    La ligne en base peut survivre à son infra réelle : une VM Nova supprimée hors bande (nettoyage
+    manuel du lab, travail tombé en échec sans compensation) continue de s'afficher `running` dans
+    les listes et les tableaux de bord, et c'est seulement au premier usage (SSH, console…) que
+    l'écart se voit — cf. l'hébergement `verif-final.example.com`, resté `en_ligne` des heures
+    après la disparition de sa VM. Même motif « reconcile-on-read » que `web_hebergement` et
+    `kubernetes` (cf. `docs/GUIDE-MODULE.md`, invariant « Réconcilier à la lecture ») : sur toute
+    lecture d'une VM en statut stable, relit le statut réel Nova et persiste l'écart s'il est
+    cassé (cf. `_mapper_statut_nova`), avant de renvoyer la ressource."""
+    if vm.statut not in STATUTS_STABLES:
+        return vm
+    try:
+        secrets = await depot.secrets(ctx, vm.id)
+    except Exception:  # noqa: BLE001
+        return vm
+    sid = secrets.get("serveur_id")
+    # Sans `serveur_id` (ligne de démo, VM antérieure au câblage Nova), la VM n'a jamais
+    # référencé d'infrastructure réelle identifiable : `serveur_id()` retomberait sur l'id
+    # applicatif, que Nova ne connaît pas — un contrôle là-dessus marquerait en erreur des
+    # lignes qui ne sont pas orphelines. On n'affirme « absente » qu'à propos d'un serveur
+    # qu'on sait avoir existé.
+    if not sid:
+        return vm
+    statut_amont = await asyncio.to_thread(amont().statut_serveur, sid)
+    nouveau = _mapper_statut_nova(statut_amont)
+    if nouveau and nouveau != vm.statut:
+        return await depot.definir_statut(ctx, vm.id, nouveau)
+    return vm
+
+
 @executeur("vm.create")
 class ExecuteurVmCreate(Executeur):
     compensable = True

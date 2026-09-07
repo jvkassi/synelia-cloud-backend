@@ -225,3 +225,88 @@ async def test_instantanes_vm(client):
     assert r.status_code == 204
     r = await client.get(f"/v1/vms/{vid}/instantanes")
     assert r.json() == []
+
+
+def test_mapper_statut_nova():
+    from synelia.modules.vms.service import _mapper_statut_nova
+
+    assert _mapper_statut_nova("absente") == "error"
+    assert _mapper_statut_nova("ERROR") == "error"
+    # Les transitions vivantes ne sont pas traduites : elles sont portées par les propres
+    # travaux de l'application (et l'amont simulé ne retient aucun état — traduire `ACTIVE`
+    # en `running` annulerait l'arrêt que `vm.power.stop` vient de poser).
+    assert _mapper_statut_nova("ACTIVE") is None
+    assert _mapper_statut_nova("SHUTOFF") is None
+    assert _mapper_statut_nova("BUILDING") is None
+    assert _mapper_statut_nova("PAUSED") is None
+    assert _mapper_statut_nova("SHELVED") is None
+
+
+async def test_reconciliation_statut_vm_orpheline(client, monkeypatch):
+    # La ligne en base peut survivre à son infra réelle : une VM Nova supprimée hors bande
+    # (nettoyage manuel du lab, travail tombé sans compensation) continuait d'afficher
+    # `running` dans les listes et les tableaux de bord, et l'écart ne se voyait qu'au
+    # premier usage (SSH, console…). On vérifie ici que la lecture rend le statut sincère
+    # et le **persiste**, pas seulement pour la réponse renvoyée.
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-reconcile")
+
+    # Serveur toujours connu de Nova (simulé : ACTIVE) : la lecture ne change rien.
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "running"
+
+    # Nova ne connaît plus le serveur : `error` (le seul statut sincère du contrat —
+    # `stopped` ferait croire à une machine simplement arrêtée, redémarrable).
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "absente",
+    )
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "error"
+
+    # La ressource a bien été persistée à jour, pas seulement renvoyée une fois.
+    r = await client.get("/v1/vms", params={"statut": "error"})
+    assert any(v["id"] == vid for v in r.json()["donnees"])
+
+
+async def test_reconciliation_statut_vm_shutoff_pas_un_orphelin(client, monkeypatch):
+    # Un serveur éteint hors bande (SHUTOFF) n'est pas un orphelin : les invités du lab
+    # s'éteignent la nuit et sont redémarrés — la réconciliation ne doit ni le marquer
+    # `error`, ni contredire le statut posé par le propre flux de l'application.
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-shutoff")
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "SHUTOFF",
+    )
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "running"
+    r = await client.get("/v1/vms", params={"statut": "error"})
+    assert all(v["id"] != vid for v in r.json()["donnees"])
+
+
+async def test_reconciliation_vm_sans_serveur_id(client, monkeypatch):
+    # Une ligne sans secret `serveur_id` (démo, VM antérieure au câblage Nova) n'a jamais
+    # référencé d'infrastructure réelle identifiable : sans cette garde, le contrôle sur
+    # l'id applicatif de repli (que Nova ignore toujours) la marquerait orpheline à tort.
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-sans-serveur")
+
+    async def _secrets_vides(ctx, id_, **kw):
+        return {}
+
+    def _interdit(self, serveur_id, identifiants=None):
+        raise AssertionError("Nova ne doit pas être interrogé sans secret serveur_id")
+
+    monkeypatch.setattr(vms_service.depot, "secrets", _secrets_vides)
+    monkeypatch.setattr(vms_service.ComputeSimule, "statut_serveur", _interdit)
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "running"
