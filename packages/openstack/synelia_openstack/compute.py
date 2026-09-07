@@ -179,6 +179,11 @@ class ComputeSimule:
     def journaux(self, serveur_id: str, lignes: int = 20) -> list[str]:
         return [f"[cloud-init] ligne {i} — démarrage nominal" for i in range(1, lignes + 1)]
 
+    def capacite_plateforme(self) -> dict[str, Any] | None:
+        """Capacité agrégée réelle du parc d'hyperviseurs Nova — `None` en simulation :
+        rien à interroger, l'appelant garde alors ses valeurs de secours."""
+        return None
+
 
 class ComputeOpenStack(ComputeSimule):
     def _c(self):  # type: ignore[no-untyped-def]
@@ -388,3 +393,18 @@ class ComputeOpenStack(ComputeSimule):
                 raise
             raise traduire(exc, "Machine virtuelle") from None
         return ((sortie or {}).get("output") or "").splitlines()
+
+    def capacite_plateforme(self) -> dict[str, Any] | None:
+        """Capacité agrégée réelle du parc d'hyperviseurs Nova (`/os-hypervisors/statistics`) :
+        depuis la microversion 2.88 le détail par hyperviseur ne renvoie plus vcpus/mémoire
+        (remplacés par l'API Placement), mais l'agrégat de statistiques reste exposé et donne
+        la vraie capacité du lab (jamais les capacités figées d'un jeu de données de départ)."""
+        r = self._c().compute.get("/os-hypervisors/statistics")
+        r.raise_for_status()
+        s = r.json()["hypervisor_statistics"]
+        return {
+            "hosts": int(s["count"]),
+            "vcpu": int(s["vcpus"]),
+            "ramGo": max(1, round(s["memory_mb"] / 1024)),
+            "stockageTo": round(s["local_gb"] / 1024, 3),
+        }

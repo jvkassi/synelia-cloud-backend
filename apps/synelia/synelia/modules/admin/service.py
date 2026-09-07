@@ -11,10 +11,19 @@ from synelia_db.modeles import Ressource, Travail, Utilisateur
 from synelia_kernel import erreurs
 from synelia_kernel.dates import depuis_iso, maintenant
 from synelia_kernel.ids import nouvel_id
+from synelia_openstack import fournisseur
+from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
 from synelia.travaux import Executeur, executeur
+
+BACKEND_REEL_ID = "backend-abj"  # seul backend réellement adossé au lab OpenStack ; GBM reste
+# un second site simulé (statut « maintenance », jamais interrogé pour de vrai).
+
+
+def amont() -> ComputeSimule:
+    return fournisseur(ComputeSimule, ComputeOpenStack)
 
 depot_backend = Depot("backend", m.Backend, plateforme=True, libelle="Backend", champ_nom="code")
 depot_placement = Depot("placement", m.Placement, plateforme=True, libelle="Placement")
@@ -63,30 +72,43 @@ async def lignes_type(ctx: Contexte, type_: str, org_id: str | None = None) -> l
 
 
 async def amacer_backends(ctx: Contexte) -> list[m.Backend]:
-    """Crée les backends par défaut si la table est vide (actif ABJ + maintenance GBM)."""
+    """Crée les backends par défaut si la table est vide (actif ABJ + maintenance GBM), puis
+    rafraîchit la capacité de `backend-abj` depuis la statistique Nova réelle du lab (mode
+    OpenStack réel seulement — en simulation, `capacite_plateforme()` renvoie `None` et les
+    valeurs de secours ci-dessous restent inchangées, comme avant)."""
     existants = await depot_backend.tous(ctx)
-    if existants:
-        return existants
-    base = [
-        ("backend-abj", "openstack-abj", "ABJ", 24, "en_ligne", 1024, 8192, 1024),
-        ("backend-gbm", "openstack-gbm", "GBM", 18, "maintenance", 768, 6144, 768),
-    ]
-    for id_, code, site, hosts, statut, vcpu, ram, stockage in base:
-        await depot_backend.creer(
-            ctx,
-            m.Backend(
-                id=id_,
-                code=code,
-                type="openstack",
-                site=site,
-                hosts=hosts,
-                statut=statut,
-                usage=m.Usage(vcpuPct=0, ramPct=0, stockagePct=0),
-                capacite=m.Quota(vcpu=vcpu, ramGo=ram, stockageTo=stockage),
-                souverain=True,
-            ),
-        )
-    return await depot_backend.tous(ctx)
+    if not existants:
+        base = [
+            ("backend-abj", "openstack-abj", "ABJ", 24, "en_ligne", 1024, 8192, 1024),
+            ("backend-gbm", "openstack-gbm", "GBM", 18, "maintenance", 768, 6144, 768),
+        ]
+        for id_, code, site, hosts, statut, vcpu, ram, stockage in base:
+            await depot_backend.creer(
+                ctx,
+                m.Backend(
+                    id=id_,
+                    code=code,
+                    type="openstack",
+                    site=site,
+                    hosts=hosts,
+                    statut=statut,
+                    usage=m.Usage(vcpuPct=0, ramPct=0, stockagePct=0),
+                    capacite=m.Quota(vcpu=vcpu, ramGo=ram, stockageTo=stockage),
+                    souverain=True,
+                ),
+            )
+        existants = await depot_backend.tous(ctx)
+
+    reel = amont().capacite_plateforme()
+    if reel is not None:
+        actuel = next((b for b in existants if b.id == BACKEND_REEL_ID), None)
+        cap = m.Quota(vcpu=reel["vcpu"], ramGo=reel["ramGo"], stockageTo=reel["stockageTo"])
+        if actuel is not None and (actuel.hosts != reel["hosts"] or actuel.capacite != cap):
+            await depot_backend.modifier(
+                ctx, BACKEND_REEL_ID, {"hosts": reel["hosts"], "capacite": cap.model_dump(mode="json")}
+            )
+            existants = await depot_backend.tous(ctx)
+    return existants
 
 
 async def usage_plateforme(ctx: Contexte) -> dict[str, float]:
