@@ -188,7 +188,84 @@ async def supprimer_lb_amont(ctx: Contexte, lb_id_local: str) -> None:
     secrets = await depot_lb.secrets(ctx, lb_id_local)
     oid = secrets.get("octavia_lb_id")
     if oid:
+        # `cascade=True` (côté NetworkOpenStack.supprimer_load_balancer) fait tomber avec lui
+        # listeners, pools, membres et moniteur de santé amont : pas besoin de les défaire un
+        # par un ici.
         amont().supprimer_load_balancer(oid)
+    fip_id = secrets.get("octavia_fip_id")
+    if fip_id:
+        # L'IP flottante d'un LB `exposure=public` n'est pas défaite par la suppression
+        # cascade du load balancer (ressource Neutron indépendante) : sans cet appel elle
+        # fuit à chaque suppression (constaté en direct : IP flottante encore allouée au
+        # projet, `port_id` à `null`, après suppression du LB public qui la portait).
+        amont().supprimer_ip_flottante_lb(fip_id)
+
+
+def _ip_privee(vm: m.Vm) -> str | None:
+    return next((ip.adresse for ip in vm.ips if ip.type == "privee"), None)
+
+
+async def synchroniser_pool_amont(
+    ctx: Contexte, lb: m.LoadBalancer, cibles: list[m.Cible2]
+) -> list[m.PoolItem]:
+    """Reflète la liste de cibles demandée sur le pool Octavia du load balancer (ajoute/retire
+    de vrais membres) : sans ça, poser une cible via `PUT /pool` ne fait que ranger une ligne
+    en base, le trafic réel ne suit jamais (constaté en testant en direct : un membre "ok" en
+    base ne recevait jamais de requête)."""
+    secrets = await depot_lb.secrets(ctx, lb.id)
+    pool_id = secrets.get("octavia_pool_id")
+    octavia_lb_id = secrets.get("octavia_lb_id")
+    port = (lb.listeners[0].port if lb.listeners else None) or 80
+
+    anciens_ids = {p.targetId for p in lb.pool}
+    nouveaux_ids = {c.targetId for c in cibles}
+
+    nouveaux_secrets: dict[str, str] = {}
+    if pool_id:
+        for retire in anciens_ids - nouveaux_ids:
+            membre_id = secrets.get(f"membre_{retire}")
+            if membre_id:
+                amont().supprimer_membre(pool_id, membre_id, loadbalancer_id=octavia_lb_id)
+                # Efface la trace du membre défait : sinon une cible retirée puis reposée
+                # plus tard serait prise pour "déjà membre" (secret encore présent) et ne
+                # recréerait jamais de membre Octavia réel.
+                nouveaux_secrets[f"membre_{retire}"] = ""
+
+    items: list[m.PoolItem] = []
+    for c in cibles:
+        vm = await Depot("vm", m.Vm).trouver(ctx, c.targetId)
+        label = vm.nom if vm else c.targetId
+        membre_id = secrets.get(f"membre_{c.targetId}")
+        if pool_id and not membre_id and vm is not None:
+            adresse = _ip_privee(vm)
+            if adresse:
+                membre = amont().ajouter_membre(
+                    pool_id=pool_id,
+                    adresse=adresse,
+                    port=port,
+                    loadbalancer_id=octavia_lb_id,
+                    poids=c.poids or 1,
+                )
+                nouveaux_secrets[f"membre_{c.targetId}"] = membre["id"]
+                # Le port du membre vit dans le groupe de sécurité `default` du projet, qui
+                # n'autorise que le trafic intra-groupe : l'amphore Octavia (autre groupe)
+                # y reste bloquée sans cette règle (constaté en direct : membre "ONLINE" côté
+                # Octavia, mais `curl` sur la VIP renvoyait 503 tant qu'elle manquait).
+                from synelia.modules.vms.service import serveur_id
+
+                sid = await serveur_id(ctx, c.targetId)
+                amont().assurer_regle_port(sid, port)
+        items.append(
+            m.PoolItem(
+                targetId=c.targetId,
+                targetLabel=label,
+                poids=c.poids or 1,
+                sante="drain" if c.drain else "ok",
+            )
+        )
+    if nouveaux_secrets:
+        await depot_lb.definir_secrets(ctx, lb.id, nouveaux_secrets)
+    return items
 
 
 def sante_defaut() -> m.HealthCheck:
@@ -220,7 +297,31 @@ class ExecuteurLbCreate(Executeur):
                 exposure=lb.exposure,
                 listeners=entree.get("listeners"),
             )
-            await depot_lb.definir_secrets(ctx, lb.id, {"octavia_lb_id": res["id"]})
+            secrets_lb = {"octavia_lb_id": res["id"]}
+            if res.get("listener_id"):
+                secrets_lb["octavia_listener_id"] = res["listener_id"]
+            if res.get("pool_id"):
+                secrets_lb["octavia_pool_id"] = res["pool_id"]
+            if res.get("fip_id"):
+                secrets_lb["octavia_fip_id"] = res["fip_id"]
+            await depot_lb.definir_secrets(ctx, lb.id, secrets_lb)
+            if res.get("pool_id"):
+                # Moniteur de santé par défaut sur le pool par défaut du listener : c'est lui
+                # qui permet à Octavia de retirer réellement un membre KO de la rotation
+                # (constaté en testant en direct : sans moniteur, le pool continue d'envoyer
+                # du trafic à un membre arrêté).
+                hc = sante_defaut()
+                mon = amont().creer_moniteur_sante(
+                    pool_id=res["pool_id"],
+                    type_=hc.protocole.upper(),
+                    delay=hc.intervalleS,
+                    timeout=max(1, hc.intervalleS - 1),
+                    max_retries=hc.seuilKo,
+                    url_path=hc.chemin,
+                    expected_codes=str(hc.codeAttendu) if hc.codeAttendu else None,
+                    loadbalancer_id=res["id"],
+                )
+                await depot_lb.definir_secrets(ctx, lb.id, {"octavia_moniteur_id": mon["id"]})
             c = dict(travail.contexte)
             c["vip"] = res["vip"]
             travail.contexte = c

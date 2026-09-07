@@ -9,7 +9,7 @@ from synelia_kernel.ids import nouvel_id
 from synelia.audit import journaliser
 from synelia.depot import Depot
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
-from synelia.modules.kubernetes.service import depot_cluster, depot_pool
+from synelia.modules.kubernetes.service import depot_cluster, depot_pool, kubeconfig_reel
 from synelia.travaux import demarrer_travail
 
 router = APIRouter(prefix="/kubernetes", tags=["Kubernetes"])
@@ -192,6 +192,11 @@ async def obtenir_kubeconfig(
     clusterId: str, ctx: Contexte = Depends(exige("component.restart"))
 ) -> Any:  # noqa: N803
     cluster = await depot_cluster.obtenir(ctx, clusterId)
+    secrets = await depot_cluster.secrets(ctx, clusterId)
+    magnum_id = secrets.get("magnum_cluster_id")
+    reel = kubeconfig_reel(magnum_id) if magnum_id else None
+    if reel:
+        return m.Kubeconfig(contenu=_kubeconfig_yaml(reel), expire=None, utilisateur="synelia-paas")
     contenu = (
         f"apiVersion: v1\nkind: Config\nclusters:\n- name: {cluster.nom}\n"
         f"  cluster:\n    server: https://{clusterId}.k8s.synelia.cloud:6443\n"
@@ -199,6 +204,31 @@ async def obtenir_kubeconfig(
         f"current-context: {cluster.nom}\nusers:\n- name: admin\n  user:\n    token: KUBECONFIG-TOKEN\n"
     )
     return m.Kubeconfig(contenu=contenu, expire=None, utilisateur="admin")
+
+
+def _kubeconfig_yaml(kc: dict[str, Any]) -> str:
+    cluster = kc["clusters"][0]
+    utilisateur = kc["users"][0]
+    contexte = kc["contexts"][0]
+    return (
+        "apiVersion: v1\nkind: Config\n"
+        "clusters:\n"
+        f"- name: {cluster['name']}\n"
+        "  cluster:\n"
+        f"    server: {cluster['cluster']['server']}\n"
+        f"    certificate-authority-data: {cluster['cluster']['certificate-authority-data']}\n"
+        "contexts:\n"
+        f"- name: {contexte['name']}\n"
+        "  context:\n"
+        f"    cluster: {contexte['context']['cluster']}\n"
+        f"    user: {contexte['context']['user']}\n"
+        f"current-context: {kc['current-context']}\n"
+        "users:\n"
+        f"- name: {utilisateur['name']}\n"
+        "  user:\n"
+        f"    client-certificate-data: {utilisateur['user']['client-certificate-data']}\n"
+        f"    client-key-data: {utilisateur['user']['client-key-data']}\n"
+    )
 
 
 @router.post(

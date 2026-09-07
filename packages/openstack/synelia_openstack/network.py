@@ -91,6 +91,7 @@ class NetworkSimule:
         port: int,
         subnet_id: str | None = None,
         loadbalancer_id: str | None = None,
+        poids: int | None = None,
     ) -> dict[str, Any]:
         return {"id": f"mbr-{nouvel_id()[:8]}"}
 
@@ -104,10 +105,30 @@ class NetworkSimule:
     ) -> dict[str, Any]:
         return {"policy_id": f"l7p-{nouvel_id()[:8]}", "rule_id": f"l7r-{nouvel_id()[:8]}"}
 
+    def creer_moniteur_sante(
+        self,
+        *,
+        pool_id: str,
+        type_: str,
+        delay: int,
+        timeout: int,
+        max_retries: int,
+        url_path: str | None = None,
+        expected_codes: str | None = None,
+        loadbalancer_id: str | None = None,
+    ) -> dict[str, Any]:
+        return {"id": f"mon-{nouvel_id()[:8]}"}
+
+    def supprimer_moniteur_sante(self, moniteur_id: str, loadbalancer_id: str | None = None) -> None:
+        return None
+
     def supprimer_regle_hote(self, policy_id: str, loadbalancer_id: str | None = None) -> None:
         return None
 
     def assurer_regle_ssh(self, serveur_id: str) -> None:
+        return None
+
+    def assurer_regle_port(self, serveur_id: str, port: int) -> None:
         return None
 
 
@@ -255,11 +276,14 @@ class NetworkOpenStack(NetworkSimule):
         port: int,
         subnet_id: str | None = None,
         loadbalancer_id: str | None = None,
+        poids: int | None = None,
     ) -> dict[str, Any]:
         c = self._c()
         attrs: dict[str, Any] = {"address": adresse, "protocol_port": port}
         if subnet_id:
             attrs["subnet_id"] = subnet_id
+        if poids is not None:
+            attrs["weight"] = poids
         m = c.load_balancer.create_member(pool_id, **attrs)
         if loadbalancer_id:
             # Octavia passe le LB en `PENDING_UPDATE` le temps de reconfigurer les amphores :
@@ -303,12 +327,50 @@ class NetworkOpenStack(NetworkSimule):
         if loadbalancer_id:
             self._attendre_actif(c, loadbalancer_id)
 
-    def assurer_regle_ssh(self, serveur_id: str) -> None:
-        """Autorise le port 22 en entrée sur le groupe de sécurité du serveur donné : le
-        groupe `default` d'un projet fraîchement créé n'autorise **aucune** entrée externe
-        (constaté en direct : une IP flottante posée sans cette règle reste injoignable, y
-        compris en SSH) — sans elle, l'IP flottante de gestion (`amont_identite()`) ne sert à
-        rien. Idempotent : ne recrée pas la règle si elle existe déjà."""
+    def creer_moniteur_sante(
+        self,
+        *,
+        pool_id: str,
+        type_: str,
+        delay: int,
+        timeout: int,
+        max_retries: int,
+        url_path: str | None = None,
+        expected_codes: str | None = None,
+        loadbalancer_id: str | None = None,
+    ) -> dict[str, Any]:
+        c = self._c()
+        attrs: dict[str, Any] = {
+            "pool_id": pool_id,
+            "type": type_,
+            "delay": delay,
+            "timeout": timeout,
+            "max_retries": max_retries,
+        }
+        if type_ in ("HTTP", "HTTPS"):
+            if url_path:
+                attrs["url_path"] = url_path
+            if expected_codes:
+                attrs["expected_codes"] = expected_codes
+        mon = c.load_balancer.create_health_monitor(**attrs)
+        if loadbalancer_id:
+            self._attendre_actif(c, loadbalancer_id)
+        return {"id": mon.id}
+
+    def supprimer_moniteur_sante(self, moniteur_id: str, loadbalancer_id: str | None = None) -> None:
+        c = self._c()
+        c.load_balancer.delete_health_monitor(moniteur_id, ignore_missing=True)
+        if loadbalancer_id:
+            self._attendre_actif(c, loadbalancer_id)
+
+    def _assurer_regle_ingress_tcp(self, serveur_id: str, port_num: int) -> None:
+        """Autorise `port_num` en entrée (TCP) sur le(s) groupe(s) de sécurité du serveur
+        donné : le groupe `default` d'un projet fraîchement créé n'autorise **aucune** entrée
+        externe (constaté en direct : une IP flottante posée sans règle reste injoignable, y
+        compris en SSH — même chose pour un membre de pool Octavia, dont le trafic arrive du
+        port de l'amphore, dans un groupe de sécurité différent de celui du membre : sans
+        cette règle, `curl` sur la VIP du load balancer renvoyait 503 alors que Nginx tournait
+        bien sur la VM). Idempotent : ne recrée pas la règle si elle existe déjà."""
         c = self._c()
         port = next(iter(c.network.ports(device_id=serveur_id)), None)
         if port is None or not port.security_group_ids:
@@ -317,7 +379,7 @@ class NetworkOpenStack(NetworkSimule):
             sg = c.network.get_security_group(sg_id)
             deja = any(
                 r.get("protocol") == "tcp"
-                and r.get("port_range_min") == 22
+                and r.get("port_range_min") == port_num
                 and r.get("direction") == "ingress"
                 for r in (sg.security_group_rules or [])
             )
@@ -326,10 +388,19 @@ class NetworkOpenStack(NetworkSimule):
                     security_group_id=sg_id,
                     direction="ingress",
                     protocol="tcp",
-                    port_range_min=22,
-                    port_range_max=22,
+                    port_range_min=port_num,
+                    port_range_max=port_num,
                     ethertype="IPv4",
                 )
+
+    def assurer_regle_ssh(self, serveur_id: str) -> None:
+        self._assurer_regle_ingress_tcp(serveur_id, 22)
+
+    def assurer_regle_port(self, serveur_id: str, port: int) -> None:
+        """Autorise le port du listener LB en entrée sur le groupe de sécurité du membre de
+        pool ciblé — sinon le trafic de l'amphore Octavia vers ce membre est bloqué par le
+        groupe `default` (voir `_assurer_regle_ingress_tcp`)."""
+        self._assurer_regle_ingress_tcp(serveur_id, port)
 
     def creer_groupe(
         self, nom: str, description: str | None = None, projet_id: str | None = None

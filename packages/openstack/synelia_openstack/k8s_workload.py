@@ -473,6 +473,14 @@ class K8sWorkloadReel(K8sWorkloadSimule):
                 raise erreurs.amont_indisponible("kubernetes", str(exc)) from exc
 
 
+def construire_kubeconfig(cluster_id: str) -> dict[str, Any]:
+    """Kubeconfig admin pour un cluster Magnum arbitraire — pas seulement celui désigné par
+    `SYNELIA_PAAS_CLUSTER_ID` : réutilisé par le module `kubernetes` pour exposer un vrai
+    `GET /kubernetes/{id}/kubeconfig` sur un cluster provisionné par un client, avec la même
+    mécanique (CSR signée par Magnum) que celle du cluster PaaS interne."""
+    return K8sWorkloadReel()._construire_kubeconfig(cluster_id)  # noqa: SLF001
+
+
 _SIMULE = K8sWorkloadSimule()
 
 

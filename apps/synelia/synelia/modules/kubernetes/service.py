@@ -26,6 +26,16 @@ def amont() -> MagnumSimule:
     return fournisseur(MagnumSimule, MagnumOpenStack)
 
 
+def kubeconfig_reel(magnum_cluster_id: str) -> dict[str, str] | None:
+    """Kubeconfig admin réel du cluster (CA + certificat client signés par Magnum), ou `None`
+    en mode simulé — l'appelant retombe alors sur un kubeconfig factice."""
+    if not isinstance(amont(), MagnumOpenStack):
+        return None
+    from synelia_openstack.k8s_workload import construire_kubeconfig
+
+    return construire_kubeconfig(magnum_cluster_id)
+
+
 @executeur("k8s.create")
 class ExecuteurK8sCreate(Executeur):
     compensable = True

@@ -32,6 +32,7 @@ from synelia.modules.reseau.service import (
     supprimer_lb_amont,
     supprimer_regle_amont,
     supprimer_reseau_amont,
+    synchroniser_pool_amont,
 )
 from synelia.travaux import demarrer_travail
 
@@ -616,19 +617,8 @@ async def obtenir_metriques_load_balancer(
 async def modifier_pool_load_balancer(
     lbId: str, corps: m.LoadBalancersLbIdPoolPutRequest, ctx: Contexte = Depends(exige("lb.create"))
 ) -> Any:  # noqa: N803
-    await depot_lb.obtenir(ctx, lbId)
-    pool: list[m.PoolItem] = []
-    for c in corps.cibles:
-        vm = await Depot("vm", m.Vm).trouver(ctx, c.targetId)
-        label = vm.nom if vm else c.targetId
-        pool.append(
-            m.PoolItem(
-                targetId=c.targetId,
-                targetLabel=label,
-                poids=c.poids or 1,
-                sante="drain" if c.drain else "ok",
-            )
-        )
+    lb = await depot_lb.obtenir(ctx, lbId)
+    pool = await synchroniser_pool_amont(ctx, lb, corps.cibles)
     await depot_lb.modifier(ctx, lbId, {"pool": [p.model_dump() for p in pool]})
     await journaliser(ctx, action="lb.pool", cible_type="load_balancer", cible_id=lbId)
     return await depot_lb.obtenir(ctx, lbId)
