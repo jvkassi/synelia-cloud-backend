@@ -4,6 +4,7 @@ import asyncio
 
 from synelia_contract import modeles as m
 from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
+from synelia_kernel import erreurs
 from synelia_openstack import fournisseur
 from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
 from synelia_openstack.network import NetworkOpenStack, NetworkSimule
@@ -80,17 +81,58 @@ async def liberer_ip_amont(ctx: Contexte, ip_id_local: str) -> None:
         await asyncio.to_thread(amont_identite().supprimer_ip_flottante, fid)
 
 
-async def associer_ip_amont(ctx: Contexte, ip_id_local: str, vm_id: str) -> str | None:
-    """Associe réellement l'IP flottante au port Neutron du serveur Nova de la VM cible —
-    sans cet appel l'attachement ne vivait que côté DB (constaté en direct : `openstack
-    floating ip show` restait sans port associé après un `PUT .../attachement` réussi)."""
-    from synelia.modules.vms.service import serveur_id
+async def resoudre_cible_attachement_ip(ctx: Contexte, cible_id: str) -> tuple[str, str]:
+    """Détermine le type réel d'une cible d'attachement d'IP flottante — le contrat
+    (`IpsIpIdAttachementPutRequest.cibleId`) documente « VM, load balancer ou passerelle »
+    mais ne porte aucun discriminant explicite : on résout donc `cibleId` en essayant
+    chaque type de ressource à son tour. Sans cette résolution, toute cible non-VM (un load
+    balancer, pourtant documenté comme cible valide) échouait avec un 404 « Vm ... introuvable »
+    trompeur, quelle que soit la cible réelle (constaté en direct)."""
+    vm = await Depot("vm", m.Vm).trouver(ctx, cible_id)
+    if vm is not None:
+        return "vm", vm.nom
+    lb = await depot_lb.trouver(ctx, cible_id)
+    if lb is not None:
+        return "load_balancer", lb.nom
+    from synelia.modules.espaces.service import depot as depot_espaces
 
+    espace = await depot_espaces.trouver(ctx, cible_id)
+    if espace is not None:
+        # La « passerelle » d'un Espace est son routeur Neutron (créé avec sa sortie externe
+        # à la création de l'Espace, cf. `IdentiteOpenStack.creer_reseau`) — pas une ressource
+        # distincte que le client pourrait référencer autrement que par l'Espace lui-même.
+        # Neutron refuse toutefois d'associer une IP flottante au port de sortie externe d'un
+        # routeur (constaté en direct sur le lab réel : `openstack floating ip set --port
+        # <port-passerelle>` échoue avec « External network ... is not reachable from subnet
+        # ... Therefore, cannot associate Port ... with a Floating IP » — la passerelle a déjà
+        # sa propre sortie externe et ne peut pas en recevoir une seconde par ce mécanisme).
+        raise erreurs.non_porte(
+            "La passerelle d'un Espace dispose déjà de sa propre sortie externe : Neutron ne "
+            "permet pas d'y associer une IP flottante supplémentaire."
+        )
+    raise erreurs.introuvable("VM, load balancer ou passerelle", cible_id)
+
+
+async def associer_ip_amont(
+    ctx: Contexte, ip_id_local: str, cible_id: str, cible_type: str
+) -> str | None:
+    """Associe réellement l'IP flottante amont à sa cible — sans cet appel l'attachement ne
+    vivait que côté DB (constaté en direct : `openstack floating ip show` restait sans port
+    associé après un `PUT .../attachement` réussi sur une VM ; un load balancer, lui,
+    échouait carrément avec un 404 avant même d'atteindre ce point)."""
     secrets = await depot_ip.secrets(ctx, ip_id_local)
     fid = secrets.get("ip_flottante_id")
     if not fid:
         return None
-    sid = await serveur_id(ctx, vm_id)
+    if cible_type == "load_balancer":
+        secrets_lb = await depot_lb.secrets(ctx, cible_id)
+        lb_id = secrets_lb.get("octavia_lb_id")
+        if not lb_id:
+            return None
+        return await asyncio.to_thread(amont().associer_ip_flottante_lb_existante, fid, lb_id)
+    from synelia.modules.vms.service import serveur_id
+
+    sid = await serveur_id(ctx, cible_id)
     return await asyncio.to_thread(amont_identite().associer_ip_flottante, fid, sid)
 
 

@@ -77,6 +77,9 @@ class NetworkSimule:
     def supprimer_ip_flottante_lb(self, fip_id: str) -> None:
         return None
 
+    def associer_ip_flottante_lb_existante(self, fip_id: str, lb_id: str) -> str | None:
+        return self.allouer_vip()
+
     def creer_pool(self, *, loadbalancer_id: str | None, nom: str, protocole: str = "http") -> dict[str, Any]:
         return {"id": f"pool-{nouvel_id()[:8]}"}
 
@@ -246,6 +249,19 @@ class NetworkOpenStack(NetworkSimule):
 
     def supprimer_ip_flottante_lb(self, fip_id: str) -> None:
         self._c().network.delete_ip(fip_id, ignore_missing=True)
+
+    def associer_ip_flottante_lb_existante(self, fip_id: str, lb_id: str) -> str | None:
+        """Associe une IP flottante déjà réservée séparément (`POST /ips`) au VIP d'un load
+        balancer déjà existant — pendant de `associer_ip_flottante_lb` pour le cas où l'IP a
+        été allouée avant d'être attachée via `PUT /ips/{id}/attachement`, plutôt qu'à la
+        création du LB. Même mécanisme que `IdentiteOpenStack.associer_ip_flottante` pour un
+        serveur Nova : le VIP d'un LB est un port Neutron ordinaire sur le réseau du tenant."""
+        c = self._c()
+        lb = c.load_balancer.get_load_balancer(lb_id)
+        if not lb.vip_port_id:
+            return None
+        fip = c.network.update_ip(fip_id, port_id=lb.vip_port_id)
+        return fip.floating_ip_address
 
     def creer_pool(
         self, *, loadbalancer_id: str | None, nom: str, protocole: str = "http"

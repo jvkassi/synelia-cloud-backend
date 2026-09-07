@@ -26,14 +26,14 @@ async def _creer_groupe(client, nom="sg-web"):
     )
 
 
-async def _creer_lb(client, nom="lb-api"):
+async def _creer_lb(client, nom="lb-api", exposure="public"):
     return await client.post(
         "/v1/load-balancers",
         json={
             "espaceId": ESPACE,
             "nom": nom,
             "layer": "l7",
-            "exposure": "public",
+            "exposure": exposure,
             "algo": "round_robin",
             "listeners": [{"protocole": "http", "port": 80}],
         },
@@ -136,6 +136,40 @@ async def test_attacher_ip_vm_introuvable(client):
     ipid = r.json()["id"]
     r = await client.put(f"/v1/ips/{ipid}/attachement", json={"cibleId": "vm-inconnu"})
     assert r.status_code == 404
+
+
+async def test_attacher_ip_load_balancer(client):
+    # Cible documentée par le contrat (« VM, load balancer ou passerelle ») mais qui échouait
+    # jusqu'ici avec un 404 « Vm ... introuvable » : le routeur résolvait toujours la cible
+    # comme une VM, quel que soit son type réel.
+    r = await _creer_lb(client, nom="lb-ip-attach", exposure="interne")
+    assert r.status_code == 202, r.text
+    lb = next(
+        x
+        for x in (await client.get("/v1/load-balancers")).json()["donnees"]
+        if x["nom"] == "lb-ip-attach"
+    )
+
+    r = await _creer_ip(client)
+    ipid = r.json()["id"]
+
+    r = await client.put(f"/v1/ips/{ipid}/attachement", json={"cibleId": lb["id"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["attachedTo"] == lb["id"] and r.json()["attachedLabel"] == "lb-ip-attach"
+
+    r = await client.delete(f"/v1/ips/{ipid}/attachement")
+    assert r.status_code == 200 and r.json().get("attachedTo") is None
+
+
+async def test_attacher_ip_passerelle_non_portee(client):
+    # La passerelle (routeur) d'un Espace a déjà sa propre sortie externe et ne peut pas, à la
+    # différence d'une VM ou d'un LB, recevoir une IP flottante supplémentaire côté Neutron
+    # (constaté en direct sur le lab réel) — 422 explicite plutôt qu'un faux succès ou un 404
+    # trompeur.
+    r = await _creer_ip(client)
+    ipid = r.json()["id"]
+    r = await client.put(f"/v1/ips/{ipid}/attachement", json={"cibleId": ESPACE})
+    assert r.status_code == 422 and r.json()["erreur"]["code"] == "non_porte"
 
 
 # ── Groupes de sécurité ────────────────────────────────────────────────────

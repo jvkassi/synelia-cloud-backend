@@ -10,7 +10,6 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 
 from synelia.audit import journaliser
-from synelia.depot import Depot
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
 from synelia.modules.reseau.service import (
     ajouter_regle_amont,
@@ -27,6 +26,7 @@ from synelia.modules.reseau.service import (
     liberer_ip_amont,
     metriques_vides,
     reserver_ip_amont,
+    resoudre_cible_attachement_ip,
     sante_defaut,
     supprimer_groupe_amont,
     supprimer_lb_amont,
@@ -214,26 +214,26 @@ async def attacher_ip(
     corps: m.IpsIpIdAttachementPutRequest,
     ctx: Contexte = Depends(exige("network.manage")),
 ) -> Any:  # noqa: N803
-    vm = await Depot("vm", m.Vm).obtenir(ctx, corps.cibleId)
     ip = await depot_ip.obtenir(ctx, ipId)
     if ip.attachedTo:
         raise erreurs.conflit(
             "Cette IP est déjà attachée à une ressource.", code="ip_deja_attachee"
         )
+    cible_type, label = await resoudre_cible_attachement_ip(ctx, corps.cibleId)
     from synelia_openstack.erreurs import traduire
 
     try:
-        await associer_ip_amont(ctx, ipId, corps.cibleId)
+        await associer_ip_amont(ctx, ipId, corps.cibleId, cible_type)
     except erreurs.AppError:
         raise
     except Exception as exc:  # noqa: BLE001
         raise traduire(exc, "IP publique") from None
-    changement: dict[str, Any] = {"attachedTo": corps.cibleId, "attachedLabel": vm.nom}
+    changement: dict[str, Any] = {"attachedTo": corps.cibleId, "attachedLabel": label}
     if corps.ptr is not None:
         changement["ptr"] = corps.ptr
     await depot_ip.modifier(ctx, ipId, changement)
     await journaliser(
-        ctx, action="ip.attachement", cible_type="ip_publique", cible_id=ipId, cible=vm.nom
+        ctx, action="ip.attachement", cible_type="ip_publique", cible_id=ipId, cible=label
     )
     return await depot_ip.obtenir(ctx, ipId)
 
