@@ -38,7 +38,26 @@ def _specs(corps: m.VmCreation) -> tuple[str | None, int, int, int]:
             )
         return corps.gabarit, g["vcpu"], g["ramGo"], g["diskGo"]
     if corps.vcpu is not None and corps.ramGo is not None and corps.diskGo is not None:
-        return None, corps.vcpu, corps.ramGo, corps.diskGo
+        # Nova ne sait créer un serveur que vers un gabarit existant (pas de vcpu/ram/disque
+        # arbitraires) : sans cette résolution, l'amont réel recevait un `flavorRef` vide et
+        # rejetait la requête en pleine exécution du job (`flavorRef: None is not of type
+        # 'string'`), au lieu d'un rejet propre à la validation — constaté en direct.
+        correspondant = next(
+            (
+                g
+                for g in flore.values()
+                if g["vcpu"] == corps.vcpu
+                and g["ramGo"] == corps.ramGo
+                and g["diskGo"] == corps.diskGo
+            ),
+            None,
+        )
+        if correspondant is None:
+            raise erreurs.validation(
+                "Aucun gabarit du catalogue ne correspond à ce vcpu/ramGo/diskGo.",
+                champs={"gabarit": "Indiquez un gabarit existant du catalogue."},
+            )
+        return correspondant["id"], corps.vcpu, corps.ramGo, corps.diskGo
     raise erreurs.validation(
         "Indiquez un gabarit ou vcpu/ramGo/diskGo.",
         champs={"gabarit": "ou vcpu/ramGo/diskGo requis."},

@@ -55,7 +55,10 @@ class ExecuteurVmCreate(Executeur):
             srv = amont().creer_serveur(
                 nom=vm.nom,
                 image_id=entre.get("imageId"),
-                gabarit_id=entre.get("gabarit"),
+                # `vm.flavor` (posé par `_specs()` à la création) est le gabarit résolu, y compris
+                # quand la requête ne donnait que vcpu/ramGo/diskGo : `entre.get("gabarit")` serait
+                # resté vide dans ce cas et Nova aurait reçu un `flavorRef` nul.
+                gabarit_id=vm.flavor,
                 reseau_id=entre.get("reseauId") or secrets_espace.get("reseau_id"),
                 identifiants=secrets_espace,
                 org_id=ctx.org_id_ou_none,
@@ -147,6 +150,28 @@ class ExecuteurVmPower(Executeur):
 
 @executeur("vm.resize")
 class ExecuteurVmResize(Executeur):
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 1:
+            entre = travail.entree or {}
+            vm = await depot.obtenir(ctx, travail.cible_id or "")
+            gabarit = next(
+                (
+                    g
+                    for g in amont().gabarits()
+                    if g["vcpu"] == entre.get("vcpu")
+                    and g["ramGo"] == entre.get("ramGo")
+                    and g["diskGo"] == entre.get("diskGo")
+                ),
+                None,
+            )
+            if gabarit:
+                # Sans cet appel, le redimensionnement ne touchait que la fiche DB : la VM Nova
+                # gardait son ancien gabarit (constaté en direct — `openstack server show`
+                # inchangé après un `POST .../redimensionnement` pourtant rendu « done »).
+                amont().redimensionner(await serveur_id(ctx, vm.id, travail), gabarit["id"])
+                return f"Redimensionné vers le gabarit {gabarit['id']}"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         entre = travail.entree or {}
         patch = {k: entre[k] for k in ("vcpu", "ramGo", "diskGo") if entre.get(k) is not None}
