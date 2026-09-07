@@ -5,6 +5,7 @@ import asyncio
 from sqlalchemy import select
 from synelia_contract import modeles as m
 from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
+from synelia_kernel import erreurs
 from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 from synelia_openstack import fournisseur
@@ -407,12 +408,18 @@ class ExecuteurVmMigrate(Executeur):
 
 @executeur("vm.snapshot")
 class ExecuteurVmSnapshot(Executeur):
+    """`amont().instantane()` crée un vrai instantané Glance et renvoie son id réel — jusqu'ici
+    jeté au sol : `InstantaneVm` (contrat) n'a pas de champ pour un id amont, donc rien ne
+    permettait à `vm.restore` de savoir quelle image restaurer (cf. mémoire
+    `vm-snapshot-restore-fake-success-bug`). Persisté ici en secret (`image_id`), même motif
+    que `serveur_id` sur la VM elle-même et `image_{p.id}` sur `web_backup`."""
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         vm = await depot.obtenir(ctx, travail.cible_id or "")
         entre = travail.entree or {}
         nom = entre.get("nom") or "snapshot"
         sid = await serveur_id(ctx, vm.id, travail)
-        await asyncio.to_thread(amont().instantane, sid, nom)
+        image_id = await asyncio.to_thread(amont().instantane, sid, nom)
         inst = m.InstantaneVm(
             id=nouvel_id(),
             vmId=vm.id,
@@ -422,7 +429,7 @@ class ExecuteurVmSnapshot(Executeur):
             avecMemoire=bool(entre.get("avecMemoire")),
             description=entre.get("description"),
         )
-        await instantane_depot.creer(ctx, inst, parent_id=vm.id)
+        await instantane_depot.creer(ctx, inst, parent_id=vm.id, secrets={"image_id": image_id})
 
 
 @executeur("vm.hardware")
@@ -433,6 +440,40 @@ class ExecuteurVmHardware(Executeur):
 
 @executeur("vm.restore")
 class ExecuteurVmRestore(Executeur):
+    """Jusqu'ici `terminer()` ne posait que le statut `running` : aucun override d'`etape()`,
+    donc simulation par défaut de `Executeur` (docs/GUIDE-MODULE.md — « sans exécuteur [réel],
+    le travail réussit en simulation ») — un `POST .../instantanes/{id}` rendait déjà 202
+    `done` sans qu'aucun code ne touche le serveur amont (cf. mémoire
+    `vm-snapshot-restore-fake-success-bug`). Restaure maintenant réellement depuis l'image
+    Glance capturée par `vm.snapshot` (`Compute.restaurer()` = `rebuild_server`, partagé avec
+    `web.backup.restore`)."""
+
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 1:  # « Restaurer les volumes »
+            entre = travail.entree or {}
+            vm = await depot.obtenir(ctx, travail.cible_id or "")
+            inst = await instantane_depot.obtenir(ctx, entre.get("instantaneId") or "")
+            try:
+                secrets = await instantane_depot.secrets(ctx, inst.id)
+            except Exception:  # noqa: BLE001
+                secrets = {}
+            image_id = secrets.get("image_id")
+            if not image_id:
+                # Instantané antérieur à ce fix (créé avant que `image_id` soit persisté, ou
+                # démo) : aucune image réelle à restaurer — échec explicite plutôt qu'un `done`
+                # qui ne restaurerait rien (même garde-fou que `ExecuteurSauvegardeRestore`,
+                # mais ici sans issue silencieuse : une VM n'a pas de granularité qui justifie
+                # un no-op honnête, il n'y a qu'un instantané entier ou rien).
+                raise erreurs.conflit(
+                    "Cet instantané n'a pas d'image capturée : recréez-en un pour pouvoir le "
+                    "restaurer.",
+                    code="instantane_sans_image",
+                )
+            sid = await serveur_id(ctx, vm.id, travail)
+            await asyncio.to_thread(amont().restaurer, sid, image_id)
+            return f"Serveur restauré depuis l'image {image_id}"
+        return None
+
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         await depot.definir_statut(ctx, travail.cible_id or "", "running")
 

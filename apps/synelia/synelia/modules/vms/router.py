@@ -518,6 +518,7 @@ async def restaurer_instantane_vm(
         vm.nom,
         cible_type="vm",
         cible_id=vmId,
+        entree={"instantaneId": instantaneId},
         etapes=[
             {"nom": "Préparer la restauration", "dureeS": 20},
             {"nom": "Restaurer les volumes", "dureeS": 45},
