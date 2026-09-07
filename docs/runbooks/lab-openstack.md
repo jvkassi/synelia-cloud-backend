@@ -64,13 +64,50 @@ D'où : `dial tcp 192.168.26.234:9696: i/o timeout` dans les logs CCM → jamais
 Machines CAPI jamais Ready → Magnum bloqué en `CREATE_IN_PROGRESS` — alors même que le cluster sert des
 workloads réels sans problème (les nœuds sont Ready côté kubelet, l'API répond).
 
-Fix (appliqué le 2026-09-07) : `openstack endpoint set <id-endpoint-network-public> --url
+Fix (ré-appliqué et **vérifié** le 2026-09-07 13:11 UTC — la pose du matin n'avait pas pris : l'URL était
+encore interne à 13:09) : `openstack endpoint set <id-endpoint-network-public> --url
 https://neutron.openstack-lab.dev01.ovh.smile.ci`, puis redémarrer le CCM pour qu'il reprenne le catalog
 (`kubectl --kubeconfig /tmp/wl.kubeconfig -n kube-system rollout restart ds/openstack-cloud-controller-manager`).
-Ancienne URL de repli : `http://192.168.26.234:9696`. Ne concerne que l'interface **public** (les services
-kolla internes utilisent l'interface internal, inchangée). Leçon générale : après publication des vhost HTTPS
-publiques, vérifier que **toutes** les entrées `public` du catalog ont suivi — `openstack endpoint list` et
-chercher les `http://192.168.26.x` restants côté public.
+Preuve de reprise : la boucle `Update N nodes status` du CCM passe de ~1m00s (timeout) à ~0,4s. Ancienne URL de
+repli : `http://192.168.26.234:9696`. Ne concerne que l'interface **public** (les services kolla internes
+utilisent l'interface internal, inchangée). Leçon générale : après publication des vhost HTTPS publiques,
+vérifier que **toutes** les entrées `public` du catalog ont suivi — `openstack endpoint list --interface public`
+et chercher les `http://192.168.26.x` restants (re-vérifier aussi après chaque redémarrage du lab).
+
+### Piège suivant (2026-09-07) : providerID absent des Nodes alors que le CCM appelle bien Neutron
+
+Le redémarrage du CCM ne suffit pas si les nœuds sont **déjà enregistrés sans taint**
+`node.cloudprovider.kubernetes.io/uninitialized` : dans le node controller du CCM, seul `syncNode` (chemin des
+nœuds taintés, i.e. kubelet lancé avec `--cloud-provider=external`) pose `spec.providerID` ; la boucle
+périodique des nœuds non taintés (`Update N nodes status`) ne met à jour que les adresses. Ici les
+`KubeadmConfig` magnum n'ont pas de `kubeletExtraArgs` cloud-provider → pas de taint → le CCM ne peuplera
+jamais le providerID de ces nœuds. Fix : patcher les Nodes à la main avec la valeur exacte des
+`OpenStackMachine.spec.providerID` (mapping vérifié par port Neutron `--device-id` ↔ IP du nœud) :
+`kubectl patch node <nom> --type=merge -p '{"spec":{"providerID":"openstack:///<uuid-vm>"}}'`
+(réversible : patch à `null`). CAPI mappe alors Machine↔Node (`nodeRef`) en quelques secondes et les Machines
+passent Ready. Le kubeconfig de `coe cluster config` sort avec `server: None` tant que Magnum ignore
+l'api_address : lire le vrai endpoint dans `openstackcluster.status.controlPlaneEndpoint` (cluster de
+management k3s de ctrl1) et patcher le champ `server`.
+
+### Piège encore (2026-09-07) : LB Octavia kubeapi en provisioning ERROR mais ONLINE
+
+Machines CAPI Ready ne suffit pas : le `OpenStackCluster` de CAPO attend `provisioning_status=ACTIVE` du LB
+API (`k8s-clusterapi-cluster-<ns>-<cluster>-kubeapi`), sinon condition `APIEndpointReady=False` → Cluster
+jamais `Available` → Magnum reste `CREATE_IN_PROGRESS` — même si l'API répond réellement derrière. Cause ici :
+l'arrêt nocturne du lab a fait perdre les heartbeats, le health manager a déclenché un failover automatique de
+l'amphora (03:02 UTC), le build de l'amphora de remplacement a timeout (`ComputeWaitTimeoutException`, 32 min)
+→ amphora origine laissée `ERROR` en base alors qu'elle sert toujours le trafic (`operating_status=ONLINE`,
+listener ACTIVE). Diag : `openstack loadbalancer show <id>` + `amphora list --loadbalancer <id>`. Fix appliqué :
+bascule d'état en base sur ctrl1 (mariadb kolla, backup des lignes + commande de rollback dans
+`/root/octavia-lb-8d5455f4-backup-20260907.txt`) : `load_balancer.provisioning_status=ACTIVE`,
+`amphora.status=ALLOCATED` (état normal d'une amphora saine, cf. le LB vps-zone). Alternative plus lourde :
+`openstack loadbalancer failover <id>` (rebuild complet de l'amphora, ~blip API de 1-3 min, à réserver aux cas
+où l'amphora est réellement morte — le précédent failover ayant déjà échoué sur un timeout compute, préférer la
+bascule d'état quand `operating_status=ONLINE`). Après chaque reboot du lab, vérifier ce LB.
+
+État final (2026-09-07 ~13:45 UTC) : endpoint public Neutron = vhost HTTPS, providerID posés, Machines CAPI
+Ready, LB ACTIVE/ONLINE → `openstack coe cluster show capi-fix-verify` = **CREATE_COMPLETE / HEALTHY**
+(health_reason : 2 machines Ready=True, api ok), sans recréation ni reboot du cluster.
 
 ## Brancher le backend sur le lab
 
