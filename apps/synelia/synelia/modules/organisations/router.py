@@ -246,8 +246,8 @@ async def obtenir_synthese_organisation(
     return {
         "organisation": await service.vers_contrat(ctx, o),
         "synthese": await service.synthese(ctx, o.id),
-        "impayes": [],
-        "tickets": [],
+        "impayes": await service.impayes(ctx, o.id),
+        "tickets": await service.tickets_organisation(ctx, o.id),
     }
 
 
