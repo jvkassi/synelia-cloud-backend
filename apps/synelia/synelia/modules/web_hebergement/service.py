@@ -125,7 +125,7 @@ async def assurer_cle_ssh_zone(ctx: Contexte) -> dict[str, str]:
     cloud-init ne s'exécute qu'au premier démarrage, on ne peut pas les retrofit."""
     from synelia_kernel.config import reglages
 
-    from synelia.modules.espaces.service import depot as depot_espaces
+    from synelia.modules.espaces.service import depot_plateforme as depot_espaces
 
     zone = await zone_vps_secrets(ctx)
     if zone.get("ssh_prive") and zone.get("ssh_publique"):
@@ -146,28 +146,28 @@ async def assurer_cle_ssh_zone(ctx: Contexte) -> dict[str, str]:
         "ssh_prive": cle["prive"],
         "ssh_publique": cle["publique"],
     }
-    await depot_espaces.definir_secrets(
-        ctx, r.vps_zone_espace_id, secrets, org_id=r.vps_zone_org_id
-    )
+    await depot_espaces.definir_secrets(ctx, r.vps_zone_espace_id, secrets)
     return secrets
 
 
 async def zone_vps_secrets(ctx: Contexte) -> dict[str, Any]:
-    """Secrets de la zone VPS partagée : un unique Espace Cloud admin (réseau privé + load
-    balancer Octavia public), configuré une fois (bootstrap manuel, voir docs/runbooks) et
-    référencé par `SYNELIA_VPS_ZONE_ESPACE_ID`. Toutes les VM d'hébergement sont créées sur
-    ce même réseau et projet OpenStack (jamais celui de l'organisation cliente) — seul le
-    load balancer partagé les expose, chacune isolée par son `Host()` Traefik et sa policy
-    L7 dédiée ; `SYNELIA_VPS_ZONE_ORG_ID` permet de lire ces secrets depuis le contexte de
-    n'importe quelle organisation cliente (l'Espace appartient à l'organisation admin)."""
+    """Secrets de la zone VPS partagée : un unique Espace Cloud **plateforme** (`org_id`
+    NULL — cf. `espaces.service.depot_plateforme` et `semer_zone_vps`, qui garantit sa
+    présence à chaque démarrage sans bootstrap manuel), réseau privé + load balancer Octavia
+    public, référencé par `SYNELIA_VPS_ZONE_ESPACE_ID`. Toutes les VM d'hébergement sont
+    créées sur ce même réseau et projet OpenStack (jamais celui de l'organisation cliente) —
+    seul le load balancer partagé les expose, chacune isolée par son `Host()` Traefik et sa
+    policy L7 dédiée. Étant « plateforme » (jamais listable/visible depuis `/espaces` côté
+    client, cf. `Depot._org`), cette lecture n'a plus besoin d'un org_id explicite : le dépôt
+    « plateforme » lit par id fixe, indépendamment du contexte appelant."""
     from synelia_kernel.config import reglages
 
-    from synelia.modules.espaces.service import depot as depot_espaces
+    from synelia.modules.espaces.service import depot_plateforme as depot_espaces
 
     r = reglages()
     if not r.vps_zone_espace_id:
         return {}
-    return await depot_espaces.secrets(ctx, r.vps_zone_espace_id, org_id=r.vps_zone_org_id)
+    return await depot_espaces.secrets(ctx, r.vps_zone_espace_id)
 
 
 # Le lab ne possède aujourd'hui que deux gabarits Nova réels — taillés pour Kubernetes,

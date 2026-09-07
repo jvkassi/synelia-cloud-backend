@@ -233,6 +233,16 @@ async def obtenir_capacite(
     }
 
 
+@router.get("/espaces", response_model=list[m.EspaceCloud], response_model_exclude_none=True)
+async def lister_espaces_plateforme(ctx: Contexte = Depends(exige_admin("capacity.manage"))) -> Any:
+    """Espaces Cloud « plateforme » (`org_id` NULL) : réseau + load balancer partagés,
+    jamais visibles depuis `/espaces` (portée client) — ex. la zone VPS partagée de
+    `web_hebergement`, cf. `espaces.service.semer_zone_vps`. Seul point d'accès pour les
+    voir/piloter depuis l'équipe Synelia."""
+    lignes = await service.lignes_type(ctx, "espace")
+    return [m.EspaceCloud.model_validate(r.donnees) for r in lignes if r.org_id is None]
+
+
 # ── conformité ───────────────────────────────────────────────────────────────
 REFERENTIELS = [
     {"nom": "ISO 27001", "statut": "partiel", "ecarts": 2},

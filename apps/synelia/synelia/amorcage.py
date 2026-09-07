@@ -70,4 +70,11 @@ async def amorcer() -> None:
 
         await semer_catalogue_reel(s)
         await s.commit()
+
+        # Espace Cloud « plateforme » de la zone VPS partagée (réseau + LB Octavia public) :
+        # même précédent, indépendant de SYNELIA_SEED_DEMO — cf. `espaces.service.semer_zone_vps`.
+        from synelia.modules.espaces.service import semer_zone_vps
+
+        await semer_zone_vps(s)
+        await s.commit()
     _AMORCE = True

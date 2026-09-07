@@ -57,10 +57,14 @@ class Reglages(BaseSettings):
     os_endpoint_overrides: dict[str, str] = Field(default_factory=dict)
     simulation_duree_etape_ms: int = 0
 
-    # Zone VPS partagée (web_hebergement) : un unique Espace Cloud admin, réseau + load
-    # balancer Octavia partagés par toutes les VM d'hébergement (routage L7 par Host()) —
-    # `vps_zone_org_id` est nécessaire pour lire les secrets de cet Espace depuis un
-    # contexte d'une autre organisation (celle qui commande l'hébergement).
+    # Zone VPS partagée (web_hebergement) : un unique Espace Cloud « plateforme » (org_id
+    # NULL, jamais visible depuis /espaces côté client), réseau + load balancer Octavia
+    # partagés par toutes les VM d'hébergement (routage L7 par Host()) — voir
+    # `espaces.service.semer_zone_vps`/`depot_plateforme` et
+    # `web_hebergement.service.zone_vps_secrets`. `vps_zone_org_id` ne sert plus qu'à sceller
+    # l'organisation admin le temps d'un provisioning initial (repli sans bootstrap manuel,
+    # cf. `semer_zone_vps`) ; une fois la ligne créée elle devient org-less, cette variable
+    # n'est alors plus consultée.
     vps_zone_espace_id: str | None = None
     vps_zone_org_id: str | None = None
 

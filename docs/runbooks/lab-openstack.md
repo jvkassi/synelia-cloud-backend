@@ -59,6 +59,21 @@ alors que le port Neutron est `ACTIVE` — la VM elle-même était juste figée)
 `SYNELIA_OS_APPLICATION_CREDENTIAL_ID/SECRET` (créer avec `openstack application credential create synelia`),
 `uv sync --extra openstack`. Depuis un poste distant : tunnel SSH + `SYNELIA_OS_ENDPOINT_OVERRIDES='{"compute":"http://127.0.0.1:8774/v2.1"}'`.
 
+## Zone VPS partagée (web_hebergement / projets cible `vm`)
+
+L'Espace Cloud `vps-zone` (réseau privé + load balancer Octavia public partagés, id
+`SYNELIA_VPS_ZONE_ESPACE_ID`) n'est plus un bootstrap manuel one-shot : `synelia.amorcage.amorcer()`
+appelle `espaces.service.semer_zone_vps` à chaque démarrage, indépendamment de `SYNELIA_SEED_DEMO` —
+idempotent, elle ne recrée rien tant que la ligne existe. Elle bascule aussi la ligne sur la
+convention « plateforme » (`org_id NULL`, jamais visible depuis `/espaces` côté client — voir
+`/admin/espaces` pour la retrouver côté équipe Synelia) si elle porte encore l'`org_id` client du
+bootstrap historique. Si la ligne est absente (nouvel environnement), elle est provisionnée pour de
+vrai avec le même exécuteur que la création normale d'un Espace (`ExecuteurEspaceCreate`) — à une
+exception près : le load balancer Octavia public partagé (`lb_id` dans les secrets de l'Espace)
+n'est pas créé par cet exécuteur et doit encore être posé à la main (`openstack loadbalancer create`
++ `depot_plateforme.definir_secrets(ctx, espace_id, {"lb_id": ...})`) avant le premier hébergement —
+c'est ce qui a été fait manuellement pour créer `vps-zone` sur ce lab.
+
 ## État réel vs simulé de l'univers Infrastructure
 
 Voir [[infra-universe-real-vs-simulated]] (mémoire de session) pour le détail à jour — au 2026-09-07,
