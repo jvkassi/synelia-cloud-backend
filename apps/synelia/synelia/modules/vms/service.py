@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
 from synelia_kernel.dates import maintenant
@@ -52,7 +54,13 @@ class ExecuteurVmCreate(Executeur):
             from synelia.modules.espaces.service import depot as depot_espaces
 
             secrets_espace = await depot_espaces.secrets(ctx, vm.espaceId)
-            srv = amont().creer_serveur(
+            # `creer_serveur` (comme les autres appels `amont()` de ce fichier) est un appel
+            # openstacksdk synchrone/bloquant : exécuté tel quel dans la coroutine, il bloquerait
+            # toute la boucle asyncio — donc toute l'API, pour tous les tenants — jusqu'à sa fin
+            # (constaté en direct via `vm.resize`, qui pouvait ainsi geler l'API entière plusieurs
+            # minutes). On le décharge donc systématiquement dans un thread.
+            srv = await asyncio.to_thread(
+                amont().creer_serveur,
                 nom=vm.nom,
                 image_id=entre.get("imageId"),
                 # `vm.flavor` (posé par `_specs()` à la création) est le gabarit résolu, y compris
@@ -87,7 +95,7 @@ class ExecuteurVmCreate(Executeur):
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
-            amont().supprimer_serveur(sid)
+            await asyncio.to_thread(amont().supprimer_serveur, sid)
         await depot.definir_statut(ctx, travail.cible_id or "", "error")
 
 
@@ -113,7 +121,8 @@ class ExecuteurVmCompose(Executeur):
                 quantite = mac.get("quantite") or 1
                 for i in range(quantite):
                     machine_nom = mac["nom"] if quantite == 1 else f"{mac['nom']}{i + 1}"
-                    srv = amont().creer_serveur(
+                    srv = await asyncio.to_thread(
+                        amont().creer_serveur,
                         nom=machine_nom,
                         image_id=mac["imageId"],
                         gabarit_id=gabarits.get(mac["nom"]),
@@ -167,7 +176,7 @@ class ExecuteurVmCompose(Executeur):
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         for srv in travail.contexte.get("serveurs") or []:
             try:
-                amont().supprimer_serveur(srv["serveur_id"])
+                await asyncio.to_thread(amont().supprimer_serveur, srv["serveur_id"])
             except Exception:  # noqa: BLE001, S110 — best effort, une machine du lot ne bloque pas les autres
                 pass
 
@@ -194,7 +203,8 @@ class ExecuteurVmPower(Executeur):
     async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
         if index == 0:
             vm = await depot.obtenir(ctx, travail.cible_id or "")
-            amont().action(await serveur_id(ctx, vm.id, travail), self._ACTION[travail.type])
+            sid = await serveur_id(ctx, vm.id, travail)
+            await asyncio.to_thread(amont().action, sid, self._ACTION[travail.type])
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
@@ -221,7 +231,13 @@ class ExecuteurVmResize(Executeur):
                 # Sans cet appel, le redimensionnement ne touchait que la fiche DB : la VM Nova
                 # gardait son ancien gabarit (constaté en direct — `openstack server show`
                 # inchangé après un `POST .../redimensionnement` pourtant rendu « done »).
-                amont().redimensionner(await serveur_id(ctx, vm.id, travail), gabarit["id"])
+                # `redimensionner` attend Nova jusqu'à `VERIFY_RESIZE` (jusqu'à 600 s, appel
+                # openstacksdk synchrone) : sans `to_thread`, un redimensionnement lent gèle toute
+                # la boucle asyncio — donc l'API entière, tous tenants confondus — pendant toute
+                # l'attente (constaté en direct : plus aucune requête, même publique, ne répondait
+                # pendant l'appel).
+                sid = await serveur_id(ctx, vm.id, travail)
+                await asyncio.to_thread(amont().redimensionner, sid, gabarit["id"])
                 return f"Redimensionné vers le gabarit {gabarit['id']}"
         return None
 
@@ -244,7 +260,8 @@ class ExecuteurVmSnapshot(Executeur):
         vm = await depot.obtenir(ctx, travail.cible_id or "")
         entre = travail.entree or {}
         nom = entre.get("nom") or "snapshot"
-        amont().instantane(await serveur_id(ctx, vm.id, travail), nom)
+        sid = await serveur_id(ctx, vm.id, travail)
+        await asyncio.to_thread(amont().instantane, sid, nom)
         inst = m.InstantaneVm(
             id=nouvel_id(),
             vmId=vm.id,
@@ -274,7 +291,7 @@ class ExecuteurVmDelete(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
-            amont().supprimer_serveur(sid)
+            await asyncio.to_thread(amont().supprimer_serveur, sid)
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
