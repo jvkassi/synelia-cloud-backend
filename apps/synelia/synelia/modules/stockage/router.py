@@ -122,8 +122,15 @@ async def supprimer_volume(
         ctx, action="volume.suppression", cible_type="volume", cible_id=volumeId, cible=vol.nom
     )
     vid = await service.volume_id_reel(ctx, volumeId)
-    secrets_espace = await service.identifiants_espace(ctx, vol.espaceId)
-    service.amont_cinder().supprimer(vid, identifiants=secrets_espace)
+    if vid and vid != volumeId:
+        # `volume_id_reel` retombe sur l'identifiant local quand aucun volume Cinder réel n'a
+        # jamais existé (ex. création échouée avant la pose du secret `volume_id`) : appeler
+        # l'amont avec cet identifiant local le fait échouer en 404 côté Cinder, ce qui rendait
+        # un tel volume définitivement impossible à supprimer depuis l'API (constaté en
+        # direct). On ne touche l'amont que si un vrai identifiant Cinder a été résolu — même
+        # garde que `vms.service.ExecuteurVmDelete`.
+        secrets_espace = await service.identifiants_espace(ctx, vol.espaceId)
+        service.amont_cinder().supprimer(vid, identifiants=secrets_espace)
     await depot_volume.supprimer(ctx, volumeId, logique=True)
     return Response(status_code=204)
 
@@ -354,6 +361,7 @@ async def creer_bucket(
     nom_reel = service.nom_reel_bucket(ctx, corps.nom)
     amont = service.amont_objet()
     amont.creer_bucket(nom=nom_reel, region=corps.region)
+    amont.definir_policy_bucket(nom_reel, corps.policy or "prive", corps.policyJson)
     bucket = m.Bucket(
         id=nouvel_id(),
         orgId=ctx.org_id,
@@ -392,8 +400,11 @@ async def obtenir_bucket(
 async def modifier_bucket(
     bucketId: str, corps: m.BucketCreation, ctx: Contexte = Depends(exige("vm.create_delete"))
 ) -> Any:  # noqa: N803
-    await depot_bucket.obtenir(ctx, bucketId)
+    bucket = await depot_bucket.obtenir(ctx, bucketId)
     await depot_bucket.modifier(ctx, bucketId, corps.model_dump(exclude_none=True))
+    if corps.policy is not None:
+        nom_reel = await service.nom_reel_bucket_existant(ctx, bucketId, bucket.nom)
+        service.amont_objet().definir_policy_bucket(nom_reel, corps.policy, corps.policyJson)
     await journaliser(
         ctx,
         action="bucket.modification",
