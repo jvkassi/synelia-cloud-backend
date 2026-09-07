@@ -59,6 +59,44 @@ class ExecuteurSauvegardeRun(Executeur):
             await depot.definir_secrets(ctx, s.id, {f"image_{p.id}": image_id})
 
 
+@executeur("web.backup.restore")
+class ExecuteurSauvegardeRestore(Executeur):
+    """Jusqu'ici ce type de travail n'avait **aucun** exécuteur enregistré du tout : le
+    guide (`docs/GUIDE-MODULE.md`) est explicite — « sans exécuteur, le travail réussit en
+    simulation » — donc `POST .../restauration` rendait déjà un 202 `done` sans qu'aucun code
+    ne s'exécute, jamais la moindre écriture DB. Pire que `vm.compose` avant son fix (qui, lui,
+    écrivait au moins en base sans toucher l'amont)."""
+
+    async def etape(self, ctx: Contexte, travail: Travail, index: int, nom: str) -> str | None:
+        if index == 1:  # « Restaurer les fichiers » (catalogue `web.backup.restore`)
+            entre = travail.entree or {}
+            s = await depot.obtenir(ctx, travail.cible_id or "")
+            execution = next(
+                (e for e in s.executions if e.id == entre.get("executionId")), None
+            )
+            # Une restauration ne vaut que ce que vaut l'image qu'elle restaurerait — même
+            # garde-fou que `ExecuteurSauvegardeTestRestauration` : point inconnu (ex. demo),
+            # granularité que la sauvegarde ne capture pas (elle ne fait qu'un instantané
+            # Nova/Glance de la VM entière, pas d'export séparé par fichier/base/messagerie/
+            # configuration) ou absence d'image réelle associée → rien à restaurer pour de
+            # vrai, pas d'échec inventé.
+            if execution is None or entre.get("granularite") != "complete":
+                return None
+            from synelia.modules.web_hebergement.service import amont, serveur_id
+
+            try:
+                secrets = await depot.secrets(ctx, s.id)
+            except Exception:  # noqa: BLE001
+                secrets = {}
+            image_id = secrets.get(f"image_{execution.id}")
+            if not image_id:
+                return None
+            sid = await serveur_id(ctx, s.hebergementId)
+            amont().restaurer(sid, image_id)
+            return f"Serveur restauré depuis l'image {image_id}"
+        return None
+
+
 @executeur("web.backup.testrestauration")
 class ExecuteurSauvegardeTestRestauration(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:

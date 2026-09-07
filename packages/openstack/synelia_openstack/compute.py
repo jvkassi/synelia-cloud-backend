@@ -170,6 +170,9 @@ class ComputeSimule:
     def instantane(self, serveur_id: str, nom: str) -> str:
         return f"img-{nouvel_id()[:8]}"
 
+    def restaurer(self, serveur_id: str, image_id: str) -> None:
+        return None
+
     def statut_image(self, image_id: str, identifiants: dict[str, Any] | None = None) -> str:
         return "active"
 
@@ -372,6 +375,23 @@ class ComputeOpenStack(ComputeSimule):
 
     def instantane(self, serveur_id: str, nom: str) -> str:
         return self._c().compute.create_server_image(serveur_id, nom, wait=True).id
+
+    def restaurer(self, serveur_id: str, image_id: str) -> None:
+        """Restaure `serveur_id` depuis l'instantané Glance `image_id` (`rebuild_server`) —
+        remplace le disque du serveur en place, sans en recréer un nouveau (IP, volumes de
+        données et association réseau inchangés)."""
+        from synelia_openstack.erreurs import traduire
+
+        c = self._c()
+        try:
+            c.compute.rebuild_server(serveur_id, image_id)
+            c.compute.wait_for_server(c.compute.get_server(serveur_id), status="ACTIVE", wait=600)
+        except Exception as exc:
+            from synelia_kernel import erreurs as _e
+
+            if isinstance(exc, _e.AppError):
+                raise
+            raise traduire(exc, "Machine virtuelle") from None
 
     def statut_image(self, image_id: str, identifiants: dict[str, Any] | None = None) -> str:
         """Statut Glance réel de l'image : `active` seulement si le snapshot est réellement
