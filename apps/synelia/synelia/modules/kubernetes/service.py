@@ -28,6 +28,56 @@ def amont() -> MagnumSimule:
     return fournisseur(MagnumSimule, MagnumOpenStack)
 
 
+# États non terminaux : un cluster dans l'un de ces statuts peut avoir évolué côté Magnum
+# depuis le dernier relevé et vaut la peine d'être vérifié en direct (cf. `reconcilier_statut`).
+STATUTS_NON_TERMINAUX = {"provisioning", "updating"}
+
+
+def _mapper_statut_magnum(statut_amont: str) -> str | None:
+    """Traduit un statut Magnum réel (`CREATE_COMPLETE`, `CREATE_FAILED`,
+    `UPDATE_IN_PROGRESS`…) vers le `statut` applicatif du contrat (`running`/`degraded`/
+    `provisioning`/`updating`, cf. `ClusterK8s.statut`) — `None` si le statut amont ne
+    correspond à aucun état stable connu, auquel cas on ne touche pas la ressource."""
+    s = statut_amont.upper()
+    if s.endswith("FAILED"):
+        return "degraded"
+    if s in ("CREATE_COMPLETE", "UPDATE_COMPLETE", "ROLLBACK_COMPLETE", "RESUME_COMPLETE"):
+        return "running"
+    if s == "CREATE_IN_PROGRESS":
+        return "provisioning"
+    if s.endswith("IN_PROGRESS"):
+        return "updating"
+    return None
+
+
+async def reconcilier_statut(ctx: Contexte, cluster: m.ClusterK8s) -> m.ClusterK8s:
+    """Relit le statut réel du cluster côté Magnum et met à jour la ressource si l'amont a
+    évolué depuis le dernier relevé, avant de la renvoyer.
+
+    `POST /kubernetes` marque son travail `done` en ~2 s sans attendre Magnum (correct : un
+    provisioning réel prend plusieurs minutes, on ne bloque pas le travail dessus, cf.
+    `ExecuteurK8sCreate.terminer`) — mais rien ne rafraîchissait plus jamais l'état depuis
+    l'amont ensuite : `GET /kubernetes/{id}` restait figé sur `provisioning` indéfiniment
+    (constaté en direct — statut resté `provisioning` en base bien après que `openstack coe
+    cluster show` rapportait `CREATE_COMPLETE`). Choix « reconcile-on-read » plutôt qu'un
+    réconciliateur périodique séparé : aucune tâche planifiée n'existe encore ailleurs dans
+    cette application (la métrologie horaire évoquée par `docs/PLAN-DIRECTEUR.md` n'est pas
+    câblée), et ce module ne doit pas toucher `app.py`/`travaux/moteur.py` pour en introduire
+    une — le motif « l'état réel peut dériver de la base, on le rafraîchit à la demande » est
+    déjà celui utilisé ailleurs dans l'app (`statut_serveur` avant un SSH, par ex.)."""
+    if cluster.statut not in STATUTS_NON_TERMINAUX:
+        return cluster
+    secrets = await depot_cluster.secrets(ctx, cluster.id)
+    mid = secrets.get("magnum_cluster_id")
+    if not mid:
+        return cluster
+    statut_amont = await asyncio.to_thread(amont().cluster_statut, mid)
+    nouveau = _mapper_statut_magnum(statut_amont)
+    if nouveau and nouveau != cluster.statut:
+        return await depot_cluster.definir_statut(ctx, cluster.id, nouveau)
+    return cluster
+
+
 def kubeconfig_reel(magnum_cluster_id: str) -> dict[str, str] | None:
     """Kubeconfig admin réel du cluster (CA + certificat client signés par Magnum), ou `None`
     en mode simulé — l'appelant retombe alors sur un kubeconfig factice."""
@@ -69,8 +119,8 @@ class ExecuteurK8sCreate(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         # Le simulé renvoie CREATE_COMPLETE instantanément ; le réel (Heat/CAPI) prend bien
         # plus longtemps qu'une étape de travail, donc on ne bloque pas dessus et le cluster
-        # reste `provisioning` côté plateforme tant qu'un réconciliateur (à écrire) n'a pas
-        # confirmé CREATE_COMPLETE côté Magnum.
+        # reste `provisioning` côté plateforme jusqu'à ce que `reconcilier_statut` (appelé à
+        # chaque lecture, cf. router) confirme CREATE_COMPLETE côté Magnum.
         statut_amont = str(travail.contexte.get("statut_amont", ""))
         statut = "running" if statut_amont.endswith("COMPLETE") else "provisioning"
         await depot_cluster.definir_statut(ctx, travail.cible_id or "", statut)
@@ -80,7 +130,12 @@ class ExecuteurK8sCreate(Executeur):
         mid = secrets.get("magnum_cluster_id")
         if mid:
             await asyncio.to_thread(amont().supprimer_cluster, mid)
-        await depot_cluster.definir_statut(ctx, travail.cible_id or "", "erreur")
+        # `ClusterK8s.statut` n'a pas de valeur `erreur` dans le contrat (seulement `running`/
+        # `degraded`/`provisioning`/`updating`) : écrire `erreur` ici cassait la prochaine
+        # lecture (`Depot._vers_modele` valide `r.donnees` contre le modèle Pydantic, qui
+        # rejette la valeur hors énumération) — `degraded` est l'état le plus proche d'un
+        # cluster dont la création amont a échoué.
+        await depot_cluster.definir_statut(ctx, travail.cible_id or "", "degraded")
 
 
 @executeur("k8s.delete")

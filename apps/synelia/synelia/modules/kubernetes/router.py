@@ -10,7 +10,12 @@ from synelia_kernel.ids import nouvel_id
 from synelia.audit import journaliser
 from synelia.depot import Depot
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
-from synelia.modules.kubernetes.service import depot_cluster, depot_pool, kubeconfig_reel
+from synelia.modules.kubernetes.service import (
+    depot_cluster,
+    depot_pool,
+    kubeconfig_reel,
+    reconcilier_statut,
+)
 from synelia.travaux import demarrer_travail
 
 router = APIRouter(prefix="/kubernetes", tags=["Kubernetes"])
@@ -30,7 +35,7 @@ async def lister_clusters(
     statut: str | None = None,
     ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True)),
 ) -> Any:
-    return await depot_cluster.lister(
+    resultat = await depot_cluster.lister(
         ctx,
         page,
         filtre=lambda c: (
@@ -40,6 +45,10 @@ async def lister_clusters(
         ),
         tri_defaut="nom",
     )
+    # Reconcile-on-read : sans ça un cluster resterait affiché `provisioning` indéfiniment
+    # dans la liste, même après achèvement réel côté Magnum (cf. `reconcilier_statut`).
+    resultat["donnees"] = [await reconcilier_statut(ctx, c) for c in resultat["donnees"]]
+    return resultat
 
 
 @router.post(
@@ -150,7 +159,8 @@ async def lister_versions_k8s(ctx: Contexte = Depends(exige(None))) -> Any:
 async def obtenir_cluster(
     clusterId: str, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))
 ) -> Any:  # noqa: N803
-    return await depot_cluster.obtenir(ctx, clusterId)
+    cluster = await depot_cluster.obtenir(ctx, clusterId)
+    return await reconcilier_statut(ctx, cluster)
 
 
 @router.delete(

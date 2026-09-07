@@ -123,6 +123,70 @@ async def test_supprimer_cluster_confirmation(client):
     assert all(c["nom"] != "k8s-a-supprimer" for c in r.json()["donnees"])
 
 
+def test_mapper_statut_magnum():
+    from synelia.modules.kubernetes.service import _mapper_statut_magnum
+
+    assert _mapper_statut_magnum("CREATE_IN_PROGRESS") == "provisioning"
+    assert _mapper_statut_magnum("CREATE_COMPLETE") == "running"
+    assert _mapper_statut_magnum("CREATE_FAILED") == "degraded"
+    assert _mapper_statut_magnum("UPDATE_IN_PROGRESS") == "updating"
+    assert _mapper_statut_magnum("UPDATE_COMPLETE") == "running"
+    assert _mapper_statut_magnum("UPDATE_FAILED") == "degraded"
+    assert _mapper_statut_magnum("DELETE_COMPLETE") is None
+
+
+async def test_reconciliation_statut_cluster(client, monkeypatch):
+    # `POST /kubernetes` marque son travail `done` en ~2 s sans attendre l'aboutissement réel
+    # côté Magnum (correct : un provisioning réel prend plusieurs minutes) — mais rien ne
+    # rafraîchissait plus jamais l'état depuis l'amont ensuite : `GET /kubernetes/{id}` restait
+    # figé sur `provisioning` indéfiniment. On force ici un statut amont non terminal à la
+    # création (comme un vrai `CREATE_IN_PROGRESS` juste après soumission à Magnum), puis on
+    # vérifie qu'une lecture ultérieure, une fois l'amont « terminé », rafraîchit bien la DB.
+    from synelia.modules.kubernetes import service as k8s_service
+
+    original_creer = k8s_service.MagnumSimule.creer_cluster
+
+    def _creer_cluster_en_cours(self, **kw):
+        r = original_creer(self, **kw)
+        r["statut"] = "CREATE_IN_PROGRESS"
+        return r
+
+    monkeypatch.setattr(k8s_service.MagnumSimule, "creer_cluster", _creer_cluster_en_cours)
+    # Sans ce patch, le stub par défaut (`cluster_statut` → `CREATE_COMPLETE`) ferait basculer
+    # le cluster dès la première lecture qui suit la création — on veut d'abord observer qu'il
+    # reste `provisioning` tant que l'amont l'est réellement.
+    monkeypatch.setattr(
+        k8s_service.MagnumSimule, "cluster_statut", lambda self, cluster_id: "CREATE_IN_PROGRESS"
+    )
+
+    espace_id = await _espace_demo(client)
+    r = await client.post("/v1/kubernetes", json=_corps_cluster(espace_id, "k8s-reconcile"))
+    assert r.status_code == 202, r.text
+
+    r = await client.get("/v1/kubernetes")
+    cluster = next(c for c in r.json()["donnees"] if c["nom"] == "k8s-reconcile")
+    assert cluster["statut"] == "provisioning"
+    cid = cluster["id"]
+
+    # Toujours en cours côté amont : une relecture ne doit rien changer.
+    monkeypatch.setattr(
+        k8s_service.MagnumSimule, "cluster_statut", lambda self, cluster_id: "CREATE_IN_PROGRESS"
+    )
+    r = await client.get(f"/v1/kubernetes/{cid}")
+    assert r.status_code == 200 and r.json()["statut"] == "provisioning"
+
+    # L'amont a maintenant terminé : la lecture doit rafraîchir le statut en base.
+    monkeypatch.setattr(
+        k8s_service.MagnumSimule, "cluster_statut", lambda self, cluster_id: "CREATE_COMPLETE"
+    )
+    r = await client.get(f"/v1/kubernetes/{cid}")
+    assert r.status_code == 200 and r.json()["statut"] == "running"
+
+    # La ressource a bien été persistée à jour, pas seulement renvoyée une fois.
+    r = await client.get("/v1/kubernetes", params={"statut": "running"})
+    assert any(c["id"] == cid for c in r.json()["donnees"])
+
+
 async def test_lister_filtres(client):
     espace_id = await _espace_demo(client)
     await _creer_cluster(client, espace_id, "k8s-filtre")

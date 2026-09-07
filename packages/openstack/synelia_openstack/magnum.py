@@ -32,6 +32,9 @@ class MagnumSimule:
     def supprimer_cluster(self, cluster_id: str) -> None:
         return None
 
+    def cluster_statut(self, cluster_id: str) -> str:
+        return "CREATE_COMPLETE"
+
 
 class MagnumOpenStack(MagnumSimule):
     def _c(self):
@@ -86,3 +89,11 @@ class MagnumOpenStack(MagnumSimule):
 
     def supprimer_cluster(self, cluster_id: str) -> None:
         self._c().container_infra.delete_cluster(cluster_id, ignore_missing=True)
+
+    def cluster_statut(self, cluster_id: str) -> str:
+        """Statut Magnum réel du cluster (`CREATE_COMPLETE`, `CREATE_FAILED`,
+        `UPDATE_IN_PROGRESS`…) — `DELETE_COMPLETE` si Magnum ne le connaît plus du tout
+        (supprimé hors bande) : même garde que `ComputeOpenStack.statut_serveur` pour Nova."""
+        c = self._c()
+        cl = c.container_infra.find_cluster(cluster_id, ignore_missing=True)
+        return str(cl.status) if cl else "DELETE_COMPLETE"
