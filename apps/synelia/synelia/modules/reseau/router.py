@@ -13,17 +13,24 @@ from synelia.audit import journaliser
 from synelia.depot import Depot
 from synelia.deps import Contexte, Page, exige, exiger_confirmation
 from synelia.modules.reseau.service import (
+    ajouter_regle_amont,
+    associer_ip_amont,
+    attacher_groupe_amont,
+    creer_groupe_amont,
     creer_reseau_amont,
     depot_groupe,
     depot_ip,
     depot_lb,
     depot_reseau,
     depot_vpn,
+    dissocier_ip_amont,
     liberer_ip_amont,
     metriques_vides,
     reserver_ip_amont,
     sante_defaut,
+    supprimer_groupe_amont,
     supprimer_lb_amont,
+    supprimer_regle_amont,
     supprimer_reseau_amont,
 )
 from synelia.travaux import demarrer_travail
@@ -212,6 +219,14 @@ async def attacher_ip(
         raise erreurs.conflit(
             "Cette IP est déjà attachée à une ressource.", code="ip_deja_attachee"
         )
+    from synelia_openstack.erreurs import traduire
+
+    try:
+        await associer_ip_amont(ctx, ipId, corps.cibleId)
+    except erreurs.AppError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise traduire(exc, "IP publique") from None
     changement: dict[str, Any] = {"attachedTo": corps.cibleId, "attachedLabel": vm.nom}
     if corps.ptr is not None:
         changement["ptr"] = corps.ptr
@@ -227,6 +242,7 @@ async def attacher_ip(
 )
 async def detacher_ip(ipId: str, ctx: Contexte = Depends(exige("network.manage"))) -> Any:  # noqa: N803
     ip = await depot_ip.obtenir(ctx, ipId)
+    await dissocier_ip_amont(ctx, ipId)
     await depot_ip.remplacer(
         ctx, ipId, ip.model_copy(update={"attachedTo": None, "attachedLabel": None})
     )
@@ -275,7 +291,17 @@ async def creer_groupe_securite(
         rules=list(corps.rules or []),
         attaches=0,
     )
-    await depot_groupe.creer(ctx, groupe)
+    from synelia_openstack.erreurs import traduire
+
+    try:
+        gid = await creer_groupe_amont(ctx, corps.espaceId, groupe.nom, groupe.description)
+    except erreurs.AppError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise traduire(exc, "Groupe de sécurité") from None
+    await depot_groupe.creer(ctx, groupe, secrets={"groupe_id": gid})
+    for regle in groupe.rules:
+        await ajouter_regle_amont(ctx, groupe.id, regle)
     await journaliser(
         ctx,
         action="groupe.creation",
@@ -333,6 +359,7 @@ async def supprimer_groupe_securite(
 ) -> Response:  # noqa: N803
     g = await depot_groupe.obtenir(ctx, groupeId)
     exiger_confirmation(g.nom, confirmation)
+    await supprimer_groupe_amont(ctx, groupeId)
     await journaliser(
         ctx,
         action="groupe.suppression",
@@ -353,6 +380,7 @@ async def attacher_groupe_securite(
     ctx: Contexte = Depends(exige("network.manage")),
 ) -> Any:  # noqa: N803
     await depot_groupe.obtenir(ctx, groupeId)
+    await attacher_groupe_amont(ctx, groupeId, corps.cibles)
     await depot_groupe.modifier(ctx, groupeId, {"attaches": len(corps.cibles)})
     await journaliser(
         ctx, action="groupe.attachement", cible_type="groupe_securite", cible_id=groupeId
@@ -372,6 +400,14 @@ async def ajouter_regle_securite(
     g = await depot_groupe.obtenir(ctx, groupeId)
     if any(r.id == corps.id for r in g.rules):
         raise erreurs.conflit("Une règle porte déjà cet identifiant.", code="regle_existante")
+    from synelia_openstack.erreurs import traduire
+
+    try:
+        await ajouter_regle_amont(ctx, groupeId, corps)
+    except erreurs.AppError:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise traduire(exc, "Groupe de sécurité") from None
     regles = [*list(g.rules), corps]
     await depot_groupe.modifier(ctx, groupeId, {"rules": [r.model_dump() for r in regles]})
     await journaliser(
@@ -398,6 +434,9 @@ async def modifier_regle_securite(
     g = await depot_groupe.obtenir(ctx, groupeId)
     if not any(r.id == regleId for r in g.rules):
         raise erreurs.introuvable("Règle de sécurité", regleId)
+    # Une règle Neutron est immuable : « modifier » revient à la remplacer côté amont.
+    await supprimer_regle_amont(ctx, groupeId, regleId)
+    await ajouter_regle_amont(ctx, groupeId, corps)
     regles = [(corps if r.id == regleId else r) for r in g.rules]
     await depot_groupe.modifier(ctx, groupeId, {"rules": [r.model_dump() for r in regles]})
     await journaliser(
@@ -418,6 +457,7 @@ async def supprimer_regle_securite(
     reste = [r for r in g.rules if r.id != regleId]
     if len(reste) == len(g.rules):
         raise erreurs.introuvable("Règle de sécurité", regleId)
+    await supprimer_regle_amont(ctx, groupeId, regleId)
     await depot_groupe.modifier(ctx, groupeId, {"rules": [r.model_dump() for r in reste]})
     await journaliser(
         ctx,

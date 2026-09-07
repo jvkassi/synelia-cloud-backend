@@ -25,8 +25,25 @@ class NetworkSimule:
     def regles_vip(self) -> dict[str, Any]:
         return {"id": f"fl-{nouvel_id()[:8]}"}
 
-    def creer_groupe(self, nom: str, description: str | None = None) -> str:
+    def creer_groupe(
+        self, nom: str, description: str | None = None, projet_id: str | None = None
+    ) -> str:
         return f"sg-{nouvel_id()[:8]}"
+
+    def supprimer_groupe(self, groupe_id: str) -> None:
+        return None
+
+    def ajouter_regle_securite(self, groupe_id: str, **kw: Any) -> str:
+        return f"sgr-{nouvel_id()[:8]}"
+
+    def supprimer_regle_securite(self, regle_id: str) -> None:
+        return None
+
+    def attacher_groupe_serveur(self, groupe_id: str, serveur_id: str) -> None:
+        return None
+
+    def detacher_groupe_serveur(self, groupe_id: str, serveur_id: str) -> None:
+        return None
 
     def creer_load_balancer(
         self,
@@ -313,3 +330,39 @@ class NetworkOpenStack(NetworkSimule):
                     port_range_max=22,
                     ethertype="IPv4",
                 )
+
+    def creer_groupe(
+        self, nom: str, description: str | None = None, projet_id: str | None = None
+    ) -> str:
+        sg = self._c().network.create_security_group(
+            name=nom, description=description or "", project_id=projet_id
+        )
+        return sg.id
+
+    def supprimer_groupe(self, groupe_id: str) -> None:
+        self._c().network.delete_security_group(groupe_id, ignore_missing=True)
+
+    def ajouter_regle_securite(self, groupe_id: str, **kw: Any) -> str:
+        r = self._c().network.create_security_group_rule(security_group_id=groupe_id, **kw)
+        return r.id
+
+    def supprimer_regle_securite(self, regle_id: str) -> None:
+        self._c().network.delete_security_group_rule(regle_id, ignore_missing=True)
+
+    def attacher_groupe_serveur(self, groupe_id: str, serveur_id: str) -> None:
+        c = self._c()
+        port = next(iter(c.network.ports(device_id=serveur_id)), None)
+        if port is None:
+            return
+        ids = set(port.security_group_ids or [])
+        ids.add(groupe_id)
+        c.network.update_port(port.id, security_group_ids=list(ids))
+
+    def detacher_groupe_serveur(self, groupe_id: str, serveur_id: str) -> None:
+        c = self._c()
+        port = next(iter(c.network.ports(device_id=serveur_id)), None)
+        if port is None:
+            return
+        ids = set(port.security_group_ids or [])
+        ids.discard(groupe_id)
+        c.network.update_port(port.id, security_group_ids=list(ids))

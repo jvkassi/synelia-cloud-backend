@@ -78,6 +78,112 @@ async def liberer_ip_amont(ctx: Contexte, ip_id_local: str) -> None:
         amont_identite().supprimer_ip_flottante(fid)
 
 
+async def associer_ip_amont(ctx: Contexte, ip_id_local: str, vm_id: str) -> str | None:
+    """Associe réellement l'IP flottante au port Neutron du serveur Nova de la VM cible —
+    sans cet appel l'attachement ne vivait que côté DB (constaté en direct : `openstack
+    floating ip show` restait sans port associé après un `PUT .../attachement` réussi)."""
+    from synelia.modules.vms.service import serveur_id
+
+    secrets = await depot_ip.secrets(ctx, ip_id_local)
+    fid = secrets.get("ip_flottante_id")
+    if not fid:
+        return None
+    sid = await serveur_id(ctx, vm_id)
+    return amont_identite().associer_ip_flottante(fid, sid)
+
+
+async def dissocier_ip_amont(ctx: Contexte, ip_id_local: str) -> None:
+    secrets = await depot_ip.secrets(ctx, ip_id_local)
+    fid = secrets.get("ip_flottante_id")
+    if fid:
+        amont_identite().dissocier_ip_flottante(fid)
+
+
+def _regle_neutron(regle: m.RegleSecurite) -> dict[str, object]:
+    """Traduit une `RegleSecurite` applicative en attributs Neutron. Sans cette traduction (et
+    sans qu'aucune règle ne soit jamais posée côté amont, cf. `ajouter_regle_amont`), un groupe
+    de sécurité créé par l'API n'avait strictement aucun effet réel : il ne vivait qu'en base,
+    n'était jamais attaché à un port Neutron ni doté de la moindre règle (constaté en direct —
+    un port bloqué par une règle « deny » restait joignable après création de la règle)."""
+    port_min = port_max = None
+    protocole = None if regle.protocole == "any" else regle.protocole
+    if regle.ports and protocole in ("tcp", "udp"):
+        if "-" in regle.ports:
+            lo, hi = regle.ports.split("-", 1)
+            port_min, port_max = int(lo), int(hi)
+        else:
+            port_min = port_max = int(regle.ports)
+    attrs: dict[str, object] = {
+        "direction": "ingress" if regle.direction == "in" else "egress",
+        "protocol": protocole,
+        "port_range_min": port_min,
+        "port_range_max": port_max,
+        "ethertype": "IPv4",
+    }
+    try:
+        import ipaddress
+
+        ipaddress.ip_network(regle.cible, strict=False)
+        attrs["remote_ip_prefix"] = regle.cible
+    except ValueError:
+        # Pas un CIDR : `cible` est l'identifiant (local) d'un autre groupe de sécurité —
+        # on ne peut le référencer côté amont qu'en résolvant son identifiant Neutron réel.
+        attrs["remote_group_id"] = regle.cible
+    return attrs
+
+
+async def creer_groupe_amont(ctx: Contexte, espace_id: str, nom: str, description: str | None) -> str:
+    projet_id = await _projet_id(ctx, espace_id)
+    return amont().creer_groupe(nom, description, projet_id)
+
+
+async def supprimer_groupe_amont(ctx: Contexte, groupe_id_local: str) -> None:
+    secrets = await depot_groupe.secrets(ctx, groupe_id_local)
+    gid = secrets.get("groupe_id")
+    if gid:
+        amont().supprimer_groupe(gid)
+
+
+async def ajouter_regle_amont(ctx: Contexte, groupe_id_local: str, regle: m.RegleSecurite) -> None:
+    secrets = await depot_groupe.secrets(ctx, groupe_id_local)
+    gid = secrets.get("groupe_id")
+    if not gid:
+        return
+    rid = amont().ajouter_regle_securite(gid, **_regle_neutron(regle))
+    await depot_groupe.definir_secrets(ctx, groupe_id_local, {f"regle_{regle.id}": rid})
+
+
+async def supprimer_regle_amont(ctx: Contexte, groupe_id_local: str, regle_id: str) -> None:
+    secrets = await depot_groupe.secrets(ctx, groupe_id_local)
+    rid = secrets.get(f"regle_{regle_id}")
+    if rid:
+        amont().supprimer_regle_securite(rid)
+
+
+async def attacher_groupe_amont(ctx: Contexte, groupe_id_local: str, cibles: list[str]) -> None:
+    """Reflète l'ensemble des cibles demandées sur le port Neutron de chaque VM concernée :
+    attache le groupe aux VM nouvellement listées, le détache de celles retirées."""
+    from synelia.modules.vms.service import serveur_id
+
+    secrets = await depot_groupe.secrets(ctx, groupe_id_local)
+    gid = secrets.get("groupe_id")
+    if not gid:
+        return
+    anciennes = {c for c in secrets if c.startswith("attache_")}
+    anciens_ids = {c.removeprefix("attache_") for c in anciennes}
+    nouveaux_ids = set(cibles)
+    for retire in anciens_ids - nouveaux_ids:
+        sid = await serveur_id(ctx, retire)
+        amont().detacher_groupe_serveur(gid, sid)
+    nouveaux_secrets: dict[str, str] = {}
+    for ajoute in nouveaux_ids - anciens_ids:
+        sid = await serveur_id(ctx, ajoute)
+        amont().attacher_groupe_serveur(gid, sid)
+        nouveaux_secrets[f"attache_{ajoute}"] = "1"
+    if nouveaux_secrets:
+        await depot_groupe.definir_secrets(ctx, groupe_id_local, nouveaux_secrets)
+
+
 async def supprimer_lb_amont(ctx: Contexte, lb_id_local: str) -> None:
     secrets = await depot_lb.secrets(ctx, lb_id_local)
     oid = secrets.get("octavia_lb_id")

@@ -48,6 +48,9 @@ class IdentiteSimule:
     def associer_ip_flottante(self, ip_id: str, serveur_id: str) -> str | None:
         return None
 
+    def dissocier_ip_flottante(self, ip_id: str) -> None:
+        return None
+
     def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         return {"id": f"ac-{nouvel_id()[:8]}", "secret": jeton_opaque(24)}
 
@@ -146,6 +149,9 @@ class IdentiteOpenStack(IdentiteSimule):
             return None
         fip = c.network.update_ip(ip_id, port_id=port.id)
         return fip.floating_ip_address
+
+    def dissocier_ip_flottante(self, ip_id: str) -> None:
+        self._conn().network.update_ip(ip_id, port_id=None)
 
     def creer_application_credential(self, projet_id: str, domaine_id: str | None = None) -> dict[str, str]:
         """Un utilisateur de service par projet (jamais d'humain dans Keystone), rôle `member`,
