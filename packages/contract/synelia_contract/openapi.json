@@ -14851,6 +14851,68 @@
         }
       }
     },
+    "/ia/cles/{cleId}/rotation": {
+      "post": {
+        "tags": [
+          "IA — Clés"
+        ],
+        "operationId": "rotationnerCleIA",
+        "summary": "Faire tourner le secret d’une clé IA",
+        "description": "Invalide l’ancien secret et en émet un nouveau immédiatement — contrairement à `rotationnerCleApi`, pas de délai de grâce : une clé IA n’a qu’un secret vivant à la fois. Le quota, le budget consommé et le statut de la clé ne changent pas.",
+        "x-rbac": "ia.key.manage",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Organisation"
+          },
+          {
+            "$ref": "#/components/parameters/Langue"
+          },
+          {
+            "name": "cleId",
+            "in": "path",
+            "required": true,
+            "description": "Identifiant de la clé IA.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "cle-prod"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Succès.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CleIASecret"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Invalide"
+          },
+          "401": {
+            "$ref": "#/components/responses/NonAuthentifie"
+          },
+          "403": {
+            "$ref": "#/components/responses/Interdit"
+          },
+          "404": {
+            "$ref": "#/components/responses/Introuvable"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflit"
+          },
+          "429": {
+            "$ref": "#/components/responses/TropDeRequetes"
+          },
+          "500": {
+            "$ref": "#/components/responses/Serveur"
+          }
+        }
+      }
+    },
     "/ia/connaissances": {
       "get": {
         "tags": [

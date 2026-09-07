@@ -138,3 +138,67 @@ async def test_revoquer_cle_ia(client):
 
     r = await client.post(AGENT, json={"message": "x"}, headers={"X-Cle-IA": secret})
     assert r.status_code == 401
+
+
+@respx.mock
+async def test_rotationner_cle_ia_invalide_l_ancien_secret(client):
+    r = await client.post("/v1/ia/cles", json={"nom": "Clé tournante", "espaceId": "espace-demo-abj"})
+    cle_id = r.json()["cle"]["id"]
+    ancien_prefixe = r.json()["cle"]["prefixe"]
+    ancien_secret = r.json()["secret"]
+    _mock_llm()
+
+    r = await client.post(f"/v1/ia/cles/{cle_id}/rotation", json={})
+    assert r.status_code == 200, r.text
+    corps = r.json()
+    nouveau_secret = corps["secret"]
+    assert corps["cle"]["prefixe"] == ancien_prefixe, "le préfixe visible ne change pas à la rotation"
+    assert nouveau_secret != ancien_secret
+
+    # l'ancien secret ne fonctionne plus.
+    r = await client.post(AGENT, json={"message": "x"}, headers={"X-Cle-IA": ancien_secret})
+    assert r.status_code == 401
+
+    # le nouveau fonctionne.
+    r = await client.post(AGENT, json={"message": "x"}, headers={"X-Cle-IA": nouveau_secret})
+    assert r.status_code == 200, r.text
+
+
+async def test_rotationner_cle_ia_revoquee_409(client):
+    r = await client.post("/v1/ia/cles", json={"nom": "Clé morte", "espaceId": "espace-demo-abj"})
+    cle_id = r.json()["cle"]["id"]
+    await client.delete(f"/v1/ia/cles/{cle_id}", params={"confirmation": "Clé morte"})
+
+    r = await client.post(f"/v1/ia/cles/{cle_id}/rotation", json={})
+    assert r.status_code == 409
+    assert r.json()["erreur"]["code"] == "cle_ia_non_active"
+
+
+@respx.mock
+async def test_cle_ia_cout_fractionnaire_finit_par_epuiser_le_budget(client):
+    """Un modèle bon marché coûte une fraction de FCFA par appel (`round(cout_fcfa, 4)` dans
+    `service._completer`) : arrondir chaque appel à l'entier avant de créditer `budgetConsomme`
+    laisserait un plafond `bloquer` de 1 FCFA inatteignable indéfiniment. Le reste fractionnaire
+    doit se reporter d'appel en appel jusqu'à franchir l'entier."""
+    r = await client.post(
+        "/v1/ia/cles",
+        json={
+            "nom": "Clé modèle bon marché",
+            "espaceId": "espace-demo-abj",
+            "budgetMensuel": 1,
+            "debitMaxParMinute": 100_000,
+            "quotaJetonsMois": 10_000_000,
+        },
+    )
+    secret = r.json()["secret"]
+    # cost 0.00001 USD * TAUX_USD_XOF (610) = 0,0061 FCFA/appel, arrondit à 0 si non reporté.
+    _mock_llm()
+
+    dernier = None
+    for _ in range(200):
+        dernier = await client.post(AGENT, json={"message": "x"}, headers={"X-Cle-IA": secret})
+        if dernier.status_code == 402:
+            break
+    assert dernier is not None and dernier.status_code == 402, (
+        "le plafond doit finir par se déclencher malgré un coût unitaire sous le FCFA"
+    )

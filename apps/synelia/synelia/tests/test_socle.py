@@ -44,4 +44,8 @@ async def test_validation_422_avec_champs(client):
 
 async def test_matrice_rbac(client):
     r = await client.get("/v1/rbac/matrice")
-    assert r.status_code == 200 and len(r.json()) == 38
+    # 37, pas 38 : `ia.endpoint.deploy` (inférence dédiée) a été supprimé côté frontend — sans
+    # GPU sur cette plateforme, ce n'était plus une permission qui pouvait un jour devenir réelle.
+    # `rbac.json` était resté périmé côté backend jusqu'à ce que `tools/contrat_sync.py` soit
+    # rejoué ; voir la décision « Inférence dédiée » dans le CLAUDE.md du frontend.
+    assert r.status_code == 200 and len(r.json()) == 37

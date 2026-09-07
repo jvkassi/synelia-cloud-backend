@@ -38,8 +38,8 @@ ENTETE_CLE_IA = "X-Cle-IA"
 _SEAUX: dict[str, tuple[float, float]] = defaultdict(lambda: (0.0, 0.0))
 
 
-def _nouveau_secret() -> tuple[str, str]:
-    prefixe = prefixe_lisible("cia")
+def _nouveau_secret(prefixe: str | None = None) -> tuple[str, str]:
+    prefixe = prefixe or prefixe_lisible("cia")
     return prefixe, f"{prefixe}.{jeton_opaque()}"
 
 
@@ -69,6 +69,21 @@ async def creer(ctx: Contexte, corps: m.CleIACreation) -> dict[str, Any]:
     )
     await journaliser(
         ctx, action="ia.cle_creation", cible_type="cle_ia", cible_id=cle.id, cible=cle.nom
+    )
+    return {"cle": cle, "secret": secret}
+
+
+async def rotation(ctx: Contexte, cle_id: str) -> dict[str, Any]:
+    """Invalide l'ancien secret et en émet un nouveau, sans toucher au quota, au budget ni au
+    statut de la clé — même geste que `POST /securite/cles-api/{cleId}/rotation`, en plus simple :
+    une clé IA n'a qu'un seul secret vivant à la fois, donc pas de délai de grâce à gérer."""
+    cle = await depot_cles.obtenir(ctx, cle_id)
+    if cle.statut != "active":
+        raise erreurs.conflit("Seule une clé active peut être tournée.", code="cle_ia_non_active")
+    _, secret = _nouveau_secret(cle.prefixe)
+    await depot_cles.definir_secrets(ctx, cle_id, {"secret_hash": hacher_jeton(secret)})
+    await journaliser(
+        ctx, action="ia.cle_rotation", cible_type="cle_ia", cible_id=cle_id, cible=cle.nom
     )
     return {"cle": cle, "secret": secret}
 
@@ -133,7 +148,9 @@ async def _reinitialiser_si_nouvelle_periode(
     if periode_dechiffree == _periode_courante():
         return cle
     cle = await depot_cles.modifier(ctx, cle.id, {"jetonsConsommes": 0, "budgetConsomme": 0})
-    await depot_cles.definir_secrets(ctx, cle.id, {"periode": _periode_courante()})
+    await depot_cles.definir_secrets(
+        ctx, cle.id, {"periode": _periode_courante(), "reste_fcfa": "0"}
+    )
     return cle
 
 
@@ -188,12 +205,24 @@ async def verifier_et_appliquer(
 async def crediter_apres_appel(
     ctx: Contexte, cle: m.CleIA, *, jetons: int, cout_fcfa: float
 ) -> None:
+    """`budgetConsomme` reste un entier FCFA — convention de toute la plateforme (voir
+    `facturation/tarification.py`, « estimation en FCFA entiers »). Mais `coutFcfa` d'un appel
+    unique est fractionnaire : un modèle bon marché (deepseek…) facturé sous le FCFA arrondirait
+    systématiquement à zéro et ne ferait jamais progresser `budgetConsomme`, ce qui rendrait un
+    plafond `bloquer` inatteignable. Le reste fractionnaire de chaque appel est donc reporté sur
+    le suivant (dans les secrets chiffrés de la ressource, comme `periode`) plutôt qu'arrondi et
+    perdu — l'entier crédité ici reste exact en cumul, seul l'affichage est entier."""
+    secrets = await depot_cles.secrets(ctx, cle.id)
+    reste = float(secrets.get("reste_fcfa") or 0.0)
+    total = reste + max(cout_fcfa, 0.0)
+    increment, nouveau_reste = int(total), total % 1
     await depot_cles.modifier(
         ctx,
         cle.id,
         {
             "jetonsConsommes": cle.jetonsConsommes + max(jetons, 0),
-            "budgetConsomme": cle.budgetConsomme + round(max(cout_fcfa, 0.0)),
+            "budgetConsomme": cle.budgetConsomme + increment,
             "derniereUtilisation": maintenant(),
         },
     )
+    await depot_cles.definir_secrets(ctx, cle.id, {"reste_fcfa": str(nouveau_reste)})
