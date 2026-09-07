@@ -341,6 +341,17 @@ async def _completer(modele: m.ModeleIA, agent: m.AgentIA, messages: list[dict[s
 
     donnees = r.json()
     reponse = donnees["choices"][0]["message"]["content"]
+    if reponse is None:
+        # Vérifié en direct sur `deepseek/deepseek-v4-flash` : un modèle de raisonnement peut
+        # consommer tout `max_tokens` en jetons de raisonnement internes et atteindre
+        # `finish_reason: "length"` sans jamais émettre de `content` visible. Un 424 franc qui
+        # le dit vaut mieux qu'un 500 brut de validation de réponse (`reponse` exigé `str`).
+        raise erreurs.amont_indisponible(
+            "litellm",
+            f"Le modèle « {modele.slug} » n'a produit aucun contenu visible dans la limite de "
+            f"{agent.jetonsMax} jetons (probablement consommés en raisonnement interne) — "
+            "augmentez `jetonsMax` sur cet agent.",
+        )
     usage = donnees.get("usage") or {}
     jetons_entree = usage.get("prompt_tokens", 0)
     jetons_sortie = usage.get("completion_tokens", 0)

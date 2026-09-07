@@ -128,3 +128,31 @@ async def test_invoquer_agent_litellm_indisponible(client):
     )
     assert r.status_code == 424
     assert r.json()["erreur"]["code"] == "amont_indisponible"
+
+
+@respx.mock
+async def test_invoquer_agent_contenu_null_raisonnement(client):
+    """Reproduction en direct (2026-09-07) : `deepseek/deepseek-v4-flash` (modèle de
+    raisonnement) peut consommer tout `max_tokens` en jetons de raisonnement internes et
+    atteindre `finish_reason: "length"` sans jamais émettre de `content` — vérifié contre
+    l'API OpenRouter réelle avec un agent à `jetonsMax` bas. Doit rester un 424 franc, pas un
+    500 de validation de réponse (`reponse` exigé `str`)."""
+    respx.post(f"{LITELLM_URL}/chat/completions").mock(
+        return_value=httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "finish_reason": "length",
+                        "message": {"content": None, "reasoning_content": "..."},
+                    }
+                ],
+                "usage": {"prompt_tokens": 32, "completion_tokens": 128},
+            },
+        )
+    )
+    r = await client.post(
+        "/v1/ia/agents/agent-demo-support/invoquer", json={"message": "Bonjour !"}
+    )
+    assert r.status_code == 424
+    assert r.json()["erreur"]["code"] == "amont_indisponible"
