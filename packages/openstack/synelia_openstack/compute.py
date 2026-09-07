@@ -222,6 +222,13 @@ class ComputeOpenStack(ComputeSimule):
     def images(self) -> list[dict[str, Any]]:
         out = []
         for i in self._c().image.images(visibility="public"):
+            if "amphora" in (i.tags or []):
+                # Image d'appliance interne d'Octavia (load balancer), pas un OS pour un
+                # client : Glance la publie en `visibility=public` (convention amont), mais
+                # elle est taguée `amphora` — même angle mort que le gabarit `is_public` déjà
+                # filtré ci-dessus pour la même raison (constaté en direct : elle apparaissait
+                # dans le catalogue images à côté d'ubuntu-24.04).
+                continue
             out.append(
                 {
                     "id": i.id,
