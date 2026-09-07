@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel.ids import jeton_opaque
@@ -41,17 +43,21 @@ _GABARIT_SIMULE_PAR_PALIER = {
 }
 
 
-def gabarit_pour_palier(palier: str) -> str:
+async def gabarit_pour_palier(palier: str) -> str:
     nom = _GABARIT_NOM_PAR_PALIER.get(palier, "k8s.worker")
-    g = next((f for f in amont().gabarits() if f["nom"] == nom), None)
+    # `amont().gabarits()` (openstacksdk, synchrone) est déchargé via `asyncio.to_thread` :
+    # même garde que `vms.service`, sans quoi un appel amont lent gèlerait la boucle asyncio
+    # — donc l'API entière, tous tenants confondus.
+    gabarits = await asyncio.to_thread(amont().gabarits)
+    g = next((f for f in gabarits if f["nom"] == nom), None)
     if g:
         return str(g["id"])
     return _GABARIT_SIMULE_PAR_PALIER.get(palier, "g1.medium")
 
 
-def image_ubuntu() -> str:
+async def image_ubuntu() -> str:
     """Image système de l'instance : Ubuntu 24.04, ou la plus proche disponible."""
-    images = amont().images()
+    images = await asyncio.to_thread(amont().images)
     img = next((i for i in images if i["id"] == "ubuntu-24.04"), None)
     if img is None:
         img = next((i for i in images if "ubuntu" in i["nom"].lower()), None)
@@ -174,10 +180,13 @@ class ExecuteurBaseCreate(Executeur):
             secrets_espace = await depot_espaces.secrets(ctx, base.espaceId)
             secrets_base = await depot.secrets(ctx, base.id)
             port = PORTS.get(base.moteur, 5432)
-            srv = amont().creer_serveur(
+            image_id = await image_ubuntu()
+            gabarit_id = entre.get("gabarit") or await gabarit_pour_palier(base.palier)
+            srv = await asyncio.to_thread(
+                amont().creer_serveur,
                 nom=f"db-{base.id[:8]}",
-                image_id=image_ubuntu(),
-                gabarit_id=entre.get("gabarit") or gabarit_pour_palier(base.palier),
+                image_id=image_id,
+                gabarit_id=gabarit_id,
                 reseau_id=entre.get("reseauId") or secrets_espace.get("reseau_id"),
                 identifiants=secrets_espace,
                 org_id=ctx.org_id_ou_none,
@@ -201,7 +210,7 @@ class ExecuteurBaseCreate(Executeur):
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
-            amont().supprimer_serveur(sid)
+            await asyncio.to_thread(amont().supprimer_serveur, sid)
         await depot.definir_statut(ctx, travail.cible_id or "", "degraded")
 
 
@@ -224,7 +233,7 @@ class ExecuteurBaseRestore(Executeur):
         if index == 0:
             sid = await serveur_id(ctx, travail.cible_id or "", travail)
             if sid and sid != (travail.cible_id or ""):
-                amont().action(sid, "redemarrage")
+                await asyncio.to_thread(amont().action, sid, "redemarrage")
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
@@ -236,5 +245,5 @@ class ExecuteurBaseDelete(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         sid = await serveur_id(ctx, travail.cible_id or "", travail)
         if sid and sid != (travail.cible_id or ""):
-            amont().supprimer_serveur(sid)
+            await asyncio.to_thread(amont().supprimer_serveur, sid)
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)

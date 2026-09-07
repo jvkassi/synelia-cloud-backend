@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -104,7 +105,7 @@ class ExecuteurSauvegarde(Executeur):
         if index == 1:
             volumes = await _volumes_du_scope(ctx, plan)
             if not volumes:
-                a = amont().executer_plan(plan.nom, plan.ressourcesProtegees)
+                a = await asyncio.to_thread(amont().executer_plan, plan.nom, plan.ressourcesProtegees)
                 travail.contexte = {**dict(travail.contexte), "taille_go": a["taille_go"]}
                 return f"Snapshot créé ({a['taille_go']} Go)."
             snapshot_ids: list[str] = []
@@ -113,8 +114,14 @@ class ExecuteurSauvegarde(Executeur):
             for vol in volumes:
                 vid = await volume_id_reel(ctx, vol.id)
                 identifiants = await identifiants_espace(ctx, vol.espaceId)
-                snap = amont_cinder().creer_snapshot(
-                    vid, f"backup-{plan.nom}-{nouvel_id()[:8]}", identifiants=identifiants
+                # `amont_cinder()` (Cinder, openstacksdk synchrone) est déchargé via
+                # `asyncio.to_thread` : même garde que `vms.service`, sans quoi un appel amont
+                # lent gèlerait la boucle asyncio — donc l'API entière, tous tenants confondus.
+                snap = await asyncio.to_thread(
+                    amont_cinder().creer_snapshot,
+                    vid,
+                    f"backup-{plan.nom}-{nouvel_id()[:8]}",
+                    identifiants=identifiants,
                 )
                 snapshot_ids.append(snap["id"])
                 volume_ids.append(vol.id)
@@ -157,10 +164,13 @@ class ExecuteurVerification(Executeur):
         if snapshot_ids and volume_ids:
             vol = await depot_volume.obtenir(ctx, volume_ids[0])
             identifiants = await identifiants_espace(ctx, vol.espaceId)
-            verifie = all(
-                amont_cinder().statut_snapshot(sid, identifiants=identifiants) == "available"
+            statuts = [
+                await asyncio.to_thread(
+                    amont_cinder().statut_snapshot, sid, identifiants=identifiants
+                )
                 for sid in snapshot_ids
-            )
+            ]
+            verifie = all(s == "available" for s in statuts)
         await points.modifier(ctx, point_id, {"verifie": verifie})
 
 
@@ -177,8 +187,11 @@ class ExecuteurRestauration(Executeur):
             vol = await depot_volume.obtenir(ctx, volume_ids[0])
             identifiants = await identifiants_espace(ctx, vol.espaceId)
             restaures = [
-                amont_cinder().restaurer_snapshot(
-                    sid, f"restore-{point.id[:8]}", identifiants=identifiants
+                await asyncio.to_thread(
+                    amont_cinder().restaurer_snapshot,
+                    sid,
+                    f"restore-{point.id[:8]}",
+                    identifiants=identifiants,
                 )
                 for sid in snapshot_ids
             ]
