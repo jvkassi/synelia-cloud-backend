@@ -169,15 +169,29 @@ async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principa
     equipe = u.equipe or {}
     role_equipe = role_effectif_equipe(equipe)
     org_id = claims.get("org")
-    await _verifier_organisation_active(
-        session, org_id, admin_plateforme=bool(equipe) and role_equipe in ROLES_EQUIPE
-    )
+    admin_plateforme = bool(equipe) and role_equipe in ROLES_EQUIPE
+    await _verifier_organisation_active(session, org_id, admin_plateforme=admin_plateforme)
+    if admin_plateforme:
+        role = role_equipe or claims.get("role") or "read_only"
+    elif org_id:
+        # Rôle réel de l'organisation à *cette* requête, jamais celui figé dans le jeton à
+        # la connexion (`claims["role"]`) : sinon un changement de rôle via
+        # `PATCH /v1/membres/{id}` ne prend effet qu'à l'expiration/rafraîchissement du
+        # jeton déjà émis (jusqu'à 15 min), ce qui vide de son sens toute rétrogradation
+        # de sécurité (compte compromis, offboarding). `roles` vient d'une lecture Membership
+        # fraîche faite plus haut pour *chaque* requête authentifiée (déjà nécessaire pour
+        # `roles_par_org`) : pas de requête supplémentaire, donc pas de coût additionnel.
+        # Absent de `roles` (membre retiré entre-temps) : on ne retombe jamais sur le rôle du
+        # jeton, seulement sur `read_only` — même logique que l'organisation suspendue.
+        role = roles.get(org_id) or "read_only"
+    else:
+        role = claims.get("role") or "read_only"
     return Principal(
         utilisateur_id=u.id,
         email=u.email,
         nom=u.nom,
         org_id=org_id,
-        role=claims.get("role") or "read_only",
+        role=role,
         session_id=sid,
         emprunt=bool(claims.get("emprunt")),
         equipe=bool(equipe),

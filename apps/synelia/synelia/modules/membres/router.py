@@ -48,6 +48,28 @@ async def obtenir_membership(ctx: Contexte, mem_id: str) -> tuple[Membership, Ut
     return mem, u
 
 
+async def _refuser_si_dernier_admin(ctx: Contexte, mem: Membership, message: str) -> None:
+    """Bloque toute opération (retrait ou rétrogradation) qui laisserait l'organisation sans
+    aucun `org_admin` — pas de chemin de récupération possible pour un compte encore
+    authentifié qui se coupe (ou coupe le dernier autre admin) l'accès admin de l'org."""
+    if mem.role != "org_admin" or mem.scope_type != "org":
+        return
+    nb = (
+        await ctx.session.execute(
+            select(func.count())
+            .select_from(Membership)
+            .where(
+                Membership.org_id == ctx.org_id,
+                Membership.role == "org_admin",
+                Membership.scope_type == "org",
+                Membership.id != mem.id,
+            )
+        )
+    ).scalar_one()
+    if nb == 0:
+        raise erreurs.conflit(message, code="dernier_admin")
+
+
 def invitation_contrat(ctx: Contexte, inv: Invitation, org_nom: str | None) -> dict[str, Any]:
     return {
         "id": inv.id,
@@ -109,7 +131,7 @@ async def ajouter_appartenance(
             select(Membership).where(
                 Membership.org_id == ctx.org_id,
                 Membership.utilisateur_id == corps.userId,
-                Membership.scope_type == corps.scopeType or "org",
+                Membership.scope_type == (corps.scopeType or "org"),
             )
         )
     ).scalar_one_or_none()
@@ -155,6 +177,12 @@ async def modifier_membre(
     if corps.role is not None and corps.role != mem.role:
         if corps.role not in ROLES_ORDRE:
             raise erreurs.validation("Rôle inconnu.", {"role": "invalide"})
+        if corps.role != "org_admin":
+            await _refuser_si_dernier_admin(
+                ctx,
+                mem,
+                "Impossible de rétrograder le dernier administrateur de l'organisation.",
+            )
         mem.role = corps.role
     if corps.scopeType is not None:
         mem.scope_type = corps.scopeType
@@ -179,24 +207,9 @@ async def retirer_membre(
     mem, u = await obtenir_membership(ctx, membreId)
     email = u.email if u else f"membre:{membreId}"
     exiger_confirmation(email, confirmation)
-    if mem.role == "org_admin" and mem.scope_type == "org":
-        nb = (
-            await ctx.session.execute(
-                select(func.count())
-                .select_from(Membership)
-                .where(
-                    Membership.org_id == ctx.org_id,
-                    Membership.role == "org_admin",
-                    Membership.scope_type == "org",
-                    Membership.id != mem.id,
-                )
-            )
-        ).scalar_one()
-        if nb == 0:
-            raise erreurs.conflit(
-                "Impossible de retirer le dernier administrateur de l'organisation.",
-                code="dernier_admin",
-            )
+    await _refuser_si_dernier_admin(
+        ctx, mem, "Impossible de retirer le dernier administrateur de l'organisation."
+    )
     await ctx.session.delete(mem)
     await ctx.session.flush()
     await journaliser(
