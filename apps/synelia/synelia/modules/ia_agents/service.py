@@ -62,6 +62,28 @@ SEMENCES: list[m.ModeleIA] = [
         invocable=True,
     ),
     m.ModeleIA(
+        id="m-deepseek-flash",
+        slug="deepseek/deepseek-v4-flash",
+        nom="DeepSeek V4 Flash",
+        editeur="DeepSeek",
+        famille="texte",
+        hebergement="externe",
+        residence="Passerelle OpenRouter — fournisseur variable selon la route.",
+        licence="DeepSeek",
+        contexteJetons=128_000,
+        prixEntree=60,
+        prixSortie=120,
+        unite="jeton",
+        statut="disponible",
+        usages=["Réponses courtes", "Volume élevé", "Secours si le garde-fou OpenRouter bloque les autres modèles"],
+        description=(
+            "Seul modèle vérifié en direct comme réellement autorisé sous le garde-fou "
+            "restrictif du compte OpenRouter partagé (2026-09-07) — appelé réellement via "
+            "LiteLLM/OpenRouter."
+        ),
+        invocable=True,
+    ),
+    m.ModeleIA(
         id="m-mistral-small",
         slug="mistralai/mistral-small-3.2-24b-instruct",
         nom="Mistral Small 3.2 24B",

@@ -33,6 +33,17 @@ model_list:
     litellm_params:
       model: openrouter/google/gemini-2.5-pro
       api_key: os.environ/SYNELIA_OPENROUTER_KEY
+  # Le garde-fou OpenRouter du compte partagé (guardrail 411e5fcb-…) restreint
+  # `allowed_models` à une liste réduite depuis le 2026-09-07 07:07 UTC — la clé
+  # configurée n'a pas les droits de gestion pour le corriger (confirmé : appel
+  # réel à /guardrails/{id} → 401 « Invalid management key »). deepseek-v4-flash
+  # est le seul modèle vérifié en direct comme réellement autorisé sous ce
+  # garde-fou (200 réel, les 8 modèles ci-dessus restent en configuration au cas
+  # où le garde-fou serait corrigé, mais échouent tant qu'il ne l'est pas).
+  - model_name: deepseek/deepseek-v4-flash
+    litellm_params:
+      model: openrouter/deepseek/deepseek-v4-flash
+      api_key: os.environ/SYNELIA_OPENROUTER_KEY
 
 litellm_settings:
   drop_params: true
