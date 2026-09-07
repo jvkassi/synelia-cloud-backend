@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from typing import Any
 
@@ -99,7 +100,10 @@ async def amacer_backends(ctx: Contexte) -> list[m.Backend]:
             )
         existants = await depot_backend.tous(ctx)
 
-    reel = amont().capacite_plateforme()
+    # `amont().capacite_plateforme` (openstacksdk, synchrone) est déchargé via
+    # `asyncio.to_thread` : même garde que `vms.service`, sans quoi un appel amont lent
+    # gèlerait la boucle asyncio — donc l'API entière, tous tenants confondus.
+    reel = await asyncio.to_thread(amont().capacite_plateforme)
     if reel is not None:
         actuel = next((b for b in existants if b.id == BACKEND_REEL_ID), None)
         cap = m.Quota(vcpu=reel["vcpu"], ramGo=reel["ramGo"], stockageTo=reel["stockageTo"])
