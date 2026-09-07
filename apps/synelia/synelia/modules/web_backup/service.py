@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Ressource, Travail
 from synelia_kernel.dates import maintenant
@@ -45,7 +47,12 @@ class ExecuteurSauvegardeRun(Executeur):
         try:
             sid = await serveur_id(ctx, s.hebergementId)
             if sid and sid != s.hebergementId:
-                image_id = amont().instantane(sid, f"backup-{s.nomServi}-{nouvel_id()[:8]}")
+                # `amont().instantane` (openstacksdk, synchrone) est déchargé via
+                # `asyncio.to_thread` : même garde que `vms.service`, sans quoi un appel amont
+                # lent gèlerait la boucle asyncio — donc l'API entière, tous tenants confondus.
+                image_id = await asyncio.to_thread(
+                    amont().instantane, sid, f"backup-{s.nomServi}-{nouvel_id()[:8]}"
+                )
         except Exception:  # noqa: BLE001 — hébergement de démo sans serveur réel, ou amont absent
             image_id = None
         p = point()
@@ -92,7 +99,7 @@ class ExecuteurSauvegardeRestore(Executeur):
             if not image_id:
                 return None
             sid = await serveur_id(ctx, s.hebergementId)
-            amont().restaurer(sid, image_id)
+            await asyncio.to_thread(amont().restaurer, sid, image_id)
             return f"Serveur restauré depuis l'image {image_id}"
         return None
 
@@ -114,7 +121,7 @@ class ExecuteurSauvegardeTestRestauration(Executeur):
                     # on vérifie que le snapshot Glande de la dernière exécution existe
                     # toujours et est réellement utilisable, pas seulement qu'il l'était
                     # au moment de la sauvegarde.
-                    statut = amont().statut_image(image_id)
+                    statut = await asyncio.to_thread(amont().statut_image, image_id)
                     resultat = "ok" if statut == "active" else "echec"
                 else:
                     # Aucune image réelle associée (hébergement de démo, ou sauvegarde

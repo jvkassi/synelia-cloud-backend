@@ -9,6 +9,8 @@ garde son propre dépôt (quotas, sièges, facturation), pas un `SiteWeb`."""
 
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel import erreurs
@@ -93,7 +95,7 @@ class ExecuteurDriveActivate(Executeur):
                 )
             if isinstance(amont_ssh(), SshReel):
                 sid = await serveur_id(ctx, hebergement.id)
-                if amont().statut_serveur(sid) == "absente":
+                if await asyncio.to_thread(amont().statut_serveur, sid) == "absente":
                     raise erreurs.amont_indisponible(
                         "hébergement (VM)",
                         "La VM de cet hébergement n'existe plus côté OpenStack (supprimée hors "
@@ -103,15 +105,27 @@ class ExecuteurDriveActivate(Executeur):
             compose, routage, fichiers = construire_site_stack(
                 "nextcloud", drive.hote, "", mdp, drive.id
             )
+            # SSH réel (`SshReel.executer`/`.ecrire_fichier`) : appels bloquants déchargés via
+            # `asyncio.to_thread`, même garde que `web_hebergement.ExecuteurSiteInstaller` — sans
+            # ça, l'installation Docker Compose sur la VM cible (par nature lente) gèlerait la
+            # boucle asyncio, donc l'API entière, tous tenants confondus.
             ssh = amont_ssh()
             racine = _racine(drive.id)
-            ssh.ecrire_fichier(ip, cle_privee, f"{racine}/docker-compose.yml", compose)
-            for chemin, contenu in fichiers.items():
-                ssh.ecrire_fichier(ip, cle_privee, chemin, contenu)
-            ssh.ecrire_fichier(
-                ip, cle_privee, f"{_RACINE_DOCKER}/traefik-dynamic/drive-{drive.id}.yml", routage
+            await asyncio.to_thread(
+                ssh.ecrire_fichier, ip, cle_privee, f"{racine}/docker-compose.yml", compose
             )
-            ssh.executer(ip, cle_privee, f"cd {racine} && docker compose up -d")
+            for chemin, contenu in fichiers.items():
+                await asyncio.to_thread(ssh.ecrire_fichier, ip, cle_privee, chemin, contenu)
+            await asyncio.to_thread(
+                ssh.ecrire_fichier,
+                ip,
+                cle_privee,
+                f"{_RACINE_DOCKER}/traefik-dynamic/drive-{drive.id}.yml",
+                routage,
+            )
+            await asyncio.to_thread(
+                ssh.executer, ip, cle_privee, f"cd {racine} && docker compose up -d"
+            )
             await depot.definir_secrets(
                 ctx,
                 drive.id,
@@ -132,7 +146,8 @@ class ExecuteurDriveActivate(Executeur):
                 return None
             heb_secrets = await depot_hebergements.secrets(ctx, hebergement.id)
             zone = await zone_vps_secrets(ctx)
-            regle = amont_network().ajouter_regle_hote(
+            regle = await asyncio.to_thread(
+                amont_network().ajouter_regle_hote,
                 listener_id=zone.get("lb_listener_id"),
                 loadbalancer_id=zone.get("lb_id"),
                 pool_id=heb_secrets.get("lb_pool_id"),
@@ -157,14 +172,17 @@ class ExecuteurDriveActivate(Executeur):
         zone = await zone_vps_secrets(ctx)
         policy_id = travail.contexte.get("lb_policy_id") or secrets.get("lb_policy_id")
         if policy_id:
-            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+            await asyncio.to_thread(
+                amont_network().supprimer_regle_hote, policy_id, loadbalancer_id=zone.get("lb_id")
+            )
         hid = travail.contexte.get("hebergement_id") or secrets.get("hebergement_id")
         hebergement = hid and await depot_hebergements.trouver(ctx, hid)
         cle_privee = zone.get("ssh_prive")
         ip = hebergement and await ip_gestion_hebergement(ctx, hebergement)
         if hebergement and cle_privee and ip:
             racine = _racine(did)
-            amont_ssh().executer(
+            await asyncio.to_thread(
+                amont_ssh().executer,
                 ip,
                 cle_privee,
                 f"cd {racine} && docker compose down -v; rm -rf {racine} "
@@ -184,14 +202,17 @@ class ExecuteurDriveDesactiver(Executeur):
         zone = await zone_vps_secrets(ctx)
         policy_id = secrets.get("lb_policy_id")
         if policy_id:
-            amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+            await asyncio.to_thread(
+                amont_network().supprimer_regle_hote, policy_id, loadbalancer_id=zone.get("lb_id")
+            )
         hid = secrets.get("hebergement_id")
         hebergement = hid and await depot_hebergements.trouver(ctx, hid)
         cle_privee = zone.get("ssh_prive")
         ip = hebergement and await ip_gestion_hebergement(ctx, hebergement)
         if hebergement and cle_privee and ip:
             racine = _racine(did)
-            amont_ssh().executer(
+            await asyncio.to_thread(
+                amont_ssh().executer,
                 ip,
                 cle_privee,
                 f"cd {racine} && docker compose down -v; rm -rf {racine} "
