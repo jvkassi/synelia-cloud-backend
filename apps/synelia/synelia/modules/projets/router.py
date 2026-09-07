@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any, Literal
 
@@ -105,7 +106,9 @@ async def creer_projet(
         # service ayant réellement quelque chose à exécuter (`_assurer_vm_projet`).
         pass
     else:
-        s.k8s().creer_namespace(s.namespace_projet(projet))
+        # `k8s_client` est synchrone/bloquant : déchargé dans un thread pour ne pas geler la
+        # boucle asyncio (même garde que `synelia.modules.vms.service`).
+        await asyncio.to_thread(s.k8s().creer_namespace, s.namespace_projet(projet))
     await journaliser(
         ctx, action="projet.creation", cible_type="projet", cible_id=projet.id, cible=projet.nom
     )

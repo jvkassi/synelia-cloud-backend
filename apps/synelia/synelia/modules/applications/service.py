@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_openstack import fournisseur
@@ -21,23 +23,35 @@ def depots() -> DepotsSimule:
     return fournisseur(DepotsSimule, DepotsReel)
 
 
-def _appliquer_composant_k8s(comp: m.Composant, replicas: int = 1) -> None:
-    """Applique un `Composant` de kind `k8s` sur le cluster PaaS (namespace = environnement)."""
+async def _appliquer_composant_k8s(comp: m.Composant, replicas: int = 1) -> None:
+    """Applique un `Composant` de kind `k8s` sur le cluster PaaS (namespace = environnement).
+
+    `k8s_client` est synchrone/bloquant : exécuté tel quel dans la coroutine, il bloquerait
+    toute la boucle asyncio — donc toute l'API, pour tous les tenants — jusqu'à sa fin (même
+    bug vécu en direct et corrigé dans `synelia.modules.vms.service` via `asyncio.to_thread`
+    systématique sur les appels amont ; même garde ici et dans `projets.service`).
+    """
     if comp.kind != "k8s" or not comp.emplacement.namespace:
         return
     a = k8s()
-    a.creer_namespace(comp.emplacement.namespace)
+    await asyncio.to_thread(a.creer_namespace, comp.emplacement.namespace)
     env = {v.cle: v.valeur for v in comp.envVars if not v.secret and v.valeur is not None}
     ports = [p.interne for p in comp.ports] or None
-    a.appliquer_deployment(
-        comp.emplacement.namespace, comp.nom, comp.image, replicas=replicas, env=env, ports=ports
+    await asyncio.to_thread(
+        a.appliquer_deployment,
+        comp.emplacement.namespace,
+        comp.nom,
+        comp.image,
+        replicas=replicas,
+        env=env,
+        ports=ports,
     )
 
 
-def _supprimer_composant_k8s(comp: m.Composant) -> None:
+async def _supprimer_composant_k8s(comp: m.Composant) -> None:
     if comp.kind != "k8s" or not comp.emplacement.namespace:
         return
-    k8s().supprimer_deployment(comp.emplacement.namespace, comp.nom)
+    await asyncio.to_thread(k8s().supprimer_deployment, comp.emplacement.namespace, comp.nom)
 
 
 SANTE_NULLE = m.Sante(cpu=0.0, ram=0.0, latenceMs=0.0, erreursPct=0.0)
@@ -90,7 +104,7 @@ class ExecuteurEnvDelete(Executeur):
 class ExecuteurComposantCreer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         comp = await depot_comp.obtenir(ctx, travail.cible_id or "")
-        _appliquer_composant_k8s(comp)
+        await _appliquer_composant_k8s(comp)
         await depot_comp.definir_statut(ctx, travail.cible_id or "", "deployed")
         await depot_env.definir_statut(ctx, travail.contexte.get("env_id") or "", "running")
 
@@ -101,14 +115,14 @@ class ExecuteurComposantModifier(Executeur):
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         comp = await depot_comp.obtenir(ctx, travail.cible_id or "")
-        _appliquer_composant_k8s(comp)
+        await _appliquer_composant_k8s(comp)
 
 
 @executeur("composant.supprimer")
 class ExecuteurComposantSupprimer(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         comp = await depot_comp.obtenir(ctx, travail.cible_id or "")
-        _supprimer_composant_k8s(comp)
+        await _supprimer_composant_k8s(comp)
         await depot_comp.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
@@ -116,7 +130,7 @@ class ExecuteurComposantSupprimer(Executeur):
 class ExecuteurComposantArret(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         comp = await depot_comp.obtenir(ctx, travail.cible_id or "")
-        _appliquer_composant_k8s(comp, replicas=0)
+        await _appliquer_composant_k8s(comp, replicas=0)
         await depot_comp.definir_statut(ctx, travail.cible_id or "", "stopped")
 
 
@@ -124,7 +138,7 @@ class ExecuteurComposantArret(Executeur):
 class ExecuteurComposantRedemarrage(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         comp = await depot_comp.obtenir(ctx, travail.cible_id or "")
-        _appliquer_composant_k8s(comp)
+        await _appliquer_composant_k8s(comp)
         await depot_comp.definir_statut(ctx, travail.cible_id or "", "deployed")
 
 
@@ -150,7 +164,7 @@ class ExecuteurComposantDimensionnement(Executeur):
             }
         )
         await depot_comp.modifier(ctx, c.id, {"ressources": ressources.model_dump()})
-        _appliquer_composant_k8s(
+        await _appliquer_composant_k8s(
             c.model_copy(update={"ressources": ressources}), replicas=demandes.get("replicas") or 1
         )
         await depot_comp.definir_statut(ctx, c.id, "deployed")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import time
 from typing import Any
 
@@ -229,7 +230,13 @@ async def _assurer_vm_projet(ctx: Contexte, projet: m.Projet) -> dict[str, Any]:
         return secrets
     zone = await web_heb.zone_vps_secrets(ctx)
     cle = await web_heb.assurer_cle_ssh_zone(ctx)
-    srv = amont_compute().creer_serveur(
+    # `creer_serveur` (comme les autres appels `amont_*()` de cette fonction) est un appel
+    # openstacksdk/SSH synchrone/bloquant : exécuté tel quel dans la coroutine, il bloquerait
+    # toute la boucle asyncio — donc toute l'API, pour tous les tenants — jusqu'à sa fin, même
+    # bug que celui vécu en direct et corrigé dans `vms.service` (`asyncio.to_thread`
+    # systématique sur les appels amont). Mêmes gardes ici.
+    srv = await asyncio.to_thread(
+        amont_compute().creer_serveur,
         nom=nom_vm_projet(projet),
         image_id=web_heb.image_ubuntu(),
         gabarit_id=web_heb.gabarit_pour_palier(GABARIT_PALIER_VM_PROJET),
@@ -244,14 +251,17 @@ async def _assurer_vm_projet(ctx: Contexte, projet: m.Projet) -> dict[str, Any]:
     # IP flottante de gestion SSH backend — même raison que `web_hebergement` : le réseau privé
     # de la zone VPS n'est routable que depuis l'intérieur du lab OpenStack, le trafic HTTP
     # public lui ne passe jamais par elle (uniquement par le load balancer partagé).
-    fip = amont_identite().creer_ip_flottante(zone.get("projet_id"))
-    ip_gestion = amont_identite().associer_ip_flottante(fip.get("id"), srv["id"])
-    amont_network().assurer_regle_ssh(srv["id"])
-    n = amont_network()
-    pool = n.creer_pool(
-        loadbalancer_id=zone.get("lb_id"), nom=f"pool-projet-{slug_court(projet.id)}"
+    fip = await asyncio.to_thread(amont_identite().creer_ip_flottante, zone.get("projet_id"))
+    ip_gestion = await asyncio.to_thread(
+        amont_identite().associer_ip_flottante, fip.get("id"), srv["id"]
     )
-    membre = n.ajouter_membre(
+    await asyncio.to_thread(amont_network().assurer_regle_ssh, srv["id"])
+    n = amont_network()
+    pool = await asyncio.to_thread(
+        n.creer_pool, loadbalancer_id=zone.get("lb_id"), nom=f"pool-projet-{slug_court(projet.id)}"
+    )
+    membre = await asyncio.to_thread(
+        n.ajouter_membre,
         pool_id=pool["id"],
         adresse=ip_privee,
         port=80,
@@ -274,7 +284,9 @@ async def _assurer_vm_projet(ctx: Contexte, projet: m.Projet) -> dict[str, Any]:
     # premier démarrage), ici la toute première installation d'un service suit IMMÉDIATEMENT
     # la création de la VM : sans cette attente, elle échoue quasiment à coup sûr
     # (« Unable to connect to port 22 »), vécu en le vérifiant en direct sur ce lab.
-    _attendre_ssh_pret(amont_ssh(), secrets_maj["vm_ssh_ip"], cle.get("ssh_prive") or "")
+    await asyncio.to_thread(
+        _attendre_ssh_pret, amont_ssh(), secrets_maj["vm_ssh_ip"], cle.get("ssh_prive") or ""
+    )
     return {**secrets, **secrets_maj}
 
 
@@ -322,31 +334,33 @@ async def _installer_service_vm(
         # rester instantané et sans réseau, comme le reste de la plateforme en mode simulé
         # (la zone VPS partagée n'a aucune raison d'être configurée en environnement de test).
         cle_privee, ip = cle_privee or "cle-simulee", ip or "127.0.0.1"
-    env = {}
+    env = env_projet(projet, service)
     if service.type == "base" and service.moteur:
         secrets_service = await depot_service.secrets(ctx, service.id)
-        env = env_base(service, secrets_service)
+        env = {**env, **env_base(service, secrets_service)}
     port = service.portConteneur or PORT_DEFAUT_SERVICE
     expose = expose_http_vm(service)
     hote = domaine_service_vm(service.id) if expose else None
     compose, routage = construire_service_stack_vm(service, image, env, port, hote)
     racine = dossier_service_vm(service.id)
-    ssh.ecrire_fichier(ip, cle_privee, f"{racine}/docker-compose.yml", compose)
+    await asyncio.to_thread(ssh.ecrire_fichier, ip, cle_privee, f"{racine}/docker-compose.yml", compose)
     if routage:
-        ssh.ecrire_fichier(
+        await asyncio.to_thread(
+            ssh.ecrire_fichier,
             ip,
             cle_privee,
             f"{RACINE_DOCKER_VM_PROJET}/traefik-dynamic/service-{service.id}.yml",
             routage,
         )
-    ssh.executer(ip, cle_privee, f"cd {racine} && docker compose up -d")
+    await asyncio.to_thread(ssh.executer, ip, cle_privee, f"cd {racine} && docker compose up -d")
     if expose:
         # Idempotent : `projet_service.create` sert aussi démarrage/redémarrage (cf. router),
         # qui repasse ici à chaque fois — une règle L7 déjà posée ne doit pas en reposer une
         # deuxième pour le même hôte.
         secrets_service = await depot_service.secrets(ctx, service.id)
         if not secrets_service.get("lb_policy_id"):
-            regle = amont_network().ajouter_regle_hote(
+            regle = await asyncio.to_thread(
+                amont_network().ajouter_regle_hote,
                 listener_id=zone.get("lb_listener_id"),
                 loadbalancer_id=zone.get("lb_id"),
                 pool_id=secrets_projet.get("vm_lb_pool_id"),
@@ -378,7 +392,9 @@ async def _arreter_service_vm(ctx: Contexte, service: m.ServiceProjet, projet: m
     if not cle_privee:
         return
     racine = dossier_service_vm(service.id)
-    amont_ssh().executer(ip, cle_privee, f"cd {racine} && docker compose stop")
+    await asyncio.to_thread(
+        amont_ssh().executer, ip, cle_privee, f"cd {racine} && docker compose stop"
+    )
 
 
 async def _supprimer_service_vm(ctx: Contexte, service: m.ServiceProjet, projet: m.Projet) -> None:
@@ -390,12 +406,15 @@ async def _supprimer_service_vm(ctx: Contexte, service: m.ServiceProjet, projet:
     zone = await web_heb.zone_vps_secrets(ctx)
     policy_id = secrets_service.get("lb_policy_id")
     if policy_id:
-        amont_network().supprimer_regle_hote(policy_id, loadbalancer_id=zone.get("lb_id"))
+        await asyncio.to_thread(
+            amont_network().supprimer_regle_hote, policy_id, loadbalancer_id=zone.get("lb_id")
+        )
     cle_privee = zone.get("ssh_prive")
     ip = secrets_projet.get("vm_ssh_ip")
     if cle_privee and ip and secrets_projet.get("vm_serveur_id"):
         racine = dossier_service_vm(service.id)
-        amont_ssh().executer(
+        await asyncio.to_thread(
+            amont_ssh().executer,
             ip,
             cle_privee,
             f"cd {racine} && docker compose down -v; rm -rf {racine} "
@@ -416,16 +435,18 @@ async def _supprimer_vm_projet(ctx: Contexte, projet: m.Projet) -> None:
         return  # jamais provisionnée réellement (aucun service n'a jamais tourné) : rien à défaire
     fip_id = secrets.get("vm_ssh_fip_id")
     if fip_id:
-        amont_identite().supprimer_ip_flottante(fip_id)
-    amont_compute().supprimer_serveur(secrets["vm_serveur_id"])
+        await asyncio.to_thread(amont_identite().supprimer_ip_flottante, fip_id)
+    await asyncio.to_thread(amont_compute().supprimer_serveur, secrets["vm_serveur_id"])
     zone = await web_heb.zone_vps_secrets(ctx)
     n = amont_network()
     pool_id = secrets.get("vm_lb_pool_id")
     membre_id = secrets.get("vm_lb_membre_id")
     if pool_id and membre_id:
-        n.supprimer_membre(pool_id, membre_id, loadbalancer_id=zone.get("lb_id"))
+        await asyncio.to_thread(
+            n.supprimer_membre, pool_id, membre_id, loadbalancer_id=zone.get("lb_id")
+        )
     if pool_id:
-        n.supprimer_pool(pool_id, loadbalancer_id=zone.get("lb_id"))
+        await asyncio.to_thread(n.supprimer_pool, pool_id, loadbalancer_id=zone.get("lb_id"))
 
 
 def hote_interne(service: m.ServiceProjet, projet: m.Projet) -> str:
@@ -511,6 +532,21 @@ def utilisateur_base(nom_service: str) -> str:
     return f"u_{brut}" if brut.startswith("pg_") else brut
 
 
+def env_projet(projet: m.Projet, service: m.ServiceProjet) -> dict[str, str]:
+    """Variables partagées du projet (`PUT /projets/{id}/variables`) applicables à l'exécution
+    de `service` : portée `runtime`, et son environnement dans `environnements`.
+
+    Sans ceci, `PUT /projets/{id}/variables` se contentait de persister les variables en base
+    et de les rendre à la lecture (`GET`), sans jamais les faire atteindre le conteneur
+    applicatif réellement déployé (Docker Compose sur la VM du projet, ou Deployment k8s) —
+    l'écriture semblait réussir mais n'avait aucun effet réel sur ce qui tourne."""
+    return {
+        v.cle: v.valeur
+        for v in projet.variables
+        if v.portee == "runtime" and service.environnement in v.environnements and v.valeur is not None
+    }
+
+
 def env_base(service: m.ServiceProjet, secrets: dict[str, str]) -> dict[str, str]:
     """Variables d'environnement d'amorçage de l'image officielle de `service.moteur`."""
     mdp = secrets.get("motDePasse", "")
@@ -547,13 +583,16 @@ async def _appliquer_service_k8s(ctx: Contexte, service: m.ServiceProjet, projet
     image = image_service(service)
     if not image:
         return False
-    env = {}
+    env = env_projet(projet, service)
     if service.type == "base" and service.moteur:
         secrets = await depot_service.secrets(ctx, service.id)
-        env = env_base(service, secrets)
+        env = {**env, **env_base(service, secrets)}
     port = service.portConteneur or (MOTEUR_PORT.get(service.moteur or "")) or PORT_DEFAUT_SERVICE
-    k8s().creer_namespace(namespace_projet(projet))
-    k8s().appliquer_deployment(
+    # `k8s_client` (comme les appels `amont_*()` de la cible `vm`, cf. plus haut) est synchrone/
+    # bloquant : même garde `asyncio.to_thread` pour ne pas geler la boucle asyncio.
+    await asyncio.to_thread(k8s().creer_namespace, namespace_projet(projet))
+    await asyncio.to_thread(
+        k8s().appliquer_deployment,
         namespace_projet(projet),
         nom_k8s_service(service),
         image,
@@ -573,10 +612,18 @@ class ExecuteurServiceCreate(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         service = await depot_service.obtenir(ctx, travail.cible_id or "")
         projet = await depot_projet.obtenir(ctx, service.projetId)
-        if projet.cible == "vm":
-            tourne = await _appliquer_service_vm(ctx, service, projet)
-        else:
-            tourne = await _appliquer_service_k8s(ctx, service, projet)
+        try:
+            if projet.cible == "vm":
+                tourne = await _appliquer_service_vm(ctx, service, projet)
+            else:
+                tourne = await _appliquer_service_k8s(ctx, service, projet)
+        except Exception:
+            # Le moteur de travaux marque déjà le travail `failed` (cf. `travaux/moteur.py`),
+            # mais sans ceci le `ServiceProjet` restait affiché `building` indéfiniment — statut
+            # qui promet une progression en cours, jamais corrigé après un échec réel du
+            # provisionnement (ex. Nova `NoValidHost`, vécu en direct sur ce lab).
+            await depot_service.definir_statut(ctx, service.id, "failed")
+            raise
         await depot_service.definir_statut(ctx, service.id, "running" if tourne else "stopped")
 
 
@@ -592,8 +639,12 @@ class ExecuteurServiceStopped(Executeur):
             # Ramène les réplicas à 0 plutôt que de supprimer le Deployment : un
             # redémarrage réapplique juste le même objet à 1 réplica, pas de
             # recréation de zéro (même motif que `ExecuteurComposantArret`).
-            k8s().appliquer_deployment(
-                namespace_projet(projet), nom_k8s_service(service), image, replicas=0
+            await asyncio.to_thread(
+                k8s().appliquer_deployment,
+                namespace_projet(projet),
+                nom_k8s_service(service),
+                image,
+                replicas=0,
             )
         await depot_service.definir_statut(ctx, service.id, "stopped")
 
@@ -606,7 +657,9 @@ class ExecuteurServiceDelete(Executeur):
         if projet.cible == "vm":
             await _supprimer_service_vm(ctx, service, projet)
         else:
-            k8s().supprimer_deployment(namespace_projet(projet), nom_k8s_service(service))
+            await asyncio.to_thread(
+                k8s().supprimer_deployment, namespace_projet(projet), nom_k8s_service(service)
+            )
         await depot_service.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
@@ -617,7 +670,7 @@ class ExecuteurProjetDelete(Executeur):
         if projet.cible == "vm":
             await _supprimer_vm_projet(ctx, projet)
         else:
-            k8s().supprimer_namespace(namespace_projet(projet))
+            await asyncio.to_thread(k8s().supprimer_namespace, namespace_projet(projet))
         await depot_projet.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
