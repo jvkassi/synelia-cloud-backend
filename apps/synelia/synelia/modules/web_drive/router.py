@@ -84,9 +84,12 @@ async def activer_drive(
         cible_type="web_drive",
         cible_id=drive.id,
         entree=corps.model_dump(mode="json"),
+        # Libellés alignés sur `ExecuteurDriveActivate.etape` (indices 0 et 1) depuis le
+        # rework « pas de VM dédiée » : l'ancien libellé « Créer le serveur Nextcloud
+        # (OpenStack) » décrivait encore l'ancienne architecture (une VM par Drive) alors que
+        # l'exécuteur installe désormais Nextcloud par SSH sur le VPS déjà en service.
         etapes=[
-            {"nom": "Réserver les quotas du palier", "dureeS": 4},
-            {"nom": "Créer le serveur Nextcloud (OpenStack)", "dureeS": 40},
+            {"nom": "Installer Nextcloud sur le VPS de l'hébergement (SSH)", "dureeS": 40},
             {"nom": "Router le domaine sur le load balancer partagé (Octavia)", "dureeS": 10},
         ],
     )
