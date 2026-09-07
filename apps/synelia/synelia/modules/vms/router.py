@@ -394,10 +394,16 @@ async def redimensionner_vm(
         "ramGo": corps.ramGo if corps.ramGo is not None else vm.ramGo,
         "diskGo": corps.diskGo if corps.diskGo is not None else vm.diskGo,
     }
+    flore = {g["id"]: g for g in amont().gabarits()}
     if nouveau["diskGo"] < vm.diskGo:
         raise erreurs.validation(
             "Un disque ne se réduit pas.", champs={"diskGo": "doit être ≥ à la taille actuelle."}
         )
+    # Nova ne sait redimensionner que vers un gabarit existant : sans ce rejet propre, le
+    # travail partait pour un `etape` qui ne trouvait pas de correspondance, sautait l'appel
+    # amont et rendait `done` — la fiche DB mise à jour, la VM Nova inchangée (faux succès,
+    # cf. `_specs` pour le même motif à la création).
+    _gabarit_pour_specs(nouveau["vcpu"], nouveau["ramGo"], nouveau["diskGo"], flore)
     delta_vcpu = nouveau["vcpu"] - vm.vcpu
     delta_ram = nouveau["ramGo"] - vm.ramGo
     delta_disk = nouveau["diskGo"] - vm.diskGo

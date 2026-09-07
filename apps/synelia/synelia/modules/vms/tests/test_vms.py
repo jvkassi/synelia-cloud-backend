@@ -186,6 +186,25 @@ async def test_redimensionner_vm(client):
     assert r.status_code == 422
 
 
+async def test_redimensionner_sans_gabarit_echoue_franchement(client):
+    """Un triplet sans gabarit correspondant est rejeté 422 au routeur (Nova ne sait
+    redimensionner que vers un gabarit existant) — et non plus un travail `done` qui
+    ne touchait que la fiche DB."""
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "resize-fantome")
+    avant = (await client.get(f"/v1/vms/{vid}")).json()
+    r = await client.post(
+        f"/v1/vms/{vid}/redimensionnement", json={"vcpu": 3, "ramGo": 6, "diskGo": 60}
+    )
+    assert r.status_code == 422
+    apres = (await client.get(f"/v1/vms/{vid}")).json()
+    assert (apres["vcpu"], apres["ramGo"], apres["diskGo"]) == (
+        avant["vcpu"],
+        avant["ramGo"],
+        avant["diskGo"],
+    )
+
+
 async def test_lot_vms(client):
     espace_id = await _espace_demo(client)
     machines = [

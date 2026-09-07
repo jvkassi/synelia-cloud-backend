@@ -391,6 +391,14 @@ class ExecuteurVmResize(Executeur):
                 sid = await serveur_id(ctx, vm.id, travail)
                 await asyncio.to_thread(amont().redimensionner, sid, gabarit["id"])
                 return f"Redimensionné vers le gabarit {gabarit['id']}"
+            # Le routeur valide le triplet contre le catalogue avant de démarrer le travail ;
+            # si on arrive ici avec un triplet sans gabarit (entrée directe du travail, ou
+            # catalogue modifié entre-temps), échouer franchement plutôt que sauter l'appel
+            # amont et rendre `done` avec la seule fiche DB mise à jour.
+            raise erreurs.validation(
+                "Aucun gabarit du catalogue ne correspond à ce vcpu/ramGo/diskGo.",
+                champs={"gabarit": "Indiquez un gabarit existant du catalogue."},
+            )
         return None
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
