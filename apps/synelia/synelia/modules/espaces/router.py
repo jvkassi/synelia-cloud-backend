@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
@@ -150,7 +151,9 @@ async def modifier_quota_espace(
         # l'ancienne limite (constaté en direct — `openstack quota show` inchangé après un
         # PUT réussi), ce qui laisse le client croire à une augmentation qui n'existe pas
         # réellement côté amont.
-        service.amont().poser_quotas(projet_id, corps.vcpu, corps.ramGo, corps.stockageTo)
+        await asyncio.to_thread(
+            service.amont().poser_quotas, projet_id, corps.vcpu, corps.ramGo, corps.stockageTo
+        )
     await depot.modifier(ctx, espaceId, {"quota": corps.model_dump()})
     await journaliser(
         ctx,

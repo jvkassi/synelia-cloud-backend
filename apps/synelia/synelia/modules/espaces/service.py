@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -98,13 +99,23 @@ class ExecuteurEspaceCreate(Executeur):
         if index == 0:
             return f"Quota réservé : {e.quota.vcpu} vCPU, {e.quota.ramGo} Go RAM"
         if index == 1:
-            c["domaine_id"] = c.get("domaine_id") or a.creer_domaine(f"org-{e.orgId}")
-            c["projet_id"] = a.creer_projet(
-                c["domaine_id"], f"espace-{e.code}", "RegionOne" if e.site == "ABJ" else "GBM"
+            # `a.xxx(...)` (openstacksdk, synchrone) est déchargé via `asyncio.to_thread` : même
+            # garde que `vms.service`, sans quoi un appel amont lent gèlerait la boucle asyncio
+            # — donc l'API entière, tous tenants confondus.
+            c["domaine_id"] = c.get("domaine_id") or await asyncio.to_thread(
+                a.creer_domaine, f"org-{e.orgId}"
             )
-            a.poser_quotas(c["projet_id"], e.quota.vcpu, e.quota.ramGo, e.quota.stockageTo)
+            c["projet_id"] = await asyncio.to_thread(
+                a.creer_projet,
+                c["domaine_id"],
+                f"espace-{e.code}",
+                "RegionOne" if e.site == "ABJ" else "GBM",
+            )
+            await asyncio.to_thread(
+                a.poser_quotas, c["projet_id"], e.quota.vcpu, e.quota.ramGo, e.quota.stockageTo
+            )
         elif index == 2:
-            c.update(a.creer_reseau(c["projet_id"], f"{e.code}-net", e.cidr))
+            c.update(await asyncio.to_thread(a.creer_reseau, c["projet_id"], f"{e.code}-net", e.cidr))
             await depot.definir_secrets(
                 ctx,
                 e.id,
@@ -115,7 +126,9 @@ class ExecuteurEspaceCreate(Executeur):
                 },
             )
         elif index == 3:
-            ac = a.creer_application_credential(c["projet_id"], c.get("domaine_id"))
+            ac = await asyncio.to_thread(
+                a.creer_application_credential, c["projet_id"], c.get("domaine_id")
+            )
             await depot.definir_secrets(
                 ctx,
                 e.id,
@@ -130,7 +143,7 @@ class ExecuteurEspaceCreate(Executeur):
     async def compenser(self, ctx: Contexte, travail: Travail, index_echoue: int) -> None:
         pid = travail.contexte.get("projet_id")
         if pid:
-            amont().supprimer_projet(pid)
+            await asyncio.to_thread(amont().supprimer_projet, pid)
         await depot.definir_statut(ctx, travail.cible_id or "", "suspendue")
 
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
@@ -147,8 +160,8 @@ class ExecuteurEspaceDelete(Executeur):
         if pid:
             rid, rtid = secrets.get("reseau_id"), secrets.get("routeur_id")
             if rid and rtid:
-                amont().supprimer_reseau(rid, rtid)
-            amont().supprimer_projet(pid)
+                await asyncio.to_thread(amont().supprimer_reseau, rid, rtid)
+            await asyncio.to_thread(amont().supprimer_projet, pid)
         await depot.supprimer(ctx, travail.cible_id or "", logique=True)
 
 
