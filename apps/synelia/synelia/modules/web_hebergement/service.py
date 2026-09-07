@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
+from sqlalchemy import select
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel import erreurs
@@ -14,9 +15,10 @@ from synelia_openstack.identite import IdentiteOpenStack, IdentiteSimule
 from synelia_openstack.network import NetworkOpenStack, NetworkSimule
 from synelia_openstack.ssh import SshReel, SshSimule
 
+from synelia.audit import journaliser
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
-from synelia.travaux import Executeur, executeur
+from synelia.travaux import Executeur, demarrer_travail, executeur
 
 depot = Depot(
     "web_hebergement",
@@ -354,10 +356,15 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
     `verif-final.example.com`, resté `en_ligne` des heures après la disparition de sa VM, ~20 s de
     SSH voué à l'échec à la clé. Même motif « reconcile-on-read » que `kubernetes` (cf.
     `docs/GUIDE-MODULE.md`, invariant « Réconcilier à la lecture ») : sur toute lecture d'un
-    hébergement `en_ligne`, vérifie que Nova connaît encore son serveur et persiste l'écart.
+    hébergement en statut contrôlé, vérifie que Nova connaît encore son serveur et persiste
+    l'écart.
 
-    Statut choisi : `suspendu`, celui que `ExecuteurHebergementCreer.compenser` pose déjà quand
-    l'amont a disparu en cours de création — c'est le seul des trois états du contrat
+    Orphelin confirmé (Nova ignore le serveur référencé, alors que la ligne a passé la fenêtre de
+    grâce de la création — statuts contrôlés seulement) : décision propriétaire, la ligne est
+    **supprimée** par le même chemin métier que DELETE /web/hebergements/{id} (exécuteur
+    `hebergement.supprimer`, cf. `_traiter_orphelin`), pas seulement marquée `suspendu`. Le
+    marquage historique reste `suspendu` — celui que `ExecuteurHebergementCreer.compenser` pose
+    déjà quand l'amont a disparu en cours de création, le seul des trois états du contrat
     (`en_ligne|maintenance|suspendu`) qui ne promette ni un service en ligne, ni une reprise
     imminente. `maintenance` en revanche n'est pas réconcilié : entre la création de la ligne et
     la fin du travail `hebergement.creer`, la VM n'existe pas encore côté Nova (le secret
@@ -365,7 +372,7 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
     travail qui y mettra le statut final. Le statut du serveur imbriqué passe à `maintenance` :
     `Serveur.statut` n'admet pas `suspendu`, et `maintenance` est le seul état qui ne l'appelle
     plus « en ligne »."""
-    if h.statut != "en_ligne":
+    if h.statut not in STATUTS_A_CONTROLER:
         return h
     try:
         secrets = await depot.secrets(ctx, h.id)
@@ -381,6 +388,52 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
         return h
     if await asyncio.to_thread(amont().statut_serveur, sid) != "absente":
         return h
+    return await _traiter_orphelin(ctx, h)
+
+
+# Statuts contrôlés à la lecture : `en_ligne` (peut avoir dérivé d'un serveur disparu) et
+# `suspendu` (lignes déjà marquées — réconciliation précédente ou compensation d'un travail
+# tombé — que la décision propriétaire fait maintenant supprimer une fois l'orphelin reconfirmé).
+# `maintenance` en est exclu volontairement : c'est le statut de la fenêtre de grâce de la
+# création (la VM n'existe pas encore côté Nova).
+STATUTS_A_CONTROLER = {"en_ligne", "suspendu"}
+
+ETAPES_SUPPRESSION = [
+    {"nom": "Suspension des sites et bases", "dureeS": 8},
+    {"nom": "Suppression du serveur (OpenStack)", "dureeS": 25},
+    {"nom": "Clore la facturation", "dureeS": 4},
+]
+
+# Décision propriétaire (2026-09-07) : ces hébergements sains du lab (serveurs Nova
+# `srv-01a073a1`/`srv-01a076fe`, ACTIVE) ne sont jamais la cible d'une suppression automatique —
+# une indisponibilité ponctuelle d'amont ne doit jamais pouvoir coûter un service réel. Ces
+# lignes restent marquées, jamais détruites.
+_HEBERGEMENTS_PROTEGES = ("01a073a1", "01a076fe")
+
+
+def _suppression_automatique_interdite(h: m.Hebergement) -> bool:
+    noms_proteges = {f"srv-{p}" for p in _HEBERGEMENTS_PROTEGES}
+    return h.id.startswith(_HEBERGEMENTS_PROTEGES) or h.serveur.nom in noms_proteges
+
+
+async def _suppression_en_cours(ctx: Contexte, cible_id: str, type_travail: str) -> bool:
+    """Un travail de suppression est-il déjà en vol pour cette ressource (DELETE utilisateur,
+    réconciliation d'une lecture concurrente) ? Le statut posé avant le lancement couvre les
+    lectures séquentielles ; ce contrôle couvre les lectures concurrentes — sans lui, deux GET
+    simultanés lanceraient deux `hebergement.supprimer`."""
+    q = select(Travail).where(
+        Travail.cible_id == cible_id,
+        Travail.type == type_travail,
+        Travail.statut.in_(("queued", "running")),
+    )
+    return (await ctx.session.execute(q)).scalars().first() is not None
+
+
+async def _marquer_suspendu(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
+    """Le marquage sincère historique (`suspendu`, serveur imbriqué `maintenance`), toujours
+    utilisé quand la suppression automatique est interdite ou déjà en vol."""
+    if h.statut == "suspendu":
+        return h
     return await depot.modifier(
         ctx,
         h.id,
@@ -391,6 +444,48 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
             ),
         },
     )
+
+
+async def _traiter_orphelin(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
+    """Orphelin confirmé (Nova ignore le serveur référencé, fenêtre de grâce de la création
+    passée) : décision propriétaire, on le **supprime** réellement — même chemin métier que
+    DELETE /web/hebergements/{id} (exécuteur `hebergement.supprimer` et sa compensation
+    habituelle : IP flottante de gestion, serveur Nova, règle L7/pool/membre du load balancer
+    partagé, sites), pas un simple marquage. Garde-fous : hébergement protégé
+    (`_HEBERGEMENTS_PROTEGES`), ou suppression déjà en vol → marquage sincère seulement."""
+    if _suppression_automatique_interdite(h) or await _suppression_en_cours(
+        ctx, h.id, "hebergement.supprimer"
+    ):
+        return await _marquer_suspendu(ctx, h)
+    return await _supprimer_orphelin(ctx, h)
+
+
+async def _supprimer_orphelin(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
+    """Suppression réelle d'un hébergement orphelin confirmé, par le chemin métier du DELETE :
+    la ligne est d'abord marquée `suspendu` (sincère immédiatement — et une lecture concurrente
+    ne redéclenchera pas, le travail de suppression étant déjà en vol), puis le travail
+    `hebergement.supprimer` détruit ce qu'il reste de l'infra (Nova répond NotFound à un serveur
+    déjà disparu — succès, pas échec) et retire la ligne. Si le travail échoue, la ligne reste
+    `suspendu` : sincère, requalifiable à la main."""
+    marque = await _marquer_suspendu(ctx, h)
+    await journaliser(
+        ctx,
+        action="hebergement.suppression_orpheline",
+        cible_type="web_hebergement",
+        cible_id=h.id,
+        cible=h.domaineProvisoire,
+        details={"origine": "reconciliation_orphelin"},
+    )
+    await demarrer_travail(
+        ctx,
+        "hebergement.supprimer",
+        h.domaineProvisoire,
+        cible_type="web_hebergement",
+        cible_id=h.id,
+        etapes=ETAPES_SUPPRESSION,
+        contexte={"origine": "reconciliation_orphelin"},
+    )
+    return marque
 
 
 async def hebergement_pour_domaine(ctx: Contexte, domaine: str) -> m.Hebergement | None:

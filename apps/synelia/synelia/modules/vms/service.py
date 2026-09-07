@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from sqlalchemy import select
 from synelia_contract import modeles as m
 from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
 from synelia_kernel.dates import maintenant
@@ -9,10 +10,11 @@ from synelia_kernel.ids import nouvel_id
 from synelia_openstack import fournisseur
 from synelia_openstack.compute import ComputeOpenStack, ComputeSimule
 
+from synelia.audit import journaliser
 from synelia.demo import peupleur
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
-from synelia.travaux import Executeur, executeur
+from synelia.travaux import Executeur, demarrer_travail, executeur
 
 depot = Depot("vm", m.Vm, champs_recherche=("nom", "os"))
 instantane_depot = Depot(
@@ -43,13 +45,17 @@ async def serveur_id(ctx: Contexte, vm_id: str, travail: Travail | None = None) 
     return str(sec.get("serveur_id") or vm_id)
 
 
-# États stables : une VM dans l'un de ces statuts **doit** avoir un serveur Nova derrière elle,
-# qui peut avoir disparu depuis le dernier relevé — elle vaut la peine d'être vérifiée en direct
-# (cf. `reconcilier_statut`). `creating` en est exclu volontairement : entre la création de la
-# ligne et l'étape 1 du travail, le serveur Nova n'existe pas encore (le secret `serveur_id` non
-# plus) — une relecture dans cette fenêtre croirait à un orphelin. `migrating`/`error` sont portés
-# par leur travail ou déjà sincères.
+# États contrôlés à la lecture : une VM dans l'un de ces statuts **doit** avoir un serveur Nova
+# derrière elle, qui peut avoir disparu depuis le dernier relevé — elle vaut la peine d'être
+# vérifiée en direct (cf. `reconcilier_statut`). `creating` en est exclu volontairement : entre la
+# création de la ligne et l'étape 1 du travail, le serveur Nova n'existe pas encore (le secret
+# `serveur_id` non plus) — une relecture dans cette fenêtre croirait à un orphelin. `migrating`
+# est porté par son travail. `error` y figure : c'est le statut des lignes déjà marquées
+# (réconciliation précédente, compensation d'un travail tombé) — on les reconfirme à chaque
+# lecture, un serveur Nova de nouveau connu (`ERROR`) n'étant jamais supprimé, un orphelin
+# confirmé l'étant (décision propriétaire, cf. `_traiter_orphelin`).
 STATUTS_STABLES = {"running", "stopped"}
+STATUTS_A_CONTROLER = STATUTS_STABLES | {"error"}
 
 
 def _mapper_statut_nova(statut_amont: str) -> str | None:
@@ -83,9 +89,14 @@ async def reconcilier_statut(ctx: Contexte, vm: m.Vm) -> m.Vm:
     l'écart se voit — cf. l'hébergement `verif-final.example.com`, resté `en_ligne` des heures
     après la disparition de sa VM. Même motif « reconcile-on-read » que `web_hebergement` et
     `kubernetes` (cf. `docs/GUIDE-MODULE.md`, invariant « Réconcilier à la lecture ») : sur toute
-    lecture d'une VM en statut stable, relit le statut réel Nova et persiste l'écart s'il est
-    cassé (cf. `_mapper_statut_nova`), avant de renvoyer la ressource."""
-    if vm.statut not in STATUTS_STABLES:
+    lecture d'une VM en statut contrôlé, relit le statut réel Nova et persiste l'écart s'il est
+    cassé (cf. `_mapper_statut_nova`), avant de renvoyer la ressource.
+
+    Orphelin confirmé (Nova ignore le serveur référencé, alors que la ligne a passé la fenêtre de
+    grâce de la création — statuts contrôlés seulement) : décision propriétaire, la ligne est
+    **supprimée** par le même chemin métier que DELETE /vms/{id} (exécuteur `vm.delete`, cf.
+    `_traiter_orphelin`), pas seulement marquée `error`."""
+    if vm.statut not in STATUTS_A_CONTROLER:
         return vm
     try:
         secrets = await depot.secrets(ctx, vm.id)
@@ -100,10 +111,83 @@ async def reconcilier_statut(ctx: Contexte, vm: m.Vm) -> m.Vm:
     if not sid:
         return vm
     statut_amont = await asyncio.to_thread(amont().statut_serveur, sid)
+    if statut_amont.upper() == "ABSENTE":
+        return await _traiter_orphelin(ctx, vm)
     nouveau = _mapper_statut_nova(statut_amont)
     if nouveau and nouveau != vm.statut:
         return await depot.definir_statut(ctx, vm.id, nouveau)
     return vm
+
+
+ETAPES_SUPPRESSION = [
+    {"nom": "Arrêter la machine", "dureeS": 18},
+    {"nom": "Supprimer les disques", "dureeS": 12},
+    {"nom": "Libérer les adresses IP", "dureeS": 6},
+]
+
+
+def _suppression_automatique_interdite(vm: m.Vm) -> bool:
+    """Garde-fou de la décision propriétaire : l'espace partagé `vps-zone` (plateforme, org NULL
+    — réseau, load balancer et VM PaaS de la plateforme) n'est jamais la cible d'une suppression
+    automatique. Une indisponibilité ponctuelle d'amont ne doit jamais pouvoir coûter une
+    infrastructure de plateforme : ces lignes restent marquées, jamais détruites."""
+    from synelia.modules.espaces.service import ESPACE_ZONE_VPS_ID
+
+    return vm.espaceId == ESPACE_ZONE_VPS_ID
+
+
+async def _suppression_en_cours(ctx: Contexte, cible_id: str, type_travail: str) -> bool:
+    """Un travail de suppression est-il déjà en vol pour cette ressource (DELETE utilisateur,
+    réconciliation d'une lecture concurrente) ? Le statut posé avant le lancement (commit au
+    moment de `demarrer_travail`) couvre les lectures séquentielles ; ce contrôle couvre les
+    lectures concurrentes — sans lui, deux GET simultanés lanceraient deux `vm.delete`."""
+    q = select(Travail).where(
+        Travail.cible_id == cible_id,
+        Travail.type == type_travail,
+        Travail.statut.in_(("queued", "running")),
+    )
+    return (await ctx.session.execute(q)).scalars().first() is not None
+
+
+async def _traiter_orphelin(ctx: Contexte, vm: m.Vm) -> m.Vm:
+    """Orphelin confirmé (Nova ignore le serveur référencé, fenêtre de grâce de la création
+    passée) : décision propriétaire, on le **supprime** réellement — même chemin métier que
+    DELETE /vms/{id} (exécuteur `vm.delete` et sa compensation habituelle), pas un simple
+    marquage. Garde-fous : ligne de l'espace partagé `vps-zone`, ou suppression déjà en vol
+    (DELETE utilisateur, lecture concurrente) → on se borne au marquage sincère `error`."""
+    if _suppression_automatique_interdite(vm) or await _suppression_en_cours(
+        ctx, vm.id, "vm.delete"
+    ):
+        return vm if vm.statut == "error" else await depot.definir_statut(ctx, vm.id, "error")
+    return await _supprimer_orphelin(ctx, vm)
+
+
+async def _supprimer_orphelin(ctx: Contexte, vm: m.Vm) -> m.Vm:
+    """Suppression réelle d'une VM orpheline confirmée, par le chemin métier du DELETE : la
+    ligne est d'abord marquée `error` (sincère immédiatement — et une lecture concurrente ne
+    redéclenchera pas, le travail de suppression étant déjà en vol), puis le travail `vm.delete`
+    détruit le serveur amont restant s'il en reste un (Nova répond NotFound à un serveur déjà
+    disparu — succès, pas échec) et retire la ligne. Si le travail échoue, la ligne reste
+    `error` : sincère, requalifiable à la main."""
+    marque = await depot.definir_statut(ctx, vm.id, "error")
+    await journaliser(
+        ctx,
+        action="vm.suppression_orpheline",
+        cible_type="vm",
+        cible_id=vm.id,
+        cible=vm.nom,
+        details={"origine": "reconciliation_orphelin"},
+    )
+    await demarrer_travail(
+        ctx,
+        "vm.delete",
+        vm.nom,
+        cible_type="vm",
+        cible_id=vm.id,
+        etapes=ETAPES_SUPPRESSION,
+        contexte={"origine": "reconciliation_orphelin"},
+    )
+    return marque
 
 
 @executeur("vm.create")

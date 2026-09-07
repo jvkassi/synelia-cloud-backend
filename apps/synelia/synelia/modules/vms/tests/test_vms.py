@@ -246,8 +246,9 @@ async def test_reconciliation_statut_vm_orpheline(client, monkeypatch):
     # La ligne en base peut survivre à son infra réelle : une VM Nova supprimée hors bande
     # (nettoyage manuel du lab, travail tombé sans compensation) continuait d'afficher
     # `running` dans les listes et les tableaux de bord, et l'écart ne se voyait qu'au
-    # premier usage (SSH, console…). On vérifie ici que la lecture rend le statut sincère
-    # et le **persiste**, pas seulement pour la réponse renvoyée.
+    # premier usage (SSH, console…). Décision propriétaire : un orphelin confirmé est
+    # **supprimé** par le chemin métier du DELETE (exécuteur `vm.delete`), pas seulement
+    # marqué en erreur — la ligne disparaît réellement.
     from synelia.modules.vms import service as vms_service
 
     espace_id = await _espace_demo(client)
@@ -257,17 +258,117 @@ async def test_reconciliation_statut_vm_orpheline(client, monkeypatch):
     r = await client.get(f"/v1/vms/{vid}")
     assert r.status_code == 200 and r.json()["statut"] == "running"
 
-    # Nova ne connaît plus le serveur : `error` (le seul statut sincère du contrat —
-    # `stopped` ferait croire à une machine simplement arrêtée, redémarrable).
+    # Nova ne connaît plus le serveur : suppression réelle déclenchée à la lecture.
+    supprime = []
     monkeypatch.setattr(
         vms_service.ComputeSimule,
         "statut_serveur",
         lambda self, serveur_id, identifiants=None: "absente",
     )
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "supprimer_serveur",
+        lambda self, serveur_id: supprime.append(serveur_id),
+    )
+    r = await client.get(f"/v1/vms/{vid}")
+    # La lecture répond avec le marquage sincère posé avant le lancement du travail
+    # (en mode en ligne, le travail `vm.delete` a déjà tourné et retiré la ligne).
+    assert r.status_code == 200 and r.json()["statut"] == "error"
+    assert len(supprime) == 1  # le serveur amont restant a bien visé par le chemin métier
+
+    # La ligne a réellement disparu : plus de zombie dans la liste, détail en 404.
+    r = await client.get("/v1/vms", params={"statut": "error"})
+    assert all(v["id"] != vid for v in r.json()["donnees"])
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 404
+
+
+async def test_reconciliation_vm_orpheline_nova_error_pas_supprimee(client, monkeypatch):
+    # Nova `ERROR` : le serveur existe toujours (build raté, hyperviseur) — ce n'est PAS un
+    # orphelin : la ligne est marquée `error` mais jamais supprimée automatiquement.
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-nova-error")
+
+    def _interdit(self, serveur_id):
+        raise AssertionError("Un serveur Nova `ERROR` existe : jamais supprimé automatiquement")
+
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "ERROR",
+    )
+    monkeypatch.setattr(vms_service.ComputeSimule, "supprimer_serveur", _interdit)
     r = await client.get(f"/v1/vms/{vid}")
     assert r.status_code == 200 and r.json()["statut"] == "error"
+    r = await client.get("/v1/vms", params={"statut": "error"})
+    assert any(v["id"] == vid for v in r.json()["donnees"])
 
-    # La ressource a bien été persistée à jour, pas seulement renvoyée une fois.
+
+async def test_reconciliation_vm_orpheline_zone_vps_protegee(client, monkeypatch):
+    # Garde-fou de la décision propriétaire : une VM de l'espace partagé `vps-zone`
+    # (infrastructure de plateforme) n'est jamais supprimée automatiquement — un orphelin
+    # confirmé y reste marqué `error`, requalifiable à la main. On simule la protection en
+    # faisant de l'espace de démo l'espace protégé.
+    from synelia.modules import espaces
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-zone-vps")
+
+    def _interdit(self, serveur_id):
+        raise AssertionError("L'espace vps-zone n'est jamais supprimé automatiquement")
+
+    monkeypatch.setattr(espaces.service, "ESPACE_ZONE_VPS_ID", espace_id)
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "absente",
+    )
+    monkeypatch.setattr(vms_service.ComputeSimule, "supprimer_serveur", _interdit)
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "error"
+    r = await client.get("/v1/vms", params={"statut": "error"})
+    assert any(v["id"] == vid for v in r.json()["donnees"])
+
+
+async def test_reconciliation_vm_orpheline_suppression_deja_en_vol(client, monkeypatch):
+    # Un travail `vm.delete` est déjà en vol pour cette VM (DELETE utilisateur, lecture
+    # concurrente) : la réconciliation ne redéclenche pas une seconde suppression — elle se
+    # borne au marquage sincère, le travail en vol retirera la ligne.
+    from synelia.modules.vms import service as vms_service
+
+    espace_id = await _espace_demo(client)
+    vid = await _creer_vm(client, espace_id, "vm-delete-en-vol")
+
+    from synelia_db import session as db_session
+    from synelia_db.modeles import Travail
+    from synelia_kernel.ids import nouvel_id
+
+    async with db_session.fabrique()() as s:
+        s.add(
+            Travail(
+                id=nouvel_id(),
+                type="vm.delete",
+                label="vm.delete — en vol",
+                statut="running",
+                cible_id=vid,
+            )
+        )
+        await s.commit()
+
+    def _interdit(self, serveur_id):
+        raise AssertionError("Suppression déjà en vol : la réconciliation ne redéclenche pas")
+
+    monkeypatch.setattr(
+        vms_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "absente",
+    )
+    monkeypatch.setattr(vms_service.ComputeSimule, "supprimer_serveur", _interdit)
+    r = await client.get(f"/v1/vms/{vid}")
+    assert r.status_code == 200 and r.json()["statut"] == "error"
     r = await client.get("/v1/vms", params={"statut": "error"})
     assert any(v["id"] == vid for v in r.json()["donnees"])
 

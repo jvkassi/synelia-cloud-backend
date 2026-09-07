@@ -189,16 +189,7 @@ async def supprimer_vm(
     exiger_confirmation(vm.nom, confirmation)
     await journaliser(ctx, action="vm.suppression", cible_type="vm", cible_id=vmId, cible=vm.nom)
     return await demarrer_travail(
-        ctx,
-        "vm.delete",
-        vm.nom,
-        cible_type="vm",
-        cible_id=vmId,
-        etapes=[
-            {"nom": "Arrêter la machine", "dureeS": 18},
-            {"nom": "Supprimer les disques", "dureeS": 12},
-            {"nom": "Libérer les adresses IP", "dureeS": 6},
-        ],
+        ctx, "vm.delete", vm.nom, cible_type="vm", cible_id=vmId, etapes=service.ETAPES_SUPPRESSION
     )
 
 

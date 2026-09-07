@@ -141,11 +141,7 @@ async def supprimer_hebergement(
         h.domaineProvisoire,
         cible_type="web_hebergement",
         cible_id=hebergementId,
-        etapes=[
-            {"nom": "Suspension des sites et bases", "dureeS": 8},
-            {"nom": "Suppression du serveur (OpenStack)", "dureeS": 25},
-            {"nom": "Clore la facturation", "dureeS": 4},
-        ],
+        etapes=service.ETAPES_SUPPRESSION,
     )
 
 
