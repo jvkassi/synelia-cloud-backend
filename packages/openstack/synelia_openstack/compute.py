@@ -173,6 +173,9 @@ class ComputeSimule:
     def statut_image(self, image_id: str, identifiants: dict[str, Any] | None = None) -> str:
         return "active"
 
+    def statut_serveur(self, serveur_id: str, identifiants: dict[str, Any] | None = None) -> str:
+        return "ACTIVE"
+
     def console(self, serveur_id: str) -> str:
         return f"https://console.synelia.cloud/novnc/{serveur_id}?token={nouvel_id()}"
 
@@ -377,6 +380,15 @@ class ComputeOpenStack(ComputeSimule):
         c = self._connexion_pour(identifiants)
         img = c.image.find_image(image_id, ignore_missing=True)
         return str(img.status) if img else "absente"
+
+    def statut_serveur(self, serveur_id: str, identifiants: dict[str, Any] | None = None) -> str:
+        """Statut Nova réel du serveur — `absente` si Nova ne le connaît plus du tout (supprimé
+        hors bande, ex. nettoyage manuel du lab) : permet d'échouer vite et clairement plutôt
+        que de tenter un SSH sur une IP dont la VM n'existe plus (`Connection timed out`, ~20 s,
+        avant de comprendre que la VM a disparu — vécu en direct sur un hébergement orphelin)."""
+        c = self._connexion_pour(identifiants)
+        srv = c.compute.find_server(serveur_id, ignore_missing=True)
+        return str(srv.status) if srv else "absente"
 
     def console(self, serveur_id: str) -> str:
         return self._c().compute.create_console(serveur_id, console_type="novnc")["url"]

@@ -932,6 +932,14 @@ class ExecuteurSiteInstaller(Executeur):
                     "zone VPS n'est pas encore initialisée, soit cette VM a été créée avant "
                     "le câblage SSH/IP flottante (non rattrapable a posteriori).",
                 )
+            if isinstance(amont_ssh(), SshReel):
+                sid = await serveur_id(ctx, hebergement.id)
+                if amont().statut_serveur(sid) == "absente":
+                    raise erreurs.amont_indisponible(
+                        "hébergement (VM)",
+                        "La VM de cet hébergement n'existe plus côté OpenStack (supprimée hors "
+                        "bande) : l'enregistrement est orphelin, à nettoyer avant de réessayer.",
+                    )
             application = application_pour_site(site.type, site.hote)
             mdp = jeton_opaque(16)
             compose, routage, fichiers = construire_site_stack(

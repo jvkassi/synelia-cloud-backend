@@ -18,11 +18,13 @@ from synelia_openstack.ssh import SshReel
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
 from synelia.modules.web_hebergement.service import (
+    amont,
     amont_network,
     amont_ssh,
     construire_site_stack,
     hebergement_pour_domaine,
     ip_gestion_hebergement,
+    serveur_id,
     zone_vps_secrets,
 )
 from synelia.modules.web_hebergement.service import depot as depot_hebergements
@@ -89,6 +91,14 @@ class ExecuteurDriveActivate(Executeur):
                     "zone VPS n'est pas encore initialisée, soit cette VM a été créée avant "
                     "le câblage SSH/IP flottante (non rattrapable a posteriori).",
                 )
+            if isinstance(amont_ssh(), SshReel):
+                sid = await serveur_id(ctx, hebergement.id)
+                if amont().statut_serveur(sid) == "absente":
+                    raise erreurs.amont_indisponible(
+                        "hébergement (VM)",
+                        "La VM de cet hébergement n'existe plus côté OpenStack (supprimée hors "
+                        "bande) : l'enregistrement est orphelin, à nettoyer avant de réessayer.",
+                    )
             mdp = jeton_opaque(16)
             compose, routage, fichiers = construire_site_stack(
                 "nextcloud", drive.hote, "", mdp, drive.id
