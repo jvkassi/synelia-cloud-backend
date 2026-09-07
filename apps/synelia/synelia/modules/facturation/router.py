@@ -272,32 +272,7 @@ async def recharger_prepaye(
 
 @router.get("/sla", response_model=m.FacturationSlaGetResponse, response_model_exclude_none=True)
 async def obtenir_sla(ctx: Contexte = Depends(exige("invoice.view", lecture=True))) -> Any:
-    return {
-        "engagements": [
-            m.EngagementSla(
-                composant="compute",
-                dispo=99.9,
-                constate=99.95,
-                reponseCritique=15,
-                resolutionCritique=60,
-            ),
-            m.EngagementSla(
-                composant="stockage",
-                dispo=99.9,
-                constate=99.98,
-                reponseCritique=15,
-                resolutionCritique=60,
-            ),
-            m.EngagementSla(
-                composant="reseau",
-                dispo=99.9,
-                constate=99.92,
-                reponseCritique=15,
-                resolutionCritique=60,
-            ),
-        ],
-        "credits": [],
-    }
+    return await service.sla_engagements(ctx)
 
 
 @router.post(

@@ -8,8 +8,9 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from synelia_contract import modeles as m
-from synelia_db.modeles import Organisation, Ressource, Utilisateur
+from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
 from synelia_kernel import argent
+from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 
 from synelia.demo import peupleur
@@ -83,6 +84,49 @@ async def prochain_numero(ctx: Contexte, annee: int) -> str:
     )
     total = int((await ctx.session.execute(q)).scalar_one())
     return f"SYN-{annee}-{total + 1:06d}"
+
+
+# Composant -> types de travaux (`Travail.cible_type`) qui le concernent. Sert à calculer
+# un taux de réussite réel des opérations de l'organisation sur 30 jours, faute d'une source
+# de mesure de disponibilité par composant : pas de nombre inventé, un vrai ratio succès/échec
+# (ou l'engagement contractuel lui-même quand aucune opération n'a encore eu lieu).
+_CIBLES_SLA: dict[str, tuple[str, ...]] = {
+    "compute": ("vm", "espace", "k8s_cluster", "service_manage", "application"),
+    "stockage": ("volume",),
+    "reseau": ("load_balancer", "ip_flottante", "groupe_securite", "reseau", "dns_zone"),
+}
+
+_DISPO_CIBLE: dict[str, float] = {"compute": 99.9, "stockage": 99.9, "reseau": 99.9}
+
+
+async def sla_engagements(ctx: Contexte) -> dict[str, Any]:
+    depuis = maintenant() - timedelta(days=30)
+    engagements: list[dict[str, Any]] = []
+    for composant, cibles in _CIBLES_SLA.items():
+        q = select(Travail.statut).where(
+            Travail.org_id == ctx.org_id,
+            Travail.cible_type.in_(cibles),
+            Travail.started_at >= depuis,
+            Travail.statut.in_(["done", "failed"]),
+        )
+        statuts = list((await ctx.session.execute(q)).scalars())
+        dispo = _DISPO_CIBLE[composant]
+        if statuts:
+            constate = round(100 * (statuts.count("done") / len(statuts)), 2)
+        else:
+            # Aucune opération mesurée sur la période : pas d'incident constaté, donc
+            # conformité à l'engagement plutôt qu'un chiffre fabriqué.
+            constate = dispo
+        engagements.append(
+            {
+                "composant": composant,
+                "dispo": dispo,
+                "constate": constate,
+                "reponseCritique": 15,
+                "resolutionCritique": 60,
+            }
+        )
+    return {"engagements": engagements, "credits": []}
 
 
 async def offre_souscrite(ctx: Contexte, org_id: str) -> m.Offre | None:

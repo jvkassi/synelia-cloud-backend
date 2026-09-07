@@ -13,6 +13,7 @@ from synelia_kernel.dates import maintenant
 from synelia.depot import Depot
 from synelia.deps import Contexte, Ctx, exige
 from synelia.modules.facturation import metrologie
+from synelia.modules.facturation import service as facturation_service
 from synelia.travaux import vers_contrat
 
 router = APIRouter(prefix="/tableau-de-bord", tags=["Tableau de bord"])
@@ -90,14 +91,20 @@ async def _synthese(ctx: Contexte) -> dict[str, Any]:
     tickets = await Depot("ticket", m.Ticket).tous(
         ctx, filtre=lambda t: t.statut not in {"resolu", "ferme"}
     )
+    # Réutilise le vrai calcul de conformité SLA (taux de réussite des travaux sur 30j,
+    # ou l'engagement contractuel quand rien n'a encore été mesuré) plutôt qu'un chiffre fixe.
+    sla = await facturation_service.sla_engagements(ctx)
+    engagements = sla["engagements"]
+    uptime30j = round(sum(e["constate"] for e in engagements) / len(engagements), 2)
+    sla_contractuel = round(sum(e["dispo"] for e in engagements) / len(engagements), 2)
     return {
         **compteurs,
         "siegesUtilises": None,
         "siegesSouscrits": None,
         "quota": quota,
         "usage": usage,
-        "uptime30j": 99.9,
-        "slaContractuel": 99.95,
+        "uptime30j": uptime30j,
+        "slaContractuel": sla_contractuel,
         "depenseMois": int(cons["total"]),
         "previsionMois": int(cons["prevision"]),
         "depenseMoisPrecedent": int(cons["totalMoisPrecedent"]),
