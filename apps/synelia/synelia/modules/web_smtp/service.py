@@ -5,7 +5,7 @@ from __future__ import annotations
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel.ids import jeton_opaque
-from synelia_openstack import postal
+from synelia_openstack import relais_smtp
 
 from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
@@ -42,8 +42,8 @@ HOTE = "smtp.synelia.cloud"
 PORTS = [587]
 
 
-def amont() -> postal.PostalSimule:
-    return postal.choisir_postal()
+def amont() -> relais_smtp.RelaisSmtpSimule:
+    return relais_smtp.choisir_relais_smtp()
 
 
 @executeur("smtp.activate")

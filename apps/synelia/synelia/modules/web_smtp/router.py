@@ -236,7 +236,18 @@ async def lister_messages_smtp(
 async def tester_relais_smtp(
     corps: m.WebSmtpTestPostRequest, ctx: Contexte = Depends(exige("service.admin"))
 ) -> Any:
-    resultat = service.amont().envoyer_test(corps.de or "", corps.destinataire)
+    # En mode réel (RelaisSmtpReel), le test s'authentifie contre le vrai relais SMTP
+    # (apps/synelia/synelia/relais_smtp.py) avec les identifiants réels de l'org, posés par
+    # `ExecuteurSmtpActivate` — mêmes identifiant/secret que ceux relus par le daemon.
+    relais = await _relais(ctx)
+    identifiant = mot_de_passe = None
+    if relais.actif and relais.identifiant:
+        secrets = await depot.secrets(ctx, relais.id)
+        identifiant = relais.identifiant
+        mot_de_passe = secrets.get("mot_de_passe")
+    resultat = service.amont().envoyer_test(
+        corps.de or "", corps.destinataire, identifiant=identifiant, mot_de_passe=mot_de_passe
+    )
     await journaliser(ctx, action="smtp.test", cible_type="smtp_relais", cible_id=ctx.org_id)
     return {
         "envoye": resultat.get("envoye", True),

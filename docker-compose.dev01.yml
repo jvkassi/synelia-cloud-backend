@@ -62,6 +62,11 @@ services:
       SYNELIA_SMTP_ADMIN_HOTE: ${SYNELIA_SMTP_ADMIN_HOTE:?}
       SYNELIA_SMTP_ADMIN_UTILISATEUR: ${SYNELIA_SMTP_ADMIN_UTILISATEUR:?}
       SYNELIA_SMTP_ADMIN_MOT_DE_PASSE: ${SYNELIA_SMTP_ADMIN_MOT_DE_PASSE:?}
+      # Relais SMTP produit (module web_smtp, docker-compose.relais-smtp.dev01.yml) : le VRAI
+      # relais custom déployé (apps/synelia/synelia/relais_smtp.py), joint par nom de conteneur sur
+      # ce même réseau — pas le produit "Postal" hypothétique (jamais déployé, retiré).
+      SYNELIA_RELAIS_SMTP_HOTE: relais-smtp
+      SYNELIA_RELAIS_SMTP_PORT: "587"
       # IA — bases de connaissances (module ia_agents/connaissances.py) : Docling extrait,
       # Infinity vectorise (BGE-M3), Qdrant indexe. `SYNELIA_QDRANT_URL` est le seul signal
       # « réel » — les deux autres ont des valeurs par défaut docker-compose, données ici pour

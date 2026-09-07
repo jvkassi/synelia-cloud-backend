@@ -246,6 +246,20 @@ async def _verifier_et_incrementer_quota(cred: dict[str, Any]) -> tuple[bool, st
 
 
 # ── relais vers l'amont (bloquant : exécuté hors boucle via `asyncio.to_thread`) ───────────────
+def _contexte_tls_amont() -> ssl.SSLContext:
+    # Bug réel trouvé en vérifiant la livraison en direct (2026-09-07) : `create_default_context()`
+    # exige une chaîne de confiance publique, or Zimbra (l'amont partagé, `zimbra:587` sur le
+    # réseau Docker interne) présente un certificat auto-signé — même motif que
+    # `synelia_openstack.zimbra.ZimbraReel` (`verify=False`, cf. son commentaire). Sans ce contexte
+    # permissif, STARTTLS échouait systématiquement (`CERTIFICATE_VERIFY_FAILED`) et tout message
+    # finissait en `differe`, quels que soient AUTH/quota — ce que le commentaire d'origine
+    # attribuait à tort à l'absence de compte de service Zimbra.
+    contexte = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    contexte.check_hostname = False
+    contexte.verify_mode = ssl.CERT_NONE  # noqa: S501 — certificat auto-signé, amont interne
+    return contexte
+
+
 def _relayer_vers_amont(
     mail_from: str, rcpt_tos: list[str], contenu: bytes
 ) -> tuple[str, str, str]:
@@ -256,7 +270,7 @@ def _relayer_vers_amont(
         with smtplib.SMTP(hote, port, timeout=10) as client:
             client.ehlo()
             if client.has_extn("STARTTLS"):
-                client.starttls(context=ssl.create_default_context())
+                client.starttls(context=_contexte_tls_amont())
                 client.ehlo()
             if identifiant and mot_de_passe:
                 client.login(identifiant, mot_de_passe)
