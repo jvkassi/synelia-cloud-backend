@@ -31,6 +31,12 @@ Lire en entier avant de coder. Le module de référence est `apps/synelia/syneli
   réelle en test. Pour les amont non OpenStack (Stalwart, Postal, Nextcloud, Plesk, ACME, CinetPay, Stripe, Argo, Harbor…),
   même motif dans `packages/openstack/synelia_openstack/connecteurs_<nom>.py` : simulé + réel (httpx), le réel n'est appelé
   que si sa variable d'environnement d'URL existe.
+- Amont SSH (une VM déjà en service, ex. `web_hebergement`/`web_drive`) : deux gardes avant le premier appel réel,
+  toutes deux inutiles en mode simulé (`SshSimule`/`ComputeSimule` n'ont besoin d'aucun identifiant réel) —
+  `if isinstance(amont_ssh(), SshReel) and (not cle_privee or not ip): raise erreurs.amont_indisponible(...)`, puis
+  `if isinstance(amont_ssh(), SshReel) and amont().statut_serveur(sid) == "absente": raise erreurs.amont_indisponible(...)`
+  (vécu en direct : sans la seconde garde, un enregistrement orphelin — VM Nova supprimée hors bande — bloque
+  ~20 s sur un SSH voué à l'échec avant de retourner une erreur, au lieu d'échouer tout de suite clairement).
 - Erreurs : `from synelia_kernel import erreurs` — `introuvable`, `conflit`, `nom_deja_pris`, `validation(message, champs)`,
   `quota_depasse`, `non_porte` (422 « l'amont ne le porte pas »), `amont_indisponible(integration)` (424), `interdit`.
 - Audit : `from synelia.audit import journaliser` — `await journaliser(ctx, action="vm.creation", cible_type="vm", cible_id=..., cible=nom)`
