@@ -59,6 +59,28 @@ async def lister_hebergements(
 async def creer_hebergement(
     corps: m.HebergementCreation, ctx: Contexte = Depends(exige("marketplace.subscribe"))
 ) -> Any:
+    if corps.installer and corps.installer.type:
+        # Le champ existe dans le contrat et était accepté sans erreur : `corps.model_dump()`
+        # partait bien dans `entree` du travail (visible dans l'audit), mais aucun exécuteur ne
+        # l'a jamais lu — la VM se met en service avec une page d'accueil générique, sans
+        # WordPress/PrestaShop/etc., et le travail se déclare quand même « done » sur ses 5
+        # étapes : un « faux succès » silencieux constaté en direct (installer: wordpress à la
+        # création, page générique "Synelia Web Hebergement" servie ensuite). Installer une
+        # application sur la VM déjà en service (`POST /web/sites`, `site.installer`) est un
+        # mécanisme différent et déjà réel (SSH + docker compose) — le rebrancher pour qu'il
+        # tourne automatiquement à la création est un vrai travail d'intégration (séquencement
+        # après la mise en ligne, choix du `hote`, réutilisation du pool LB existant plutôt que
+        # d'en ouvrir un nouveau), pas un correctif ponctuel : on échoue franchement plutôt que
+        # de continuer à ignorer la demande en silence.
+        raise erreurs.validation(
+            "L'installation d'une application à la création de l'hébergement n'est pas encore "
+            "prise en charge. Créez d'abord l'hébergement, attendez qu'il soit en ligne, puis "
+            "installez l'application via POST /web/sites.",
+            champs={
+                "installer": "Non pris en charge à la création ; utilisez POST /web/sites une "
+                "fois l'hébergement en ligne."
+            },
+        )
     if corps.domaine:
         await depot.exiger_nom_libre(ctx, corps.domaine)
     hebergement = service.construire_hebergement(ctx, corps)
