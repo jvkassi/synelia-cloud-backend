@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
@@ -61,7 +62,7 @@ async def supprimer_zone_dns(
     z = await depot.obtenir(ctx, zoneId)
     exiger_confirmation(z.domaine, confirmation)
     zid = await service.zone_id_amont(ctx, z)
-    service.amont().supprimer_zone(zid)
+    await asyncio.to_thread(service.amont().supprimer_zone, zid)
     await depot.supprimer(ctx, zoneId, logique=True)
     await journaliser(
         ctx, action="dns.zone_suppression", cible_type="dns_zone", cible_id=zoneId, cible=z.domaine
@@ -79,7 +80,7 @@ async def modifier_dnssec(
     if z.dnssec == corps.actif:
         raise erreurs.conflit("DNSSEC est déjà dans cet état.", code="dnssec_etat_identique")
     zid = await service.zone_id_amont(ctx, z)
-    service.amont().activer_dnssec(zid, corps.actif)
+    await asyncio.to_thread(service.amont().activer_dnssec, zid, corps.actif)
     await depot.remplacer(ctx, zoneId, z.model_copy(update={"dnssec": corps.actif}))
     await journaliser(
         ctx,

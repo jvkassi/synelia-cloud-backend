@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_openstack import zimbra
@@ -40,7 +42,10 @@ def palier(cle: str) -> dict:
 class ExecuteurMessagerieActivate(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         mess = await depot.obtenir(ctx, travail.cible_id or "")
-        amont().creer_domaine(mess.domaine)
+        # `ZimbraReel` (SOAP admin, `httpx.post` synchrone) est déchargé via `asyncio.to_thread` :
+        # même garde que `vms.service`, sans quoi un appel amont lent gèlerait la boucle asyncio
+        # — donc l'API entière, tous tenants confondus.
+        await asyncio.to_thread(amont().creer_domaine, mess.domaine)
         await depot.modifier(
             ctx,
             mess.id,

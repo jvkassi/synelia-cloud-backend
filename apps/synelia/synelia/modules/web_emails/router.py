@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -141,7 +142,7 @@ async def verifier_authentification_messagerie(
     messagerieId: str, ctx: Contexte = Depends(exige(None))
 ) -> Any:  # noqa: N803
     mess = await depot.obtenir(ctx, messagerieId)
-    resultat = service.amont().verifier_authentification(mess.domaine)
+    resultat = await asyncio.to_thread(service.amont().verifier_authentification, mess.domaine)
     a_creer = (
         [m.EnregistrementDnsCreation(**r) for r in resultat.get("enregistrements", [])]
         if resultat.get("spf") != "valide"
@@ -195,7 +196,9 @@ async def creer_boite_mail(
         mfa=bool(corps.mfaObligatoire),
         derniereConnexion=None,
     )
-    service.amont().creer_boite(mess.domaine, corps.adresse, corps.motDePasse)
+    await asyncio.to_thread(
+        service.amont().creer_boite, mess.domaine, corps.adresse, corps.motDePasse
+    )
     boites = [*mess.boites, boite]
     await depot.modifier(ctx, messagerieId, {"boites": [b.model_dump(mode="json") for b in boites]})
     await journaliser(
@@ -251,7 +254,7 @@ async def supprimer_boite_mail(
     boite = next((b for b in mess.boites if b.adresse == adresse), None)
     if boite is None:
         raise erreurs.introuvable("Boîte mail", adresse)
-    service.amont().supprimer_boite(mess.domaine, adresse)
+    await asyncio.to_thread(service.amont().supprimer_boite, mess.domaine, adresse)
     boites = [b for b in mess.boites if b.adresse != adresse]
     await depot.modifier(ctx, messagerieId, {"boites": [b.model_dump(mode="json") for b in boites]})
     await journaliser(
@@ -276,7 +279,7 @@ async def ouvrir_webmail(
     ctx: Contexte = Depends(exige("service.open")),
 ) -> Any:  # noqa: N803
     mess = await depot.obtenir(ctx, messagerieId)
-    url = service.amont().ouvrir_webmail(corps.adresse)
+    url = await asyncio.to_thread(service.amont().ouvrir_webmail, corps.adresse)
     await journaliser(
         ctx,
         action="web.emails.ouverture",

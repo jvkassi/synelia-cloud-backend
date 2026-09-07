@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_kernel import erreurs
 from synelia_kernel.ids import nouvel_id
@@ -64,7 +66,10 @@ MODELES_DNS = [
 
 
 async def creer_zone(ctx: Contexte, domaine: str) -> m.ZoneDns:
-    r = amont().creer_zone(domaine)
+    # `amont().creer_zone` (Designate, openstacksdk synchrone, `wait_for_status` jusqu'à 60s)
+    # est déchargé via `asyncio.to_thread` : même garde que `vms.service`, sans quoi un appel
+    # amont lent gèlerait la boucle asyncio — donc l'API entière, tous tenants confondus.
+    r = await asyncio.to_thread(amont().creer_zone, domaine)
     zone = m.ZoneDns(
         id=nouvel_id(),
         orgId=ctx.org_id,
@@ -117,8 +122,13 @@ async def _creer_enregistrement_amont(
     ctx: Contexte, zone: m.ZoneDns, e: m.EnregistrementDnsCreation
 ) -> m.EnregistrementDns:
     zid = await zone_id_amont(ctx, zone)
-    r = amont().creer_enregistrement(
-        zid, _fqdn(e.nom, zone.domaine), e.type, [_valeur_amont(e, zone.domaine)], e.ttl or 3600
+    r = await asyncio.to_thread(
+        amont().creer_enregistrement,
+        zid,
+        _fqdn(e.nom, zone.domaine),
+        e.type,
+        [_valeur_amont(e, zone.domaine)],
+        e.ttl or 3600,
     )
     return enregistrement_vers(zone, e, str(r.get("id")) if r.get("id") else None)
 
@@ -140,8 +150,12 @@ async def modifier_enregistrement_amont(
     ctx: Contexte, zone: m.ZoneDns, enregistrement_id: str, e: m.EnregistrementDnsCreation
 ) -> None:
     zid = await zone_id_amont(ctx, zone)
-    amont().modifier_enregistrement(
-        zid, enregistrement_id, [_valeur_amont(e, zone.domaine)], e.ttl or 3600
+    await asyncio.to_thread(
+        amont().modifier_enregistrement,
+        zid,
+        enregistrement_id,
+        [_valeur_amont(e, zone.domaine)],
+        e.ttl or 3600,
     )
 
 
@@ -149,7 +163,7 @@ async def supprimer_enregistrement_amont(
     ctx: Contexte, zone: m.ZoneDns, enregistrement_id: str
 ) -> None:
     zid = await zone_id_amont(ctx, zone)
-    amont().supprimer_enregistrement(zid, enregistrement_id)
+    await asyncio.to_thread(amont().supprimer_enregistrement, zid, enregistrement_id)
 
 
 async def appliquer_enregistrements(
