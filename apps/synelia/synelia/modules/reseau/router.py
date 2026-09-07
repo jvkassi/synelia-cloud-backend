@@ -360,6 +360,14 @@ async def supprimer_groupe_securite(
 ) -> Response:  # noqa: N803
     g = await depot_groupe.obtenir(ctx, groupeId)
     exiger_confirmation(g.nom, confirmation)
+    if g.attaches:
+        # Neutron refuse de supprimer un security group encore attaché à un port (constaté en
+        # direct : `ConflictException` brute remontée en 500 sans ce garde-fou) — même famille
+        # de contrôle que `espace_non_vide`/`volume_attache` ailleurs dans l'API.
+        raise erreurs.conflit(
+            "Le groupe de sécurité est encore attaché à une ou plusieurs ressources.",
+            code="groupe_attache",
+        )
     await supprimer_groupe_amont(ctx, groupeId)
     await journaliser(
         ctx,

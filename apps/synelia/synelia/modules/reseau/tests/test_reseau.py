@@ -182,6 +182,14 @@ async def test_cycle_groupe_securite(client):
     r = await client.get(f"/v1/groupes-securite/{gid}")
     assert r.json()["rules"] == []
 
+    # Un groupe encore attaché ne se supprime pas (Neutron le refuse réellement) : il faut
+    # d'abord le détacher, comme pour un Espace non vide ou un volume attaché.
+    r = await client.delete(f"/v1/groupes-securite/{gid}", params={"confirmation": "sg-web"})
+    assert r.status_code == 409 and r.json()["erreur"]["code"] == "groupe_attache"
+
+    r = await client.put(f"/v1/groupes-securite/{gid}/attachements", json={"cibles": []})
+    assert r.status_code == 200 and r.json()["attaches"] == 0
+
     r = await client.delete(f"/v1/groupes-securite/{gid}", params={"confirmation": "sg-web"})
     assert r.status_code == 204
 
