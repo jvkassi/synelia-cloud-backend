@@ -115,6 +115,55 @@ Ready, LB ACTIVE/ONLINE → `openstack coe cluster show capi-fix-verify` = **CRE
 `SYNELIA_OS_APPLICATION_CREDENTIAL_ID/SECRET` (créer avec `openstack application credential create synelia`),
 `uv sync --extra openstack`. Depuis un poste distant : tunnel SSH + `SYNELIA_OS_ENDPOINT_OVERRIDES='{"compute":"http://127.0.0.1:8774/v2.1"}'`.
 
+Depuis dev01 lui-même (pas besoin de tunnel) : `192.168.26.0/24` est directement routé — `ping`/`curl`/
+`openstack` (CLI, `~/.config/synelia/admin-openrc.sh`) fonctionnent tels quels vers ctrl1 et les VIP
+internes kolla (`192.168.26.234`), sans SSH ni tunnel.
+
+## Console noVNC des VM (`GET /vms/{id}/console`) — vhost public `console.synelia.dev01.ovh.smile.ci`
+
+`ComputeOpenStack.console()` (`packages/openstack/synelia_openstack/compute.py`) appelait Nova
+`create_console(..., console_type="novnc")`, qui renvoie l'URL du **novnc-proxy interne** du lab —
+confirmé (deux VM différentes, même host:port, seul le `token` change) :
+`http://192.168.26.234:6080/vnc_lite.html?path=%3Ftoken%3D<uuid>` (VIP kolla, une seule instance
+`nova-novncproxy` sert toutes les VM ; jamais atteignable depuis Internet, y compris depuis un client
+mobile réel). Le correctif ne réécrit **que** le schéma/host/port vers un vhost public dev01, jamais le
+chemin ni le `token` (jeton de session Nova, casse si altéré).
+
+**Vhost Apache** (fichiers hors dépôt git, sur dev01 uniquement — `/etc/httpd/conf.d/`) :
+- `console.synelia.dev01.ovh.smile.ci.conf` (port 80, redirection HTTPS + bypass ACME comme les autres
+  vhosts `*.synelia.dev01.ovh.smile.ci`).
+- `console.synelia.dev01.ovh.smile.ci-le-ssl.conf` (port 443) : `ProxyPass`/`ProxyPassReverse` classiques
+  vers `http://192.168.26.234:6080/`, **plus** le motif websocket déjà utilisé pour n8n/argocd sur ce
+  host (`mod_proxy_wstunnel`, déjà chargé — vérifié via `httpd -M`) :
+  ```
+  RewriteEngine On
+  RewriteCond %{HTTP:Upgrade} =websocket [NC]
+  RewriteRule /(.*) ws://192.168.26.234:6080/$1 [P,L]
+  RewriteCond %{HTTP:Upgrade} !=websocket [NC]
+  RewriteRule /(.*) http://192.168.26.234:6080/$1 [P,L]
+  ```
+  Sans ce motif, la page noVNC se charge mais la connexion websocket (le flux vidéo réel) échoue —
+  vérifié en direct via un handshake `Upgrade: websocket` brut (réponse `101 Switching Protocols`,
+  `server: WebSockify Python/3.12.14`) à travers ce vhost HTTPS, depuis dev01 (donc depuis l'extérieur
+  du réseau du lab — le même point de vue qu'un client mobile réel).
+- Certificat Let's Encrypt obtenu normalement (`certbot certonly --webroot -w /var/www/html -d
+  console.synelia.dev01.ovh.smile.ci --key-type ecdsa`), DNS déjà wildcard sur `*.dev01.ovh.smile.ci`
+  (aucun enregistrement DNS à ajouter).
+- **Recharger Apache** : `sudo systemctl reload httpd` échoue sur dev01 (bug de namespace systemd déjà
+  documenté dans [[dev01-backend-hosting]]) — utiliser `sudo kill -USR1 $(cat /run/httpd/httpd.pid)`.
+  Vérifié après coup : `api.`/`app.`/`grafana.synelia.dev01.ovh.smile.ci` toujours fonctionnels.
+
+**Vérification bout en bout réalisée le 2026-09-07** : `ComputeOpenStack().console(<id Nova réel>)` appelé
+en direct dans le conteneur redéployé (contre `vm-projet-7a33a865dc46`, VM ACTIVE réelle du lab) renvoie
+`https://console.synelia.dev01.ovh.smile.ci/vnc_lite.html?path=%3Ftoken%3D<token réel>` ; cette URL exacte
+a été rechargée en HTTP (200, page noVNC) et en websocket (`101 Switching Protocols`) depuis dev01. Note :
+la création d'une VM neuve via l'API réelle (`POST /v1/espaces` puis `POST /v1/vms`) pour ce test a
+échoué sur `No valid host was found` — capacité du lab déjà épuisée (`vcpus_used=17/10`,
+`disk_available_least=-3` sur `openstack hypervisor stats show`), confirmé indépendamment du code avec un
+`openstack server create` brut ; pas un bug introduit par ce changement. L'espace/VM de test et le serveur
+Nova orphelin de ce test ont été nettoyés (`DELETE /v1/vms/{id}` puis `/v1/espaces/{id}`, `openstack server
+delete`).
+
 ## Zone VPS partagée (web_hebergement / projets cible `vm`)
 
 L'Espace Cloud `vps-zone` (réseau privé + load balancer Octavia public partagés, id

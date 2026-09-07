@@ -417,8 +417,22 @@ class ComputeOpenStack(ComputeSimule):
         srv = c.compute.find_server(serveur_id, ignore_missing=True)
         return str(srv.status) if srv else "absente"
 
+    # Vhost Apache public sur dev01, reverse-proxy TLS (Let's Encrypt) vers le
+    # nova-novncproxy interne du lab (VIP kolla 192.168.26.234:6080, une seule instance pour
+    # toutes les VM, différenciées par le `token` de session dans la query) — injoignable tel
+    # quel depuis Internet, cf. docs/runbooks/lab-openstack.md.
+    _CONSOLE_HOTE_PUBLIC = "console.synelia.dev01.ovh.smile.ci"
+
     def console(self, serveur_id: str) -> str:
-        return self._c().compute.create_console(serveur_id, console_type="novnc")["url"]
+        """Nova renvoie l'URL novnc de son proxy interne (adresse privée du lab, jamais
+        atteignable par un client réel hors du réseau du lab) : on ne réécrit que le
+        schéma/host/port vers le vhost public de dev01, jamais le chemin ni le `token` de
+        session émis par Nova — le jeton casse si altéré."""
+        from urllib.parse import urlsplit, urlunsplit
+
+        brute = self._c().compute.create_console(serveur_id, console_type="novnc")["url"]
+        parties = urlsplit(brute)
+        return urlunsplit(parties._replace(scheme="https", netloc=self._CONSOLE_HOTE_PUBLIC))
 
     def journaux(self, serveur_id: str, lignes: int = 20) -> list[str]:
         from synelia_openstack.erreurs import traduire
