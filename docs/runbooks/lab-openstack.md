@@ -53,6 +53,25 @@ suffit fréquemment à débloquer un nœud qui bootait proprement mais ne répon
 alors que le port Neutron est `ACTIVE` — la VM elle-même était juste figée). CAPI reconcilie toutes les
 ~10 min : laisser le temps après un hard reboot avant de conclure à un problème plus profond.
 
+### Cause racine du statut bloqué (2026-09-07) : le catalog Keystone pointait Neutron en interne
+
+Le CCM (`openstack-cloud-controller-manager` v1.33.1, DaemonSet `kube-system` du cluster workload, config dans
+le Secret `cloud-config`) s'authente bien sur le Keystone **public** (`auth-url=https://keystone.openstack-lab…`,
+joignable du réseau tenant), puis résout les URLs des autres services **depuis le catalog du token**. Or dans ce
+lab, l'entrée **public** de `network` (Neutron) pointait comme l'interne sur `http://192.168.26.234:9696` —
+seul service dont l'URL publique n'avait pas été basculée sur les vhost HTTPS `*.openstack-lab.dev01.ovh.smile.ci`.
+D'où : `dial tcp 192.168.26.234:9696: i/o timeout` dans les logs CCM → jamais de `providerID` sur les nœuds →
+Machines CAPI jamais Ready → Magnum bloqué en `CREATE_IN_PROGRESS` — alors même que le cluster sert des
+workloads réels sans problème (les nœuds sont Ready côté kubelet, l'API répond).
+
+Fix (appliqué le 2026-09-07) : `openstack endpoint set <id-endpoint-network-public> --url
+https://neutron.openstack-lab.dev01.ovh.smile.ci`, puis redémarrer le CCM pour qu'il reprenne le catalog
+(`kubectl --kubeconfig /tmp/wl.kubeconfig -n kube-system rollout restart ds/openstack-cloud-controller-manager`).
+Ancienne URL de repli : `http://192.168.26.234:9696`. Ne concerne que l'interface **public** (les services
+kolla internes utilisent l'interface internal, inchangée). Leçon générale : après publication des vhost HTTPS
+publiques, vérifier que **toutes** les entrées `public` du catalog ont suivi — `openstack endpoint list` et
+chercher les `http://192.168.26.x` restants côté public.
+
 ## Brancher le backend sur le lab
 
 `SYNELIA_FOURNISSEUR=openstack`, `SYNELIA_OS_AUTH_URL=http://192.168.26.234:5000/v3`,
