@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, status
@@ -194,7 +195,10 @@ async def obtenir_kubeconfig(
     cluster = await depot_cluster.obtenir(ctx, clusterId)
     secrets = await depot_cluster.secrets(ctx, clusterId)
     magnum_id = secrets.get("magnum_cluster_id")
-    reel = kubeconfig_reel(magnum_id) if magnum_id else None
+    # `kubeconfig_reel` construit le kubeconfig via un appel Magnum/openstacksdk synchrone
+    # (CSR signée, avec reprises et `time.sleep` en cas de 502/504 intermittents côté lab) :
+    # déchargé dans un thread pour ne pas geler la boucle asyncio pendant ces reprises.
+    reel = await asyncio.to_thread(kubeconfig_reel, magnum_id) if magnum_id else None
     if reel:
         return m.Kubeconfig(contenu=_kubeconfig_yaml(reel), expire=None, utilisateur="synelia-paas")
     contenu = (

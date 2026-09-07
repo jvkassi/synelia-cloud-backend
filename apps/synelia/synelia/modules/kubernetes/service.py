@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel.ids import nouvel_id
@@ -47,7 +49,11 @@ class ExecuteurK8sCreate(Executeur):
             from synelia.modules.espaces.service import depot as depot_espaces
 
             secrets_espace = await depot_espaces.secrets(ctx, cluster.espaceId)
-            cl = amont().creer_cluster(
+            # `amont().creer_cluster` (openstacksdk Magnum, synchrone) est déchargé via
+            # `asyncio.to_thread` : même garde que `vms.service`, sans quoi un appel amont lent
+            # gèlerait la boucle asyncio — donc l'API entière, tous tenants confondus.
+            cl = await asyncio.to_thread(
+                amont().creer_cluster,
                 nom=cluster.nom,
                 pools=entree.get("pools") or [],
                 master_count=cluster.controlPlane.nodes,
@@ -73,7 +79,7 @@ class ExecuteurK8sCreate(Executeur):
         secrets = await depot_cluster.secrets(ctx, travail.cible_id or "")
         mid = secrets.get("magnum_cluster_id")
         if mid:
-            amont().supprimer_cluster(mid)
+            await asyncio.to_thread(amont().supprimer_cluster, mid)
         await depot_cluster.definir_statut(ctx, travail.cible_id or "", "erreur")
 
 
@@ -83,7 +89,7 @@ class ExecuteurK8sDelete(Executeur):
         secrets = await depot_cluster.secrets(ctx, travail.cible_id or "")
         mid = secrets.get("magnum_cluster_id")
         if mid:
-            amont().supprimer_cluster(mid)
+            await asyncio.to_thread(amont().supprimer_cluster, mid)
         await depot_pool.supprimer_enfants(ctx, travail.cible_id or "")
         await depot_cluster.supprimer(ctx, travail.cible_id or "", logique=True)
 
