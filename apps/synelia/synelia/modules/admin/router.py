@@ -518,10 +518,13 @@ async def elever_privileges(
         "expire": iso(exp),
         "accordePar": ctx.principal.email if ctx.principal else None,
     }
+    # Le rôle de base (`eq["role"]`) n'est jamais muté ici : le rôle effectivement
+    # autorisé (RBAC comme affichage) est recalculé à chaque lecture par
+    # `role_effectif_equipe()`, qui privilégie une élévation active tant qu'elle n'a
+    # pas expiré ou été révoquée — sans ça, une élévation « temporaire » restait en
+    # fait permanente (jamais réellement révoquée par expiration ou par DELETE).
     elevations.append(elev)
     eq["elevations"] = elevations
-    eq["role"] = corps.role
-    eq["elevation"] = {"active": True, "jusqua": iso(exp), "justification": corps.motif}
     u.equipe = eq
     await ctx.session.flush()
     await journaliser(
@@ -541,8 +544,15 @@ async def revoquer_elevation(
 ) -> Response:  # noqa: N803
     u = await service.membre_equipe(ctx, membreId)
     eq = dict(u.equipe)
+    # On désactive les élévations actives (`actif=False`) sans effacer l'historique —
+    # la trace (qui, quand, motif) reste consultable via GET .../elevation, seul l'effet
+    # RBAC cesse (voir `role_effectif_equipe`, qui ignore une élévation `actif=False`).
+    elevations = [dict(e) for e in (eq.get("elevations") or [])]
+    for e in elevations:
+        if e.get("actif", True):
+            e["actif"] = False
+    eq["elevations"] = elevations
     eq.pop("elevation", None)
-    eq["elevations"] = []
     u.equipe = eq
     await ctx.session.flush()
     await journaliser(

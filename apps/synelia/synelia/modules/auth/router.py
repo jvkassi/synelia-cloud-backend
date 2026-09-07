@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import APIRouter, Body, status
 from sqlalchemy import select
 from synelia_contract import modeles as m
+from synelia_contract import rbac
 from synelia_db.modeles import Invitation, Membership, Organisation, SessionAuth, Utilisateur
 from synelia_kernel import courriel, erreurs
 from synelia_kernel.chiffrement import dechiffrer
@@ -21,6 +22,7 @@ from synelia.securite import (
     hacher_mot_de_passe,
     ip_autorisee,
     politiques_securite,
+    role_effectif_equipe,
     verifier_mot_de_passe,
     verifier_totp,
 )
@@ -46,6 +48,25 @@ async def se_connecter(ctx: CtxPublic, corps: m.DemandeConnexion) -> Any:
     org = u.org_active_id
     if org:
         o = await ctx.session.get(Organisation, org)
+        # Une organisation suspendue coupe l'accès de ses membres — l'équipe Synelia garde
+        # le sien pour pouvoir la consulter/la réactiver (jamais bloquée par sa propre action).
+        if (
+            o is not None
+            and o.statut == "suspendue"
+            and role_effectif_equipe(u.equipe or {}) not in rbac.ROLES_EQUIPE
+        ):
+            await journaliser(
+                ctx,
+                action="auth.connexion_refusee_organisation_suspendue",
+                cible_type="utilisateur",
+                cible_id=u.id,
+                cible=u.email,
+                org_id=org,
+                resultat="refus",
+            )
+            raise erreurs.interdit(
+                "Organisation suspendue : connexion impossible.", code="organisation_suspendue"
+            )
         restriction = politiques_securite(o.politiques if o else None).get("restrictionIp", {})
         if restriction.get("actif") and not ip_autorisee(
             ctx.ip, restriction.get("plages", []), "portail"

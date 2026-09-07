@@ -20,7 +20,7 @@ from joserfc.jws import JWSRegistry
 _REGISTRE = JWSRegistry(algorithms=["EdDSA"])
 from synelia_kernel import erreurs
 from synelia_kernel.config import reglages
-from synelia_kernel.dates import maintenant
+from synelia_kernel.dates import depuis_iso, maintenant
 
 _hasher = PasswordHasher()
 
@@ -128,6 +128,25 @@ def politiques_securite(brutes: dict[str, Any] | None) -> dict[str, Any]:
     p["restrictionIp"]["plages"] = p["restrictionIp"].get("plages", [])
     p["mfa"]["methodes"] = p["mfa"].get("methodes", ["totp"])
     return p
+
+
+def role_effectif_equipe(equipe: dict[str, Any] | None) -> str | None:
+    """Rôle réellement actif d'un membre de l'équipe Synelia — calculé à chaque lecture,
+    jamais stocké muté : le rôle d'une élévation temporaire tant qu'elle est active et non
+    expirée, sinon le rôle de base assigné (`equipe.role`). Utilisée pour l'autorisation
+    RBAC (`Principal.role_equipe`) comme pour l'affichage — une élévation révoquée ou
+    expirée retombe donc réellement sur le rôle de base, y compris côté permissions."""
+    if not equipe:
+        return None
+    for e in reversed(equipe.get("elevations") or []):
+        if not e.get("actif", True):
+            continue
+        expire = e.get("expire")
+        if expire and depuis_iso(expire) <= maintenant():
+            continue
+        if e.get("role"):
+            return e["role"]
+    return equipe.get("role")
 
 
 def ip_autorisee(ip: str | None, plages: list[dict[str, Any]], portee_requise: str) -> bool:

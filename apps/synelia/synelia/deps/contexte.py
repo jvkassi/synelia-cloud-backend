@@ -22,7 +22,13 @@ from synelia_kernel.dates import maintenant
 from synelia_kernel.journal import org_id_courant, utilisateur_id_courant
 
 from synelia.deps import limitation
-from synelia.securite import hacher_jeton, ip_autorisee, lire_acces, politiques_securite
+from synelia.securite import (
+    hacher_jeton,
+    ip_autorisee,
+    lire_acces,
+    politiques_securite,
+    role_effectif_equipe,
+)
 
 
 @dataclass
@@ -116,6 +122,20 @@ async def _politiques_org(session: AsyncSession, org_id: str | None) -> dict[str
     return politiques_securite(o.politiques) if o else {}
 
 
+async def _verifier_organisation_active(
+    session: AsyncSession, org_id: str | None, *, admin_plateforme: bool
+) -> None:
+    """Une organisation suspendue coupe l'accès de ses membres à *chaque* requête (pas
+    seulement à la connexion) — une session déjà ouverte avant la suspension ne doit pas
+    survivre jusqu'à son expiration naturelle. L'équipe Synelia garde l'accès (elle doit
+    pouvoir consulter/réactiver l'organisation qu'elle vient de suspendre)."""
+    if not org_id or admin_plateforme:
+        return
+    o = await session.get(Organisation, org_id)
+    if o is not None and o.statut == "suspendue":
+        raise erreurs.interdit("Organisation suspendue.", code="organisation_suspendue")
+
+
 async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principal:
     claims = lire_acces(jeton)
     sid = claims.get("sid")
@@ -147,16 +167,21 @@ async def _principal_depuis_jeton(session: AsyncSession, jeton: str) -> Principa
     )
     roles = {m.org_id: m.role for m in membres if m.scope_type == "org"}
     equipe = u.equipe or {}
+    role_equipe = role_effectif_equipe(equipe)
+    org_id = claims.get("org")
+    await _verifier_organisation_active(
+        session, org_id, admin_plateforme=bool(equipe) and role_equipe in ROLES_EQUIPE
+    )
     return Principal(
         utilisateur_id=u.id,
         email=u.email,
         nom=u.nom,
-        org_id=claims.get("org"),
+        org_id=org_id,
         role=claims.get("role") or "read_only",
         session_id=sid,
         emprunt=bool(claims.get("emprunt")),
         equipe=bool(equipe),
-        role_equipe=equipe.get("role"),
+        role_equipe=role_equipe,
         roles_par_org=roles,
     )
 
@@ -225,6 +250,7 @@ async def contexte(
             principal.org_id = x_organisation_id
             principal.role = principal.role_equipe or principal.role
         elif x_organisation_id in principal.roles_par_org:
+            await _verifier_organisation_active(session, x_organisation_id, admin_plateforme=False)
             principal.org_id = x_organisation_id
             principal.role = principal.roles_par_org[x_organisation_id]
         else:
