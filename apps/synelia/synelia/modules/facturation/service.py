@@ -8,8 +8,8 @@ from typing import Any
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from synelia_contract import modeles as m
-from synelia_db.modeles import Organisation, Ressource, Travail, Utilisateur
-from synelia_kernel import argent
+from synelia_db.modeles import Membership, Organisation, Ressource, Travail, Utilisateur
+from synelia_kernel import argent, courriel
 from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 
@@ -198,7 +198,33 @@ async def construire_facture(ctx: Contexte, org_id: str, periode: str) -> dict[s
     )
     ctx.session.add(r)
     await ctx.session.flush()
+    await _notifier_facture_emise(ctx, org_id, facture)
     return facture
+
+
+async def _notifier_facture_emise(ctx: Contexte, org_id: str, facture: dict[str, Any]) -> None:
+    """Best-effort : prévient les org_admin par courriel qu'une nouvelle facture est disponible.
+    Une panne d'envoi ne doit jamais faire échouer le cycle de facturation."""
+    destinataires = (
+        await ctx.session.execute(
+            select(Utilisateur)
+            .join(Membership, Membership.utilisateur_id == Utilisateur.id)
+            .where(Membership.org_id == org_id, Membership.role == "org_admin")
+        )
+    ).scalars()
+    for u in destinataires:
+        await courriel.envoyer(
+            u.email,
+            f"Nouvelle facture {facture['numero']} — Synelia Cloud",
+            f"Bonjour {u.nom},",
+            [
+                f"Votre facture {facture['numero']} pour la période {facture['periode']} "
+                f"est disponible, d'un montant de {facture['total']} {facture['devise']}.",
+                f"Échéance : {facture['echeance']}.",
+            ],
+            bouton_texte="Voir la facture",
+            bouton_url=f"{ctx.reglages.url_frontend}/app/facturation/factures/{facture['id']}",
+        )
 
 
 @executeur("facturation.cycle")

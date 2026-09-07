@@ -8,7 +8,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Response, status
 from synelia_contract import modeles as m
-from synelia_kernel import erreurs
+from synelia_db.modeles import Utilisateur
+from synelia_kernel import courriel, erreurs
 from synelia_kernel.dates import maintenant
 from synelia_kernel.ids import nouvel_id
 
@@ -161,6 +162,21 @@ async def payer_facture(
     await crediter(ctx, ctx.org_id, f"Paiement facture {facture.numero}", facture.total)
     facture = await depot.definir_statut(ctx, factureId, "payee")
     await journaliser(ctx, action="facture.paiement", cible_type="facture", cible_id=factureId)
+    if ctx.principal and ctx.principal.utilisateur_id:
+        u = await ctx.session.get(Utilisateur, ctx.principal.utilisateur_id)
+        if u is not None:
+            await courriel.envoyer(
+                u.email,
+                f"Paiement reçu — facture {facture.numero}",
+                f"Bonjour {u.nom},",
+                [
+                    f"Nous avons bien reçu le paiement de la facture {facture.numero}, "
+                    f"d'un montant de {facture.total} {facture.devise}.",
+                    "Vous pouvez la retrouver à tout moment dans votre espace Facturation.",
+                ],
+                bouton_texte="Voir la facture",
+                bouton_url=f"{ctx.reglages.url_frontend}/app/facturation/factures/{factureId}",
+            )
     return {"facture": facture, "urlRedirection": None, "statut": "payee"}
 
 
