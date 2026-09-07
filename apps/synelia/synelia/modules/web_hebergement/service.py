@@ -342,6 +342,57 @@ async def serveur_id(ctx: Contexte, hebergement_id: str, travail: Travail | None
     return str(sec.get("serveur_id") or hebergement_id)
 
 
+async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
+    """Relit l'existence réelle de la VM côté Nova et rend le statut sincère si elle a disparu
+    depuis le dernier relevé, avant de renvoyer la ressource.
+
+    La ligne en base peut survivre à son infra réelle : une VM d'hébergement supprimée hors bande
+    (nettoyage manuel du lab, travail tombé en échec sans compensation) laisse l'hébergement
+    s'afficher `en_ligne` dans les listes et les tableaux de bord, et c'est seulement au premier
+    usage (installation d'un site, activation Drive — cf. la garde `statut_serveur` de
+    `ExecuteurSiteInstaller`/`ExecuteurDriveActivate`) que l'écart se voit — vécu en direct sur
+    `verif-final.example.com`, resté `en_ligne` des heures après la disparition de sa VM, ~20 s de
+    SSH voué à l'échec à la clé. Même motif « reconcile-on-read » que `kubernetes` (cf.
+    `docs/GUIDE-MODULE.md`, invariant « Réconcilier à la lecture ») : sur toute lecture d'un
+    hébergement `en_ligne`, vérifie que Nova connaît encore son serveur et persiste l'écart.
+
+    Statut choisi : `suspendu`, celui que `ExecuteurHebergementCreer.compenser` pose déjà quand
+    l'amont a disparu en cours de création — c'est le seul des trois états du contrat
+    (`en_ligne|maintenance|suspendu`) qui ne promette ni un service en ligne, ni une reprise
+    imminente. `maintenance` en revanche n'est pas réconcilié : entre la création de la ligne et
+    la fin du travail `hebergement.creer`, la VM n'existe pas encore côté Nova (le secret
+    `serveur_id` non plus) — une relecture dans cette fenêtre croirait à un orphelin ; et c'est le
+    travail qui y mettra le statut final. Le statut du serveur imbriqué passe à `maintenance` :
+    `Serveur.statut` n'admet pas `suspendu`, et `maintenance` est le seul état qui ne l'appelle
+    plus « en ligne »."""
+    if h.statut != "en_ligne":
+        return h
+    try:
+        secrets = await depot.secrets(ctx, h.id)
+    except Exception:  # noqa: BLE001
+        return h
+    sid = secrets.get("serveur_id")
+    # Sans `serveur_id` (hébergement de démo, antérieur au câblage Nova), la ligne n'a jamais
+    # référencé d'infrastructure réelle identifiable : `serveur_id()` retomberait sur l'id
+    # applicatif, que Nova ne connaît pas — un contrôle là-dessus marquerait en erreur des
+    # lignes qui ne sont pas orphelines. On n'affirme « absente » qu'à propos d'un serveur
+    # qu'on sait avoir existé.
+    if not sid:
+        return h
+    if await asyncio.to_thread(amont().statut_serveur, sid) != "absente":
+        return h
+    return await depot.modifier(
+        ctx,
+        h.id,
+        {
+            "statut": "suspendu",
+            "serveur": h.serveur.model_copy(update={"statut": "maintenance"}).model_dump(
+                mode="json"
+            ),
+        },
+    )
+
+
 async def hebergement_pour_domaine(ctx: Contexte, domaine: str) -> m.Hebergement | None:
     """Résout le VPS (hébergement) déjà en service pour un domaine — un domaine n'a qu'un
     seul serveur (`domaine`, le nom de domaine réel du client, jamais `domaineProvisoire`

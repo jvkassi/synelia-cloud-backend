@@ -19,6 +19,7 @@ from synelia.modules.web_hebergement.service import (
     depot_comptes,
     depot_domaines,
     depot_taches,
+    reconcilier_statut,
 )
 from synelia.travaux import demarrer_travail
 
@@ -33,7 +34,7 @@ async def lister_hebergements(
     palier: str | None = None,
     ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True)),
 ) -> Any:  # noqa: N803, PLR0917
-    return await depot.lister(
+    resultat = await depot.lister(
         ctx,
         page,
         filtre=lambda h: (
@@ -43,6 +44,10 @@ async def lister_hebergements(
         ),
         tri_defaut="domaineProvisoire",
     )
+    # Reconcile-on-read : sans ça un hébergement resterait affiché `en_ligne` dans la liste même
+    # après la disparition de sa VM Nova (supprimée hors bande — cf. `reconcilier_statut`).
+    resultat["donnees"] = [await reconcilier_statut(ctx, h) for h in resultat["donnees"]]
+    return resultat
 
 
 @router.post(
@@ -87,7 +92,7 @@ async def creer_hebergement(
 async def obtenir_hebergement(
     hebergementId: str, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))
 ) -> Any:  # noqa: N803
-    return await depot.obtenir(ctx, hebergementId)
+    return await reconcilier_statut(ctx, await depot.obtenir(ctx, hebergementId))
 
 
 @router.patch("/{hebergementId}", response_model=m.Hebergement, response_model_exclude_none=True)

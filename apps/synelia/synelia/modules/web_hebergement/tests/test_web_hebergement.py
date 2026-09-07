@@ -288,3 +288,46 @@ async def test_bases(client):
 
     r = await client.delete(f"{DES}/web/bases/{sid}/bases/wpdb", params={"confirmation": "wpdb"})
     assert r.status_code == 204
+
+
+async def test_reconciliation_statut_hebergement_orphelin(client, monkeypatch):
+    # La ligne en base peut survivre à son infra réelle : une VM d'hébergement supprimée hors
+    # bande (nettoyage manuel du lab) laissait l'hébergement s'afficher `en_ligne`, et l'écart
+    # ne se voyait qu'au premier usage (installation de site, activation Drive) — ~20 s de SSH
+    # voué à l'échec sur `verif-final.example.com`. La lecture doit rendre le statut sincère
+    # et le **persiste**, pas seulement pour la réponse renvoyée.
+    from synelia.modules.web_hebergement import service as hebergement_service
+
+    h = await _creer_hebergement(client, "reconcile-orphan.com")
+    hid = h["id"]
+
+    # Serveur toujours connu de Nova (simulé : ACTIVE) : la lecture ne change rien.
+    r = await client.get(f"{DES}/web/hebergements/{hid}")
+    assert r.status_code == 200 and r.json()["statut"] == "en_ligne"
+    assert r.json()["serveur"]["statut"] == "en_ligne"
+
+    # Nova ne connaît plus le serveur : `suspendu` (le statut que `compenser` pose déjà quand
+    # l'amont a disparu en cours de création — ni en ligne, ni reprise imminente) ; le serveur
+    # imbriqué passe à `maintenance`, seul état sincère de son propre Literal.
+    monkeypatch.setattr(
+        hebergement_service.ComputeSimule,
+        "statut_serveur",
+        lambda self, serveur_id, identifiants=None: "absente",
+    )
+    r = await client.get(f"{DES}/web/hebergements/{hid}")
+    assert r.status_code == 200
+    assert r.json()["statut"] == "suspendu"
+    assert r.json()["serveur"]["statut"] == "maintenance"
+
+    # La ressource a bien été persistée à jour, pas seulement renvoyée une fois.
+    r = await client.get(f"{DES}/web/hebergements", params={"statut": "suspendu"})
+    assert any(x["id"] == hid for x in r.json()["donnees"])
+
+    # Une ligne déjà sincère n'est plus recontrôlée : seule une ligne `en_ligne` (susceptible
+    # d'avoir dérivé) déclenche un appel Nova.
+    def _interdit(self, serveur_id, identifiants=None):
+        raise AssertionError("Nova ne doit pas être interrogé pour une ligne déjà sincère")
+
+    monkeypatch.setattr(hebergement_service.ComputeSimule, "statut_serveur", _interdit)
+    r = await client.get(f"{DES}/web/hebergements/{hid}")
+    assert r.status_code == 200 and r.json()["statut"] == "suspendu"
