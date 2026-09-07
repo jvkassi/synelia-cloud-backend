@@ -161,11 +161,14 @@ class NetworkOpenStack(NetworkSimule):
     def regles_vip(self) -> dict[str, Any]:
         return {"id": nouvel_id()}
 
-    def _attendre_actif(self, c: Any, lb_id: str, wait: int = 60) -> Any:
+    def _attendre_actif(self, c: Any, lb_id: str, wait: int = 240) -> Any:
         """Attente bornée (Octavia déploie une paire d'amphores : bien plus long qu'une étape
-        de travail). Au-delà de `wait`, on relit juste le statut courant et on continue :
-        le load balancer reste `PENDING_CREATE`/`PENDING_UPDATE` tant qu'un réconciliateur (à
-        écrire) n'a pas confirmé `ACTIVE` côté Octavia."""
+        de travail, et parfois plus que les 60 s d'origine sur un lab chargé — constaté en
+        direct : 65 s pour un déploiement pourtant réussi). Au-delà de `wait`, on relit juste
+        le statut courant et on continue : le load balancer reste `PENDING_CREATE`/
+        `PENDING_UPDATE` tant qu'un réconciliateur (à écrire) n'a pas confirmé `ACTIVE` côté
+        Octavia. Tourne toujours via `asyncio.to_thread` côté appelant, donc un `wait` généreux
+        ne gèle jamais la boucle asyncio — seul le thread de fond patiente."""
         try:
             return c.load_balancer.wait_for_load_balancer(lb_id, wait=wait)
         except Exception:  # noqa: BLE001
@@ -190,30 +193,52 @@ class NetworkOpenStack(NetworkSimule):
         statut = lb.provisioning_status
         listener_id = None
         pool_id = None
-        if statut == "ACTIVE":
-            proto_defaut = "tcp" if layer == "l4" else "http"
-            for ln in listeners or [{"protocole": proto_defaut, "port": 80}]:
-                protocole = str(ln.get("protocole") or proto_defaut).upper()
-                port = int(ln.get("port") or 80)
-                ecouteur = c.load_balancer.create_listener(
-                    name=f"{nom}-ecouteur",
-                    loadbalancer_id=lb.id,
-                    protocol=protocole,
-                    protocol_port=port,
+        # Auparavant un simple `if statut == "ACTIVE":` : passé silencieusement, l'appelant
+        # (`ExecuteurLbCreate.etape`) ne voit ni `listener_id` ni `pool_id` dans le résultat et
+        # se contente de ne rien créer — le job entier se déclare quand même « ok » (« créé
+        # (PENDING_CREATE) » en message), le LB reste sans écouteur ni pool pour toujours (rien
+        # ne revient jamais réconcilier), et le client croit avoir un load balancer fonctionnel
+        # qui ne route jamais le moindre octet — constaté en direct sur ce lab (amphore montée
+        # en 65 s, un rien au-delà de l'ancien `wait=60`). Échouer franchement ici permet au
+        # travail de se marquer `failed` et d'être rejoué proprement, plutôt qu'un « faux succès ».
+        if statut != "ACTIVE":
+            from synelia_kernel import erreurs
+
+            raise erreurs.amont_indisponible(
+                "octavia",
+                f"Le load balancer amont n'a pas atteint l'état ACTIVE à temps "
+                f"(statut actuel : {statut}) : écouteur et pool non créés.",
+            )
+        proto_defaut = "tcp" if layer == "l4" else "http"
+        for ln in listeners or [{"protocole": proto_defaut, "port": 80}]:
+            protocole = str(ln.get("protocole") or proto_defaut).upper()
+            port = int(ln.get("port") or 80)
+            ecouteur = c.load_balancer.create_listener(
+                name=f"{nom}-ecouteur",
+                loadbalancer_id=lb.id,
+                protocol=protocole,
+                protocol_port=port,
+            )
+            listener_id = ecouteur.id
+            lb = self._attendre_actif(c, lb.id)
+            statut = lb.provisioning_status
+            if statut != "ACTIVE":
+                from synelia_kernel import erreurs
+
+                raise erreurs.amont_indisponible(
+                    "octavia",
+                    f"L'écouteur amont n'a pas atteint l'état ACTIVE à temps "
+                    f"(statut actuel : {statut}) : pool non créé.",
                 )
-                listener_id = ecouteur.id
-                lb = self._attendre_actif(c, lb.id)
-                statut = lb.provisioning_status
-                if statut == "ACTIVE":
-                    pool = c.load_balancer.create_pool(
-                        name=f"{nom}-pool",
-                        listener_id=ecouteur.id,
-                        protocol=protocole,
-                        lb_algorithm="ROUND_ROBIN",
-                    )
-                    pool_id = pool.id
-                    lb = self._attendre_actif(c, lb.id)
-                    statut = lb.provisioning_status
+            pool = c.load_balancer.create_pool(
+                name=f"{nom}-pool",
+                listener_id=ecouteur.id,
+                protocol=protocole,
+                lb_algorithm="ROUND_ROBIN",
+            )
+            pool_id = pool.id
+            lb = self._attendre_actif(c, lb.id)
+            statut = lb.provisioning_status
         resultat = {
             "id": lb.id,
             "vip": vip or lb.vip_address,
