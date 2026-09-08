@@ -112,7 +112,15 @@ async def reconcilier_statut(ctx: Contexte, vm: m.Vm) -> m.Vm:
     # qu'on sait avoir existé.
     if not sid:
         return vm
-    statut_amont = await asyncio.to_thread(amont().statut_serveur, sid)
+    try:
+        statut_amont = await asyncio.to_thread(amont().statut_serveur, sid)
+    except Exception:  # noqa: BLE001
+        # Une panne/latence Keystone-Nova transitoire (`ServiceUnavailable`…) ne doit pas faire
+        # échouer toute une liste de VMs pour un incident ponctuel d'amont — même esprit que le
+        # `except` juste au-dessus sur `depot.secrets` : on renvoie la ligne telle quelle plutôt
+        # que de laisser l'exception remonter nue (elle traverserait alors `CORSMiddleware` sans
+        # en-têtes CORS, un client web la verrait comme un blocage CORS plutôt qu'un vrai 5xx).
+        return vm
     if statut_amont.upper() in ("ABSENTE", "DELETED"):
         # `ABSENTE` : Nova ignore le serveur (purgé) ; `DELETED` : ligne soft-delete encore
         # visible de Nova (purge asynchrone) — dans les deux cas l'objet n'existe plus
