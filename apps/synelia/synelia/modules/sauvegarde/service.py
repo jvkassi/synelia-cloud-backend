@@ -153,6 +153,29 @@ class ExecuteurSauvegarde(Executeur):
         await depot.modifier(ctx, plan.id, {"dernierResultat": "ok"})
 
 
+async def supprimer_snapshots_reels(ctx: Contexte, point_id: str) -> None:
+    """Purge les snapshots Cinder réels d'un point de restauration avant que sa ligne ne
+    disparaisse — sans quoi `DELETE /sauvegarde/points/{id}` ne fait qu'un soft-delete côté base
+    et laisse les instantanés réels orphelins sur le lab (fuite de stockage silencieuse, jamais
+    facturée ni nettoyée). Best-effort : un volume déjà supprimé ou un snapshot déjà absent ne
+    doit pas empêcher la suppression du point côté application."""
+    secrets = await points.secrets(ctx, point_id)
+    snapshot_ids = secrets.get("snapshot_ids") or []
+    volume_ids = secrets.get("volume_ids") or []
+    if not snapshot_ids or not volume_ids:
+        return
+    try:
+        vol = await depot_volume.obtenir(ctx, volume_ids[0])
+    except Exception:  # noqa: BLE001
+        return
+    identifiants = await identifiants_espace(ctx, vol.espaceId)
+    for sid in snapshot_ids:
+        try:
+            await asyncio.to_thread(amont_cinder().supprimer_snapshot, sid, identifiants=identifiants)
+        except Exception:  # noqa: BLE001
+            continue
+
+
 @executeur("backup.verify")
 class ExecuteurVerification(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:

@@ -177,6 +177,7 @@ async def supprimer_point_restauration(
 ) -> Response:  # noqa: N803
     point = await points.obtenir(ctx, pointId)
     exiger_confirmation(point.resourceNom, confirmation)
+    await service.supprimer_snapshots_reels(ctx, pointId)
     await points.supprimer(ctx, pointId, logique=True)
     await journaliser(
         ctx,
