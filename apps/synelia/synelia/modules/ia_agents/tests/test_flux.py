@@ -205,3 +205,58 @@ async def test_flux_reprise_sans_attente_409(client):
         json={"decision": "approuve"},
     )
     assert r.status_code == 409, r.text
+
+
+async def test_suppression_flux_pendant_pause_termine_le_travail(client):
+    """Bug réel (démo) : un travail en pause `humain` dont le flux est supprimé restait `running`
+    pour toujours — plus aucun `POST .../reprendre` possible (flux 404), plus aucune autre voie
+    ne le faisait terminer. La suppression doit désormais faire basculer ce travail vers un état
+    terminal (`rolled_back`) avec un motif explicite, sans jamais toucher un flux qui existe
+    encore et dont la pause est légitime."""
+    flux = {
+        "nom": "Flux de test — supprimé pendant la pause",
+        "declencheur": {"type": "message", "libelle": "Message entrant", "detail": "test"},
+        "etapes": [
+            _etape("e-decl", "declencheur"),
+            _etape("e-humain", "humain", detail="Confirmez-vous l'envoi ?"),
+            _etape("e-rep", "reponse", detail="Décision reçue : {{derniereSortie}}."),
+        ],
+    }
+    r = await client.post("/v1/ia/flux", json=flux)
+    assert r.status_code == 201, r.text
+    flux_id = r.json()["id"]
+
+    r = await client.post(f"/v1/ia/flux/{flux_id}/executer", json={"entree": "test"})
+    assert r.status_code == 202, r.text
+    corps = r.json()
+    assert corps["statut"] == "running", corps
+    travail_id = corps["id"]
+
+    r = await client.delete(f"/v1/ia/flux/{flux_id}", params={"confirmation": flux["nom"]})
+    assert r.status_code == 204, r.text
+
+    # Le flux a bien disparu : reprendre l'exécution n'est plus possible.
+    r = await client.get(f"/v1/ia/flux/{flux_id}")
+    assert r.status_code == 404, r.text
+
+    # ... mais le travail, lui, n'est plus un zombie `running` — il est terminé, motif explicite.
+    r = await client.get(f"/v1/travaux/{travail_id}")
+    assert r.status_code == 200, r.text
+    corps = r.json()
+    assert corps["statut"] == "rolled_back", corps
+    assert "supprimé" in corps["erreur"]["message"].lower()
+
+
+async def test_suppression_flux_sans_travail_en_cours_ne_touche_rien(client):
+    """Cas nominal : un flux sans exécution en vol se supprime sans effet de bord sur `travaux`."""
+    flux = {
+        "nom": "Flux de test — sans exécution",
+        "declencheur": {"type": "message", "libelle": "Message entrant", "detail": "test"},
+        "etapes": [_etape("e-decl", "declencheur"), _etape("e-rep", "reponse", detail="ok")],
+    }
+    r = await client.post("/v1/ia/flux", json=flux)
+    assert r.status_code == 201, r.text
+    flux_id = r.json()["id"]
+
+    r = await client.delete(f"/v1/ia/flux/{flux_id}", params={"confirmation": flux["nom"]})
+    assert r.status_code == 204, r.text

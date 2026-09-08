@@ -269,6 +269,25 @@ async def supprimer_flux_orchestration(
     await journaliser(
         ctx, action="flux_ia.suppression", cible_type="flux_ia", cible_id=fluxId, cible=flux_.nom
     )
+    # Sinon un travail encore `queued`/`running` (notamment une pause `humain` en attente
+    # d'approbation) référençant ce flux resterait un zombie permanent : le flux vient de
+    # disparaître, `POST .../reprendre` n'a plus rien à relire. Même transaction que la
+    # suppression ci-dessus.
+    travaux_annules = await flux.annuler_executions_en_cours(
+        ctx,
+        fluxId,
+        motif=f"Le flux « {flux_.nom} » a été supprimé pendant l'exécution de ce travail "
+        "(éventuellement en attente d'approbation) : il ne peut plus aboutir.",
+    )
+    for travail in travaux_annules:
+        await journaliser(
+            ctx,
+            action="travail.annulation",
+            cible_type="travail",
+            cible_id=travail.id,
+            cible=travail.label,
+            details={"cause": "flux_ia.suppression", "fluxId": fluxId},
+        )
     return Response(status_code=204)
 
 

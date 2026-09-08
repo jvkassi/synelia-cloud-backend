@@ -53,6 +53,7 @@ import time
 from typing import Any
 
 import httpx
+from sqlalchemy import select
 from synelia_contract import modeles as m
 from synelia_db.modeles import Travail
 from synelia_kernel import erreurs
@@ -64,6 +65,7 @@ from synelia.modules.ia_agents import service
 from synelia.modules.ia_agents.service import depot_agents
 from synelia.securite import emettre_acces
 from synelia.travaux import Executeur, PauseHumaine, demarrer_travail, executeur
+from synelia.travaux import moteur
 
 log = journal("ia_agents.flux")
 
@@ -503,6 +505,29 @@ async def demarrer_execution(
         etapes=taches,
         contexte={"variables": _preparer_variables(flux, entree, overrides), "resultats": {}, "messages": []},
     )
+
+
+async def annuler_executions_en_cours(
+    ctx: Contexte, flux_id: str, *, motif: str
+) -> list[Travail]:
+    """Suppression d'un flux (`DELETE /ia/flux/{id}`) : tout travail encore `queued`/`running`
+    qui le référence — notamment une exécution en pause `humain` (`PauseHumaine`, voir le
+    module) — resterait sinon un zombie éternel : le flux 404 désormais, `POST
+    .../reprendre` n'a plus de flux à relire (`depot_flux.obtenir` lèverait), et rien d'autre
+    ne repasse jamais sur ce travail pour le faire terminer. On le bascule ici vers `rolled_back`
+    (même convention que `moteur.annuler`, l'annulation utilisateur d'un travail) avec un motif
+    explicite, dans la même transaction que la suppression du flux — pas un correctif dans
+    l'IHM. Un flux qui existe encore et dont un travail est réellement en attente d'approbation
+    n'est jamais concerné : cette fonction n'est appelée qu'après confirmation de suppression."""
+    q = select(Travail).where(
+        Travail.type == TYPE_TRAVAIL,
+        Travail.cible_id == flux_id,
+        Travail.statut.in_(("queued", "running")),
+    )
+    travaux = list((await ctx.session.execute(q)).scalars())
+    for travail in travaux:
+        await moteur.annuler(ctx, travail, motif=motif)
+    return travaux
 
 
 @executeur(TYPE_TRAVAIL)

@@ -385,14 +385,18 @@ async def reprendre_apres_pause(ctx: Contexte, travail: Travail, depuis: int) ->
     return travail
 
 
-async def annuler(ctx: Contexte, travail: Travail) -> Travail:
+async def annuler(ctx: Contexte, travail: Travail, *, motif: str | None = None) -> Travail:
+    """`motif` : raison métier précise à afficher (ex. suppression de la ressource référencée
+    pendant que ce travail était en cours/en pause) — par défaut le message générique
+    d'annulation utilisateur, inchangé pour l'appel existant (`POST /travaux/{id}/annulation`)."""
     if travail.statut in {"done", "rolled_back"}:
         raise erreurs.conflit("Ce travail est déjà terminé.", code="travail_termine")
+    message_tache = motif or "Annulé à la demande de l'utilisateur."
     taches = [dict(t) for t in travail.taches]
     for t in taches:
         if t["statut"] in {"pending", "running"}:
             t["statut"] = "failed"
-            t["message"] = "Annulé à la demande de l'utilisateur."
+            t["message"] = message_tache
     travail.taches = copy.deepcopy(taches)
     ex = executeur_pour(travail.type)
     if ex.compensable:
@@ -403,7 +407,7 @@ async def annuler(ctx: Contexte, travail: Travail) -> Travail:
             log.error("travail.compensation_echouee", travail=travail.id, erreur=str(exc))
     travail.statut = "rolled_back"
     travail.erreur = {
-        "message": "Travail annulé.",
+        "message": motif or "Travail annulé.",
         "correlationId": ctx.correlation_id,
         "suggestion": "Relancez l'opération depuis l'écran d'origine si nécessaire.",
     }
