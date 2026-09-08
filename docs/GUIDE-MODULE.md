@@ -19,6 +19,7 @@ Lire en entier avant de coder. Le module de référence est `apps/synelia/syneli
   `remplacer`, `supprimer(logique=True)`, `definir_statut`, `exiger_nom_libre` (409 `nom_deja_pris`), `secrets/definir_secrets`
   (chiffrés). `plateforme=True` pour les ressources sans organisation (catalogue, backends, offres). Le `type` est une chaîne
   stable en snake_case (`vm`, `volume`, `load_balancer`…) ; deux modules qui partagent une ressource utilisent le même type.
+  Schéma : `create_all` fait foi, jamais d'ALTER automatique — ADR 0003 (`docs/ADR/0003-schema-create-all-sans-migrations.md`).
 - Travaux (202) : `from synelia.travaux import demarrer_travail, executeur, Executeur` ;
   `return await demarrer_travail(ctx, "vm.create", vm.nom, cible_type="vm", cible_id=vm.id, entree=corps.model_dump(mode="json"))`.
   Les 41 types du catalogue sont dans `synelia_contract.workflows.catalogue()` ; sinon passer `etapes=[{"nom":..., "dureeS":...}]`.
@@ -40,7 +41,9 @@ Lire en entier avant de coder. Le module de référence est `apps/synelia/syneli
 - Erreurs : `from synelia_kernel import erreurs` — `introuvable`, `conflit`, `nom_deja_pris`, `validation(message, champs)`,
   `quota_depasse`, `non_porte` (422 « l'amont ne le porte pas »), `amont_indisponible(integration)` (424), `interdit`.
 - Audit : `from synelia.audit import journaliser` — `await journaliser(ctx, action="vm.creation", cible_type="vm", cible_id=..., cible=nom)`
-  sur chaque mutation.
+  sur chaque mutation. Le journal est *tamper-evident*, pas *tamper-proof* : append-only imposé par les droits
+  Postgres (`synelia_app` n'a que `SELECT, INSERT` sur `audit`), chaîne vérifiable par `/audit/integrite`, tête de
+  chaîne ancrée chaque jour hors du rôle applicatif ; un superutilisateur Postgres reste hors du modèle de menace.
 - Destructif : `exiger_confirmation(nom_attendu, confirmation)` **avant** toute action (paramètre de requête `confirmation`).
 - Démo : `from synelia.demo import peupleur` → `@peupleur async def demo(session, org, admin)` crée 2-3 ressources réalistes
   pour l'organisation de démo (utiliser `Depot` avec un `Contexte` minimal n'est pas possible : insérer des `Ressource`

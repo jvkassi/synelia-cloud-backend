@@ -67,7 +67,10 @@ async def verifier_integrite_audit(
 ) -> Any:
     """Rejoue la chaîne de hachage de l'organisation active et confirme qu'elle est intacte, ou
     signale la première ligne où l'empreinte enregistrée ne correspond plus à ce qui est
-    recalculé à partir des champs eux-mêmes — insertion, modification ou suppression."""
+    recalculé à partir des champs eux-mêmes — insertion, modification ou suppression.
+    *Tamper-evident*, pas *tamper-proof* : détecte toute altération faite sans le droit de
+    réécrire la chaîne (le rôle applicatif n'a que `SELECT, INSERT` sur `audit`), pas une
+    altération faite avec le superutilisateur Postgres — voir `synelia.audit.verifier_chaine`."""
     return await verifier_chaine(ctx)
 
 

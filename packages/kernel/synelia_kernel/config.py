@@ -68,6 +68,11 @@ class Reglages(BaseSettings):
     vps_zone_espace_id: str | None = None
     vps_zone_org_id: str | None = None
 
+    # Audit : ancrage quotidien hors-rôle (SYNELIA_AUDIT_ANCRAGE_EMAIL), cf. `synelia.audit.ancrer`
+    # et §3 de docs/PLAN-ARCHITECTURE-SUITE.md. Optionnelle : sans elle, seul le journal
+    # structuré (`audit.ancrage`, logs Docker) sert d'ancrage — pas d'adresse inventée ici.
+    audit_ancrage_email: str | None = None
+
     # Amorçage
     seed_admin_email: str | None = "admin@synelia.cloud"
     seed_admin_mot_de_passe: str | None = "Synelia!2026"
