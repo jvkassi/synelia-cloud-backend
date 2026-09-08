@@ -23,7 +23,10 @@ services:
     command: ["relais-smtp"]
     environment:
       SYNELIA_ENV: production
-      SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia:${POSTGRES_PASSWORD}@postgres:5432/synelia
+      # Même rôle applicatif restreint que le conteneur `api` (docker-compose.dev01.yml) — ce
+      # relais lit/écrit aussi `ressources`/`audit` filtrés par org_id (RLS), voir
+      # packages/db/synelia_db/rls.py. Ne jamais y connecter le superutilisateur `synelia`.
+      SYNELIA_DATABASE_URL: postgresql+asyncpg://synelia_app:${SYNELIA_APP_DB_PASSWORD:?}@postgres:5432/synelia
       SYNELIA_SECRET: ${SYNELIA_SECRET:?}
       SYNELIA_SMTP_RELAIS_PORT: "587"
       # Amont : Zimbra (partagé, toutes orgs), atteint ici par nom de conteneur (même réseau) —

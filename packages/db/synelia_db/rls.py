@@ -1,6 +1,11 @@
 """Row-Level Security : `SET LOCAL app.org_id` posé à l'ouverture de chaque transaction Postgres.
 
-Le filtre applicatif par `org_id` existe aussi ; la RLS est la ceinture en plus des bretelles.
+Le filtre applicatif par `org_id` existe aussi ; la RLS est la ceinture en plus des bretelles —
+mais seulement si le rôle Postgres qui exécute les requêtes n'est ni superutilisateur ni
+BYPASSRLS, et que `FORCE ROW LEVEL SECURITY` est posé (sinon le propriétaire de la table
+contourne aussi sa propre politique). Voir `docker-compose.dev01.yml` : le conteneur `api` se
+connecte avec un rôle applicatif dédié (`synelia_app`, NOSUPERUSER NOBYPASSRLS), jamais avec le
+superutilisateur `synelia` réservé à l'accès hors-ligne.
 Sur SQLite (dev, Vercel sans Postgres) seule la couche applicative s'applique."""
 
 from __future__ import annotations
@@ -36,6 +41,11 @@ def sql_politiques() -> list[str]:
     for table in TABLES_TENANT:
         ddl += [
             f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY",
+            # Sans FORCE, le propriétaire de la table (le rôle applicatif lui-même) contourne
+            # la RLS comme le ferait un superutilisateur — FORCE l'applique aussi à ce rôle,
+            # seul un filet de sécurité contre un bug applicatif, pas contre le rôle admin
+            # hors-ligne (superutilisateur `synelia`, jamais utilisé par l'appli en marche).
+            f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY",
             f"DROP POLICY IF EXISTS {table}_org ON {table}",
             f"CREATE POLICY {table}_org ON {table} USING ("
             f"  org_id IS NULL OR current_setting('app.org_id', true) = '' "
