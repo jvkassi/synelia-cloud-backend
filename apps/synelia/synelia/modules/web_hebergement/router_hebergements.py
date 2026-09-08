@@ -19,6 +19,7 @@ from synelia.modules.web_hebergement.service import (
     depot_comptes,
     depot_domaines,
     depot_taches,
+    mesurer_espace_utilise,
     reconcilier_statut,
 )
 from synelia.travaux import demarrer_travail
@@ -114,7 +115,11 @@ async def creer_hebergement(
 async def obtenir_hebergement(
     hebergementId: str, ctx: Contexte = Depends(exige("org.dashboard.view", lecture=True))
 ) -> Any:  # noqa: N803
-    return await reconcilier_statut(ctx, await depot.obtenir(ctx, hebergementId))
+    h = await reconcilier_statut(ctx, await depot.obtenir(ctx, hebergementId))
+    # Mesure réelle de l'espace disque uniquement sur la fiche détail : un SSH par ligne sur
+    # la liste serait trop coûteux pour un chiffre qui n'a pas besoin d'être à jour à chaque
+    # requête (cf. `mesurer_espace_utilise`).
+    return await mesurer_espace_utilise(ctx, h)
 
 
 @router.patch("/{hebergementId}", response_model=m.Hebergement, response_model_exclude_none=True)

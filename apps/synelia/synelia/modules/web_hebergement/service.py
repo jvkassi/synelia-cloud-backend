@@ -396,6 +396,38 @@ async def reconcilier_statut(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
     return h
 
 
+async def mesurer_espace_utilise(ctx: Contexte, h: m.Hebergement) -> m.Hebergement:
+    """Mesure réelle de l'espace disque occupé par les sites de cet hébergement, par SSH (`du
+    -sb`, même transport que `ExecuteurSiteInstaller` — `amont_ssh()`/`zone_vps_secrets`),
+    posée à la lecture (best-effort, même motif reconcile-on-read que `reconcilier_statut` :
+    pas besoin de tourner à chaque requête, seulement de ne plus mentir indéfiniment).
+    `espaceUtiliseGo` restait sinon figé à `0.0` depuis `construire_hebergement`, quel que soit
+    le contenu réel déployé dessus. No-op en simulé (`SshSimule.executer` renvoie une chaîne
+    vide) et si aucune IP de gestion SSH n'est disponible (VM antérieure au câblage SSH/IP,
+    hébergement pas encore en ligne)."""
+    if not isinstance(amont_ssh(), SshReel):
+        return h
+    zone = await zone_vps_secrets(ctx)
+    cle_privee = zone.get("ssh_prive")
+    ip = await ip_gestion_hebergement(ctx, h)
+    if not cle_privee or not ip:
+        return h
+    try:
+        sortie = await asyncio.to_thread(
+            amont_ssh().executer,
+            ip,
+            cle_privee,
+            f"du -sb {_RACINE_DOCKER}/sites 2>/dev/null | awk '{{print $1}}'",
+        )
+        octets = int((sortie or "0").split()[0])
+    except Exception:  # noqa: BLE001
+        return h
+    go = round(octets / 1_000_000_000, 2)
+    if go == h.espaceUtiliseGo:
+        return h
+    return await depot.modifier(ctx, h.id, {"espaceUtiliseGo": go})
+
+
 # Statuts contrôlés à la lecture : `en_ligne` (peut avoir dérivé d'un serveur disparu) et
 # `suspendu` (lignes déjà marquées — réconciliation précédente ou compensation d'un travail
 # tombé — que la décision propriétaire fait maintenant supprimer une fois l'orphelin reconfirmé).
