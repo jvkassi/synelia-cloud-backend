@@ -290,7 +290,3 @@ async def contexte(
 
 Ctx = Annotated[Contexte, Depends(contexte)]
 CtxPublic = Annotated[Contexte, Depends(contexte_public)]
-
-
-def dict_sans_none(d: dict[str, Any]) -> dict[str, Any]:
-    return {k: v for k, v in d.items() if v is not None}

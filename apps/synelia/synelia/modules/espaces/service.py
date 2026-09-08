@@ -282,7 +282,3 @@ async def _provisionner_zone_vps(session: AsyncSession, espace_id: str, org_id: 
     # comblé automatiquement ; un vrai nouvel environnement devrait encore créer ce LB à la
     # main et poser `lb_id` via `depot_plateforme.definir_secrets` avant le premier hébergement.
     log.warning("zone_vps.lb_id_non_provisionne", espace_id=espace_id)
-
-
-def consommation_vide(periode: str) -> dict[str, Any]:
-    return {"periode": periode, "jours": [], "total": 0, "prevision": 0, "totalMoisPrecedent": 0}
