@@ -99,7 +99,24 @@ services:
       # `demarrer_travail` met la ligne `queued` et c'est `worker` (ci-dessous) qui la réclame —
       # plus de `create_task` perdu à chaque redéploiement de l'image `api`.
       SYNELIA_TRAVAUX_WORKER: "true"
+      # Étape 1.7 du plan, après (c) stabilisé sur au moins deux cycles réels : 2, pas plus —
+      # 2×15 + 15 (worker) + 15 (relais) = 60 connexions Postgres potentielles sur 97
+      # disponibles. Valeur résiduelle : un `to_thread` oublié dans un gestionnaire de requête
+      # ne gèle plus que la moitié de la capacité ; le superviseur uvicorn relance un worker
+      # mort sans redémarrage de conteneur.
+      SYNELIA_API_WORKERS: "2"
     ports: ["127.0.0.1:4010:4000"]
+    healthcheck:
+      # L'image purge `curl` (Dockerfile) : un client HTTP en Python fait l'affaire.
+      test:
+        [
+          "CMD",
+          "python3",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:4000/healthz', timeout=3).status == 200 else 1)",
+        ]
+      interval: 10s
+      retries: 5
     restart: unless-stopped
 
   # Worker des travaux (moteur Local, `synelia.travaux.local` — pas de Temporal sur dev01) :
