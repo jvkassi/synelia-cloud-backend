@@ -9,6 +9,7 @@ intégrations optionnelles de ce dépôt (`SYNELIA_LITELLM_URL`, `SYNELIA_VICTOR
 from __future__ import annotations
 
 import os
+import socket
 
 from opentelemetry import metrics
 
@@ -42,7 +43,15 @@ def configurer(app: object, *, version: str, env: str) -> None:
     from opentelemetry.sdk.resources import Resource
 
     ressource = Resource.create(
-        {"service.name": "synelia-api", "service.version": version, "deployment.environment": env}
+        {
+            "service.name": "synelia-api",
+            "service.version": version,
+            "deployment.environment": env,
+            # Avec `SYNELIA_API_WORKERS=N` (étape 1.7 de docs/PLAN-ARCHITECTURE-SUITE.md),
+            # plusieurs processus uvicorn partagent le même `service.name` : sans cet
+            # identifiant, VictoriaMetrics reçoit des compteurs entrelacés entre workers.
+            "service.instance.id": f"{socket.gethostname()}:{os.getpid()}",
+        }
     )
     lecteur = PeriodicExportingMetricReader(
         OTLPMetricExporter(endpoint=endpoint, insecure=True), export_interval_millis=15000

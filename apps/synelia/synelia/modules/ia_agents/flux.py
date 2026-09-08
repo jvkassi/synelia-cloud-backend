@@ -62,6 +62,7 @@ from synelia.depot import Depot
 from synelia.deps.contexte import Contexte
 from synelia.modules.ia_agents import service
 from synelia.modules.ia_agents.service import depot_agents
+from synelia.securite import emettre_acces
 from synelia.travaux import Executeur, PauseHumaine, demarrer_travail, executeur
 
 log = journal("ia_agents.flux")
@@ -295,6 +296,19 @@ async def _executer_connaissance(ctx: Contexte, etat: _Etat, etape: m.EtapeFlux)
     port = os.environ.get("PORT", "4000")
     url = f"http://127.0.0.1:{port}/v1/ia/connaissances/{etape.connaissanceId}/rechercher"
     jeton = ctx.entete("Authorization")
+    if not jeton and ctx.principal and ctx.principal.utilisateur_id:
+        # Hors requête HTTP (`synelia worker`, `travaux/local.py`) : la fausse requête que le
+        # worker construit (`worker_ctx.contexte_travail`) n'a aucun en-tête à transmettre à cet
+        # appel loopback interne — on émet un jeton d'accès de courte durée pour le même
+        # principal que celui qui a demandé ce flux, uniquement pour cet appel.
+        jeton = "Bearer " + emettre_acces(
+            {
+                "sub": ctx.principal.utilisateur_id,
+                "org": ctx.principal.org_id,
+                "role": ctx.principal.role,
+            },
+            duree_s=60,
+        )
     headers = {"Authorization": jeton} if jeton else {}
     try:
         async with httpx.AsyncClient(timeout=30) as client:

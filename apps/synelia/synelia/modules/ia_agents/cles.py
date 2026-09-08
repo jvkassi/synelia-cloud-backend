@@ -2,9 +2,10 @@
 résidence des données — un contrat réellement appliqué, pas un affichage.
 
 Débit (`debitMaxParMinute`) : seau à jetons en mémoire, une entrée par clé — même mécanique que
-`synelia.deps.limitation`. ponytail : plafond process-local (une seule instance API sur dev01
-aujourd'hui) ; `SYNELIA_VALKEY_URL` existe déjà dans la configuration pour un seau partagé le
-jour où l'API tourne en plusieurs instances.
+`synelia.deps.limitation`. ponytail : plafond process-local ; avec `SYNELIA_API_WORKERS=N`
+(étape 1.7 de docs/PLAN-ARCHITECTURE-SUITE.md), chaque worker uvicorn a son propre seau, donc
+la limite effective est ×N. `SYNELIA_VALKEY_URL` existe déjà dans la configuration pour un seau
+partagé le jour où ça compte réellement.
 
 Quota (`quotaJetonsMois`) et budget (`budgetMensuel`) : compteurs réels, incrémentés après
 chaque appel réel, remis à zéro au changement de mois (comparaison de période stockée dans les
