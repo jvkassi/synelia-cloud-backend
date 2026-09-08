@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from synelia_kernel.ids import nouvel_id
@@ -191,6 +192,20 @@ class ComputeSimule:
         return None
 
 
+# Nova refuse (409) une action `stop`/`start` quand le serveur est déjà dans l'état visé
+# (`InstanceInvalidState`, message « Cannot '<verbe>' instance ... while it is in vm_state
+# <etat> ») — cf. `_deja_dans_etat_cible`. Pas d'entrée pour `redemarrage` : un reboot n'a pas
+# d'« état déjà atteint » analogue (un 409 dessus signale un vrai conflit, ex. une autre
+# opération en cours), donc rien à absorber.
+# Deux vocabulaires distincts côté Nova pour le même état : `vm_state` (interne, utilisé dans le
+# texte du message d'erreur — « stopped »/« active ») et `status` (façade API, exposé par
+# `Server.status` — « SHUTOFF »/« ACTIVE », le même que celui déjà attendu par `wait_for_server`
+# plus bas). Les deux tables ci-dessous font chacune la correspondance dans son vocabulaire ;
+# la confirmation en direct (`get_server(...).status`) doit être comparée à la bonne.
+_VM_STATE_MESSAGE_CIBLE = {"arret": "stopped", "demarrage": "active"}
+_STATUT_API_CIBLE = {"arret": "SHUTOFF", "demarrage": "ACTIVE"}
+
+
 class ComputeOpenStack(ComputeSimule):
     def _c(self):  # type: ignore[no-untyped-def]
         from synelia_openstack.fabrique import connexion
@@ -316,11 +331,30 @@ class ComputeOpenStack(ComputeSimule):
             c.compute.create_keypair(name=nom, public_key=cle_publique)
         return nom
 
+    def _deja_dans_etat_cible(self, exc: Exception, action: str, c, serveur_id: str) -> bool:  # type: ignore[no-untyped-def]
+        """Un `stop`/`start` peut échouer 409 alors que le serveur est déjà dans l'état visé —
+        dérive DB/Nova (coupure lab avec redémarrage des invités, arrêt fait hors plateforme,
+        travail antérieur retombé sans mettre à jour le statut…) constatée en direct (`vm.power.
+        stop` sur une VM déjà `SHUTOFF` : 409 `Cannot 'stop' instance ... while it is in
+        vm_state stopped`). Ce n'est un succès de fait que si (a) c'est bien ce conflit précis
+        (message Nova `InstanceInvalidState` mentionnant l'état visé par CETTE action, pas un
+        409 générique — une vraie collision, ex. une autre opération en cours, garde un message
+        différent et continue de remonter), et (b) une relecture Nova fraîche confirme l'état
+        réel — on ne se fie pas qu'au texte du message, dont le format peut varier selon la
+        version Nova."""
+        vm_state_cible = _VM_STATE_MESSAGE_CIBLE.get(action)
+        if vm_state_cible is None or type(exc).__name__ != "ConflictException":
+            return False
+        if not re.search(rf"while it is in vm_state {vm_state_cible}\b", str(exc), re.IGNORECASE):
+            return False
+        srv = c.compute.get_server(serveur_id)
+        return str(srv.status).upper() == _STATUT_API_CIBLE[action]
+
     def action(self, serveur_id: str, action: str) -> None:
         from synelia_openstack.erreurs import traduire
 
+        c = self._c()
         try:
-            c = self._c()
             if action == "arret":
                 c.compute.stop_server(serveur_id)
                 c.compute.wait_for_server(
@@ -344,6 +378,10 @@ class ComputeOpenStack(ComputeSimule):
 
             if isinstance(exc, _e.AppError):
                 raise
+            if self._deja_dans_etat_cible(exc, action, c, serveur_id):
+                # Déjà dans l'état visé côté Nova : succès de fait, pas un échec à remonter
+                # (même motif que `supprimer_serveur` — `NotFound` = déjà supprimé = succès).
+                return
             raise traduire(exc, "Machine virtuelle") from None
 
     def supprimer_serveur(self, serveur_id: str) -> None:

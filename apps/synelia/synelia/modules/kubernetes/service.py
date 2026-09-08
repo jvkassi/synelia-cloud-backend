@@ -37,7 +37,18 @@ def _mapper_statut_magnum(statut_amont: str) -> str | None:
     """Traduit un statut Magnum réel (`CREATE_COMPLETE`, `CREATE_FAILED`,
     `UPDATE_IN_PROGRESS`…) vers le `statut` applicatif du contrat (`running`/`degraded`/
     `provisioning`/`updating`, cf. `ClusterK8s.statut`) — `None` si le statut amont ne
-    correspond à aucun état stable connu, auquel cas on ne touche pas la ressource."""
+    correspond à aucun état stable connu, auquel cas on ne touche pas la ressource.
+
+    `DELETE_COMPLETE` (renvoyé par `MagnumOpenStack.cluster_statut()` quand Magnum ne connaît
+    plus du tout le cluster — jamais créé pour de vrai, ou supprimé hors bande) vaut `degraded` :
+    trouvé en direct sur une ligne `paas-shared-cluster2` restée `provisioning` 3 jours, dont le
+    `magnum_cluster_id` en secret ne correspondait à aucun cluster Magnum réel (create jamais
+    abouti, avant le fix CAPI du 2026-09-07) — avant ce correctif, `DELETE_COMPLETE` ne
+    correspondait à aucune branche ci-dessus et `reconcilier_statut` ne touchait donc jamais la
+    ressource : elle restait `provisioning` indéfiniment malgré un appel Magnum réel à chaque
+    lecture. `ClusterK8s.statut` n'a pas de valeur `erreur`/`absente` (seulement
+    `running|degraded|provisioning|updating`, cf. l'invariant `docs/GUIDE-MODULE.md`) —
+    `degraded` est l'état sincère le plus proche, même choix que `ExecuteurK8sCreate.compenser`."""
     s = statut_amont.upper()
     if s.endswith("FAILED"):
         return "degraded"
@@ -47,6 +58,8 @@ def _mapper_statut_magnum(statut_amont: str) -> str | None:
         return "provisioning"
     if s.endswith("IN_PROGRESS"):
         return "updating"
+    if s == "DELETE_COMPLETE":
+        return "degraded"
     return None
 
 

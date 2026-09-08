@@ -132,7 +132,10 @@ def test_mapper_statut_magnum():
     assert _mapper_statut_magnum("UPDATE_IN_PROGRESS") == "updating"
     assert _mapper_statut_magnum("UPDATE_COMPLETE") == "running"
     assert _mapper_statut_magnum("UPDATE_FAILED") == "degraded"
-    assert _mapper_statut_magnum("DELETE_COMPLETE") is None
+    # `DELETE_COMPLETE` = Magnum ne connaît plus du tout le cluster (jamais créé pour de vrai,
+    # ou supprimé hors bande) : `degraded` est l'état sincère, pas `None` (qui laissait la
+    # ressource figée `provisioning` indéfiniment — bug réel trouvé sur `paas-shared-cluster2`).
+    assert _mapper_statut_magnum("DELETE_COMPLETE") == "degraded"
 
 
 async def test_reconciliation_statut_cluster(client, monkeypatch):
@@ -184,6 +187,53 @@ async def test_reconciliation_statut_cluster(client, monkeypatch):
 
     # La ressource a bien été persistée à jour, pas seulement renvoyée une fois.
     r = await client.get("/v1/kubernetes", params={"statut": "running"})
+    assert any(c["id"] == cid for c in r.json()["donnees"])
+
+
+async def test_reconciliation_cluster_jamais_abouti_cote_amont(client, monkeypatch):
+    # Bug réel trouvé en direct (démo 2026-09-08) : `paas-shared-cluster2` était resté
+    # `provisioning` 3 jours, deux `GET` consécutifs renvoyant le même statut figé en ~60 ms —
+    # son `magnum_cluster_id` (secret) ne correspondait à aucun cluster Magnum réel (create
+    # jamais abouti, avant le fix CAPI du 2026-09-07). `MagnumOpenStack.cluster_statut()` rend
+    # alors `DELETE_COMPLETE` (Magnum ne connaît plus la ressource) : avant ce correctif,
+    # `_mapper_statut_magnum` ne traduisait pas cette valeur (`None`), donc `reconcilier_statut`
+    # ne touchait jamais la ligne malgré l'appel Magnum réel à chaque lecture.
+    from synelia.modules.kubernetes import service as k8s_service
+
+    original_creer = k8s_service.MagnumSimule.creer_cluster
+
+    def _creer_cluster_en_cours(self, **kw):
+        r = original_creer(self, **kw)
+        r["statut"] = "CREATE_IN_PROGRESS"
+        return r
+
+    # Comme `test_reconciliation_statut_cluster` : sans ce patch de `creer_cluster`, le stub
+    # par défaut renvoie `CREATE_COMPLETE` à la création, et `ExecuteurK8sCreate.terminer` (qui
+    # se fie au statut retourné par la soumission, pas encore à `cluster_statut`) marquerait la
+    # ressource `running` immédiatement — on ne pourrait alors jamais observer le `provisioning`
+    # figé que ce test reproduit.
+    monkeypatch.setattr(k8s_service.MagnumSimule, "creer_cluster", _creer_cluster_en_cours)
+    monkeypatch.setattr(
+        k8s_service.MagnumSimule, "cluster_statut", lambda self, cluster_id: "CREATE_IN_PROGRESS"
+    )
+    espace_id = await _espace_demo(client)
+    r = await client.post("/v1/kubernetes", json=_corps_cluster(espace_id, "k8s-jamais-abouti"))
+    assert r.status_code == 202, r.text
+    r = await client.get("/v1/kubernetes")
+    cluster = next(c for c in r.json()["donnees"] if c["nom"] == "k8s-jamais-abouti")
+    assert cluster["statut"] == "provisioning"
+    cid = cluster["id"]
+
+    # L'amont ne connaît plus (ou n'a jamais connu) ce cluster : reconciliation attendue vers
+    # un statut sincère (`degraded`), pas un `provisioning` figé indéfiniment.
+    monkeypatch.setattr(
+        k8s_service.MagnumSimule, "cluster_statut", lambda self, cluster_id: "DELETE_COMPLETE"
+    )
+    r = await client.get(f"/v1/kubernetes/{cid}")
+    assert r.status_code == 200 and r.json()["statut"] == "degraded"
+
+    # Persisté, pas seulement renvoyé une fois.
+    r = await client.get("/v1/kubernetes", params={"statut": "degraded"})
     assert any(c["id"] == cid for c in r.json()["donnees"])
 
 
