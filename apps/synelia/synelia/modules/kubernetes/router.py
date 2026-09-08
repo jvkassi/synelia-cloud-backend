@@ -61,7 +61,7 @@ async def creer_cluster(
     corps: m.ClusterK8sCreation, ctx: Contexte = Depends(exige("vm.create_delete"))
 ) -> Any:
     await depot_cluster.exiger_nom_libre(ctx, corps.nom)
-    espace = await Depot("espace", m.EspaceCloud).obtenir(ctx, corps.espaceId)
+    await Depot("espace", m.EspaceCloud).obtenir(ctx, corps.espaceId)
     cluster = m.ClusterK8s(
         id=nouvel_id(),
         espaceId=corps.espaceId,
@@ -74,7 +74,6 @@ async def creer_cluster(
         modules=corps.modules or ["ingress-nginx"],
         statut="provisioning",
         site=corps.site,
-        applicationId=getattr(espace, "applicationId", None),
     )
     await depot_cluster.creer(ctx, cluster)
     await journaliser(
