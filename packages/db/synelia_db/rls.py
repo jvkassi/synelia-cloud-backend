@@ -13,7 +13,7 @@ from __future__ import annotations
 from contextvars import ContextVar
 
 from sqlalchemy import event, text
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
 
 org_id_transaction: ContextVar[str | None] = ContextVar("org_id_transaction", default=None)
 
@@ -35,8 +35,20 @@ def brancher(engine: AsyncEngine) -> None:
         conn.execute(text("SELECT set_config('app.org_id', :org, true)"), {"org": org or ""})
 
 
+def _sql_politique(table: str) -> str:
+    return (
+        f"CREATE POLICY {table}_org ON {table} USING ("
+        f"  org_id IS NULL OR current_setting('app.org_id', true) = '' "
+        f"  OR org_id = current_setting('app.org_id', true))"
+    )
+
+
 def sql_politiques() -> list[str]:
-    """DDL des politiques RLS (Postgres). Idempotent."""
+    """DDL complet des politiques RLS (Postgres), inconditionnel — conservé pour compatibilité ;
+    préférer `politiques_manquantes(conn)` qui ne rejoue que ce qui manque réellement. **Changer
+    le texte d'une politique existante** ne passe pas par ce module (un `CREATE POLICY` échoue
+    si la politique existe déjà) : il faut la supprimer à la main, en tant que superutilisateur
+    (`DROP POLICY <table>_org ON <table>`), puis redémarrer un processus pour qu'il la recrée."""
     ddl: list[str] = []
     for table in TABLES_TENANT:
         ddl += [
@@ -47,8 +59,36 @@ def sql_politiques() -> list[str]:
             # hors-ligne (superutilisateur `synelia`, jamais utilisé par l'appli en marche).
             f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY",
             f"DROP POLICY IF EXISTS {table}_org ON {table}",
-            f"CREATE POLICY {table}_org ON {table} USING ("
-            f"  org_id IS NULL OR current_setting('app.org_id', true) = '' "
-            f"  OR org_id = current_setting('app.org_id', true))",
+            _sql_politique(table),
         ]
+    return ddl
+
+
+async def politiques_manquantes(conn: AsyncConnection) -> list[str]:
+    """Comme `sql_politiques()`, mais lit l'état réel (`pg_class`, `pg_policies`) et ne renvoie
+    que les ordres nécessaires — plus de `DROP POLICY` systématique. Sûr à rejouer à chaque boot
+    de chaque processus (API, worker, relais SMTP) sous le verrou consultatif de
+    `session.py::initialiser_schema`."""
+    lignes = (
+        await conn.execute(
+            text(
+                "SELECT c.relname AS table, c.relrowsecurity, c.relforcerowsecurity,"
+                "       EXISTS(SELECT 1 FROM pg_policies p"
+                "              WHERE p.tablename = c.relname AND p.policyname = c.relname || '_org')"
+                "         AS a_politique"
+                "  FROM pg_class c"
+                " WHERE c.relname = ANY(:tables)"
+            ),
+            {"tables": list(TABLES_TENANT)},
+        )
+    ).mappings().all()
+    ddl: list[str] = []
+    for ligne in lignes:
+        table = ligne["table"]
+        if not ligne["relrowsecurity"]:
+            ddl.append(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        if not ligne["relforcerowsecurity"]:
+            ddl.append(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        if not ligne["a_politique"]:
+            ddl.append(_sql_politique(table))
     return ddl
