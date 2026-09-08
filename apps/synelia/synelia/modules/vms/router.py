@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import timedelta
 from typing import Any
 
@@ -49,8 +50,8 @@ def _gabarit_pour_specs(vcpu: int, ram_go: int, disk_go: int, flore: dict[str, A
     return str(correspondant["id"])
 
 
-def _specs(corps: m.VmCreation) -> tuple[str | None, int, int, int]:
-    flore = {g["id"]: g for g in amont().gabarits()}
+async def _specs(corps: m.VmCreation) -> tuple[str | None, int, int, int]:
+    flore = {g["id"]: g for g in await asyncio.to_thread(amont().gabarits)}
     if corps.gabarit:
         g = flore.get(corps.gabarit)
         if not g:
@@ -67,8 +68,8 @@ def _specs(corps: m.VmCreation) -> tuple[str | None, int, int, int]:
     )
 
 
-def _image_par_id(image_id: str) -> dict[str, Any]:
-    images = {i["id"]: i for i in amont().images()}
+async def _image_par_id(image_id: str) -> dict[str, Any]:
+    images = {i["id"]: i for i in await asyncio.to_thread(amont().images)}
     img = images.get(image_id)
     if not img:
         raise erreurs.validation(
@@ -120,8 +121,8 @@ async def creer_vm(corps: m.VmCreation, ctx: Contexte = Depends(exige("vm.create
     espace = await verifier_quota(
         ctx, corps.espaceId, corps.vcpu or 0, corps.ramGo or 0, corps.diskGo or 0
     )
-    flavor, vcpu, ram_go, disk_go = _specs(corps)
-    image = _image_par_id(corps.imageId)
+    flavor, vcpu, ram_go, disk_go = await _specs(corps)
+    image = await _image_par_id(corps.imageId)
     await depot.exiger_nom_libre(ctx, corps.nom, parent_id=corps.espaceId)
     vm = m.Vm(
         id=nouvel_id(),
@@ -280,7 +281,8 @@ async def ouvrir_console_vm(vmId: str, ctx: Contexte = Depends(exige("vm.power")
 
     vm = await _vm(ctx, vmId)
     try:
-        url = amont().console(await service.serveur_id(ctx, vm.id))
+        sid = await service.serveur_id(ctx, vm.id)
+        url = await asyncio.to_thread(amont().console, sid)
     except erreurs.AppError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -299,7 +301,8 @@ async def obtenir_journaux_vm(
     from synelia_openstack.erreurs import traduire
 
     try:
-        lignes = amont().journaux(await service.serveur_id(ctx, vm.id))
+        sid = await service.serveur_id(ctx, vm.id)
+        lignes = await asyncio.to_thread(amont().journaux, sid)
     except erreurs.AppError:
         raise
     except Exception as exc:  # noqa: BLE001
@@ -394,7 +397,7 @@ async def redimensionner_vm(
         "ramGo": corps.ramGo if corps.ramGo is not None else vm.ramGo,
         "diskGo": corps.diskGo if corps.diskGo is not None else vm.diskGo,
     }
-    flore = {g["id"]: g for g in amont().gabarits()}
+    flore = {g["id"]: g for g in await asyncio.to_thread(amont().gabarits)}
     if nouveau["diskGo"] < vm.diskGo:
         raise erreurs.validation(
             "Un disque ne se réduit pas.", champs={"diskGo": "doit être ≥ à la taille actuelle."}
@@ -431,8 +434,8 @@ async def creer_vms_en_lot(
     total_ram = sum((mac.ramGo or 0) * (mac.quantite or 1) for mac in corps.machines)
     total_disk = sum((mac.diskGo or 0) * (mac.quantite or 1) for mac in corps.machines)
     await verifier_quota(ctx, corps.espaceId, total_vcpu, total_ram, total_disk)
-    images = {i["id"] for i in amont().images()}
-    flore = {g["id"]: g for g in amont().gabarits()}
+    images = {i["id"] for i in await asyncio.to_thread(amont().images)}
+    flore = {g["id"]: g for g in await asyncio.to_thread(amont().gabarits)}
     gabarits: dict[str, str] = {}
     for mac in corps.machines:
         if mac.imageId not in images:

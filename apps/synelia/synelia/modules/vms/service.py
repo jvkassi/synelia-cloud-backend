@@ -372,7 +372,7 @@ class ExecuteurVmResize(Executeur):
             gabarit = next(
                 (
                     g
-                    for g in amont().gabarits()
+                    for g in await asyncio.to_thread(amont().gabarits)
                     if g["vcpu"] == entre.get("vcpu")
                     and g["ramGo"] == entre.get("ramGo")
                     and g["diskGo"] == entre.get("diskGo")
