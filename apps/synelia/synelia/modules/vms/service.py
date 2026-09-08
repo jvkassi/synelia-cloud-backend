@@ -294,6 +294,7 @@ class ExecuteurVmCompose(Executeur):
                             "diskGo": mac["diskGo"],
                             "nics": mac.get("nics") or 1,
                             "ip_privee": srv.get("ip_privee") or ip_privee_mac(machine_nom, mac["imageId"]),
+                            "backupPlanId": mac.get("backupPlanId"),
                         }
                     )
             c = dict(travail.contexte)
@@ -321,6 +322,7 @@ class ExecuteurVmCompose(Executeur):
                     scsiControllers=1, nics=srv["nics"], usb=False, secureBoot=False
                 ),
                 site=site,
+                backupPlanId=srv.get("backupPlanId"),
             )
             await depot.creer(ctx, vm, parent_id=espace_id)
             await depot.definir_secrets(ctx, vm.id, {"serveur_id": srv["serveur_id"]})
