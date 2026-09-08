@@ -23,7 +23,7 @@ RACINE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(RACINE))
 
 import synelia_db.modeles  # noqa: E402,F401 — enregistre les tables sur Base.metadata
-from sqlalchemy import inspect  # noqa: E402
+from sqlalchemy import UniqueConstraint, inspect  # noqa: E402
 from synelia_db.base import Base  # noqa: E402
 from synelia_db.session import engine  # noqa: E402
 
@@ -32,6 +32,26 @@ def _type_normalise(texte: str) -> str:
     """Tolérant à la casse et aux longueurs (`VARCHAR(36)` == `varchar`)."""
     texte = texte.strip().upper()
     return texte.split("(", 1)[0] if "(" in texte else texte
+
+
+def _noms_index_modele(table: Any, dialecte: str) -> set[str]:
+    """Index déclarés (`Index(...)`, `mapped_column(index=True)`) **et**, sur Postgres
+    seulement, index qui matérialisent une contrainte d'unicité sans nom explicite
+    (`mapped_column(unique=True)` sans `index=True` : SQLAlchemy ne la nomme pas, Postgres la
+    nomme `<table>_<colonne>_key` à la création — reproduit ici pour ne pas signaler un faux
+    écart). SQLite n'expose pas ces index auto-créés via `get_indexes()` (vérifié) : sur ce
+    dialecte, seuls les index déclarés comptent."""
+    noms = {ix.name for ix in table.indexes}
+    if dialecte != "postgresql":
+        return noms
+    for c in table.constraints:
+        if not isinstance(c, UniqueConstraint):
+            continue
+        if c.name:
+            noms.add(c.name)
+        else:
+            noms.add(f"{table.name}_{'_'.join(col.name for col in c.columns)}_key")
+    return noms
 
 
 def _comparer(conn: Any) -> list[str]:
@@ -56,8 +76,12 @@ def _comparer(conn: Any) -> list[str]:
                     f"{nom}.{col.name} : nullable={col_db['nullable']} en base, "
                     f"{bool(col.nullable)} dans le modèle"
                 )
+            # Les deux côtés compilés avec le même dialecte : `str()` seul sur un type reflété
+            # (PostgreSQL) rend souvent la forme générique ("TIMESTAMP") sans "WITH TIME ZONE",
+            # même quand `timezone=True` est bien posé côté catalogue — `.compile(dialect=...)`
+            # est nécessaire des deux côtés pour comparer des chaînes équivalentes.
             type_modele = _type_normalise(str(col.type.compile(dialect=conn.dialect)))
-            type_db = _type_normalise(str(col_db["type"]))
+            type_db = _type_normalise(str(col_db["type"].compile(dialect=conn.dialect)))
             if type_modele != type_db:
                 ecarts.append(f"{nom}.{col.name} : type={type_db} en base, {type_modele} dans le modèle")
 
@@ -66,7 +90,7 @@ def _comparer(conn: Any) -> list[str]:
             ecarts.append(f"{nom}.{c} : colonne en base absente du modèle")
 
         index_db = {ix["name"] for ix in insp.get_indexes(nom) if not ix["name"].endswith("_pkey")}
-        index_modele = {ix.name for ix in table.indexes}
+        index_modele = _noms_index_modele(table, conn.dialect.name)
         for manquant in sorted(index_modele - index_db):
             ecarts.append(f"{nom} : index déclaré absent en base : {manquant}")
         for en_trop in sorted(index_db - index_modele):
