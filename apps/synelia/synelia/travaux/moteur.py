@@ -135,6 +135,14 @@ def _en_ligne() -> bool:
     return bool(os.environ.get("VERCEL")) or reglages().env == "test"
 
 
+def _mode_worker() -> bool:
+    """Vrai quand ce processus API délègue l'exécution des travaux à `synelia worker`
+    (`travaux/local.py`) plutôt que de les exécuter lui-même (`create_task`) — dev01 seulement,
+    voir `docker-compose.dev01.yml`. Lu à l'appel (pas mis en cache) pour que les tests puissent
+    le basculer par `monkeypatch.setenv`, comme `_en_ligne()`."""
+    return os.environ.get("SYNELIA_TRAVAUX_WORKER", "").lower() in {"1", "true", "oui"}
+
+
 async def demarrer_travail(
     ctx: Contexte,
     type_travail: str,
@@ -175,6 +183,28 @@ async def demarrer_travail(
 
     if _en_ligne():
         await _executer(ctx, travail, depuis=0)
+    elif _mode_worker():
+        # `synelia worker` (travaux/local.py) rejoue ce travail hors requête HTTP : il a besoin
+        # du même acteur que `create_task` aujourd'hui pour que les lignes d'audit écrites par
+        # les exécuteurs portent l'e-mail de l'utilisateur, pas un principal générique
+        # « worker ». Aucun secret dans ce qui est sérialisé (pas de jeton, pas de mot de
+        # passe). `vers_contrat` n'expose pas `contexte` — le principal reste interne.
+        p = ctx.principal
+        if p is not None:
+            travail.contexte = {
+                **travail.contexte,
+                "principal": {
+                    "utilisateur_id": p.utilisateur_id,
+                    "email": p.email,
+                    "nom": p.nom,
+                    "org_id": p.org_id,
+                    "role": p.role,
+                    "equipe": p.equipe,
+                    "role_equipe": p.role_equipe,
+                },
+            }
+        travail.statut = "queued"
+        await ctx.session.commit()
     else:
         await ctx.session.commit()
         asyncio.get_running_loop().create_task(_executer_detache(travail.id, ctx))
@@ -320,6 +350,9 @@ async def relancer(ctx: Contexte, travail: Travail) -> Travail:
         return travail
     if _en_ligne():
         await _executer(ctx, travail, depuis=depuis)
+    elif _mode_worker():
+        travail.statut = "queued"
+        await ctx.session.commit()
     else:
         await ctx.session.commit()
         asyncio.get_running_loop().create_task(_executer_detache(travail.id, ctx))
@@ -337,6 +370,15 @@ async def reprendre_apres_pause(ctx: Contexte, travail: Travail, depuis: int) ->
         return travail
     if _en_ligne():
         await _executer(ctx, travail, depuis=depuis)
+    elif _mode_worker():
+        # La présence de `attente` dans `contexte` signifie « en pause » pour le worker (1.4) ;
+        # elle doit disparaître dès que l'humain a tranché. Réassignation d'un nouveau dict :
+        # `contexte` est une colonne JSON, une mutation en place n'est pas détectée par
+        # SQLAlchemy. La tâche courante reste `running` — le worker recalcule le point de
+        # reprise (`executer_un`, règle 1.4).
+        travail.contexte = {k: v for k, v in travail.contexte.items() if k != "attente"}
+        travail.statut = "queued"
+        await ctx.session.commit()
     else:
         await ctx.session.commit()
         asyncio.get_running_loop().create_task(_executer_detache(travail.id, ctx))
