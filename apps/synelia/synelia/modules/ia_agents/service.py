@@ -77,9 +77,30 @@ SEMENCES: list[m.ModeleIA] = [
         statut="disponible",
         usages=["Réponses courtes", "Volume élevé", "Secours si le garde-fou OpenRouter bloque les autres modèles"],
         description=(
-            "Seul modèle vérifié en direct comme réellement autorisé sous le garde-fou "
-            "restrictif du compte OpenRouter partagé (2026-09-07) — appelé réellement via "
-            "LiteLLM/OpenRouter."
+            "Vérifié en direct comme réellement autorisé sous le garde-fou restrictif du "
+            "compte OpenRouter partagé (2026-09-07) — appelé réellement via LiteLLM/OpenRouter."
+        ),
+        invocable=True,
+    ),
+    m.ModeleIA(
+        id="m-glm-flash",
+        slug="z-ai/glm-5.3-flash",
+        nom="GLM 5.3 Flash",
+        editeur="Z.ai",
+        famille="texte",
+        hebergement="externe",
+        residence="Passerelle OpenRouter — fournisseur variable selon la route.",
+        licence="Z.ai",
+        contexteJetons=128_000,
+        prixEntree=65,
+        prixSortie=130,
+        unite="jeton",
+        statut="disponible",
+        usages=["Réponses courtes", "Volume élevé", "Modèle par défaut de la démo"],
+        description=(
+            "Vérifié en direct comme réellement autorisé sous le garde-fou restrictif du "
+            "compte OpenRouter partagé (2026-09-09) — appelé réellement via LiteLLM/OpenRouter. "
+            "Modèle par défaut demandé pour la démo."
         ),
         invocable=True,
     ),

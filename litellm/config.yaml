@@ -37,12 +37,18 @@ model_list:
   # `allowed_models` à une liste réduite depuis le 2026-09-07 07:07 UTC — la clé
   # configurée n'a pas les droits de gestion pour le corriger (confirmé : appel
   # réel à /guardrails/{id} → 401 « Invalid management key »). deepseek-v4-flash
-  # est le seul modèle vérifié en direct comme réellement autorisé sous ce
-  # garde-fou (200 réel, les 8 modèles ci-dessus restent en configuration au cas
-  # où le garde-fou serait corrigé, mais échouent tant qu'il ne l'est pas).
+  # et glm-5.3-flash sont les deux modèles vérifiés en direct comme réellement
+  # autorisés sous ce garde-fou (200 réel, les 8 modèles ci-dessus restent en
+  # configuration au cas où le garde-fou serait corrigé, mais échouent tant
+  # qu'il ne l'est pas). glm-5.3-flash est le modèle par défaut demandé pour la
+  # démo du 2026-09-09.
   - model_name: deepseek/deepseek-v4-flash
     litellm_params:
       model: openrouter/deepseek/deepseek-v4-flash
+      api_key: os.environ/SYNELIA_OPENROUTER_KEY
+  - model_name: z-ai/glm-5.3-flash
+    litellm_params:
+      model: openrouter/z-ai/glm-5.3-flash
       api_key: os.environ/SYNELIA_OPENROUTER_KEY
 
 litellm_settings:
