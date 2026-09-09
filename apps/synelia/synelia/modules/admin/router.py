@@ -27,6 +27,9 @@ from synelia.modules.admin.service import (
     depot_placement,
     depot_statut_service,
 )
+from synelia.modules.espaces.service import depot as depot_espace
+from synelia.modules.membres.router import membre_contrat
+from synelia.modules.support.service import detenteur_tickets
 from synelia.travaux import demarrer_travail, vers_contrat
 
 router = APIRouter(prefix="/admin", tags=["Super admin — pilotage"])
@@ -981,6 +984,64 @@ async def notifier_organisation(
         details={"destinataires": destinataires, "sujet": corps.sujet},
     )
     return {"destinataires": destinataires}
+
+
+# ── organisations : lecture cross-tenant (fiche organisation, espace fournisseur) ────────────
+# Les routes `/espaces`, `/membres`, `/support/tickets` sont scellées par organisation (RLS +
+# filtre applicatif sur `ctx.org_id`, cf. `Depot._org`) : un admin plateforme qui consulte la
+# fiche d'*une* organisation cliente ne peut pas s'en servir pour lire celles d'une autre. Ces
+# trois routes existent pour ce seul usage — passer `org_id=orgId` explicitement au dépôt/à la
+# requête, comme le fait déjà `notifier_organisation` ci-dessus et `service.lignes_type` pour les
+# agrégations plateforme. Aucune n'accepte l'id d'appel du client : l'appelant doit être
+# `exige_admin`, jamais une route `/v1/**` ordinaire.
+@router.get(
+    "/organisations/{orgId}/espaces",
+    response_model=list[m.EspaceCloud],
+    response_model_exclude_none=True,
+)
+async def lister_espaces_organisation(
+    orgId: str, ctx: Contexte = Depends(exige_admin("org.manage"))
+) -> Any:  # noqa: N803
+    org = await ctx.session.get(Organisation, orgId)
+    if org is None:
+        raise erreurs.introuvable("Organisation", orgId)
+    return await depot_espace.tous(ctx, org_id=orgId)
+
+
+@router.get(
+    "/organisations/{orgId}/membres",
+    response_model=list[m.Membre],
+    response_model_exclude_none=True,
+)
+async def lister_membres_organisation(
+    orgId: str, ctx: Contexte = Depends(exige_admin("org.manage"))
+) -> Any:  # noqa: N803
+    org = await ctx.session.get(Organisation, orgId)
+    if org is None:
+        raise erreurs.introuvable("Organisation", orgId)
+    q = (
+        select(Membership, Utilisateur)
+        .join(Utilisateur, Utilisateur.id == Membership.utilisateur_id)
+        .where(Membership.org_id == orgId)
+        .order_by(Membership.cree_le)
+    )
+    lignes = (await ctx.session.execute(q)).all()
+    return [membre_contrat(ctx, mem, u) for mem, u in lignes]
+
+
+@router.get(
+    "/organisations/{orgId}/tickets",
+    response_model=list[m.Ticket],
+    response_model_exclude_none=True,
+)
+async def lister_tickets_organisation(
+    orgId: str, ctx: Contexte = Depends(exige_admin("org.manage"))
+) -> Any:  # noqa: N803
+    org = await ctx.session.get(Organisation, orgId)
+    if org is None:
+        raise erreurs.introuvable("Organisation", orgId)
+    items = await detenteur_tickets.tous(ctx, org_id=orgId)
+    return [t.model_dump(mode="json") for t in items]
 
 
 # ── placements ───────────────────────────────────────────────────────────────
