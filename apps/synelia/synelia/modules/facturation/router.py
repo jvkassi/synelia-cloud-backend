@@ -222,6 +222,29 @@ async def initier_paiement_paystack(
     }
 
 
+@router.post("/paystack/prepayer")
+async def initier_prepaiement_paystack(
+    corps: dict[str, Any], ctx: Contexte = Depends(exige(None))
+) -> dict[str, Any]:
+    """Paiement exigé avant la création d'un Espace Cloud ou d'un domaine — aucune facture
+    n'existe encore pour ce montant, donc pas de `factureId` à référencer (voir l'endpoint
+    précédent, qui suppose une facture)."""
+    montant = int(corps.get("montant") or 0)
+    if montant <= 0:
+        raise erreurs.validation("Montant invalide.", {"montant": "Doit être supérieur à zéro."})
+    cle_publique = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
+    u = await ctx.session.get(Utilisateur, ctx.utilisateur_id) if ctx.utilisateur_id else None
+    return {
+        "reference": paystack.generer_reference_prepaiement(ctx.org_id, montant),
+        "clePublique": cle_publique,
+        "montant": montant,
+        "devise": "XOF",
+        "email": u.email if u else ctx.principal.email if ctx.principal else "",
+        "montantMineur": montant * 100,
+        "canaux": ["card", "mobile_money"],
+    }
+
+
 @router.get("/paystack/verifier/{reference}")
 async def verifier_paiement_paystack(reference: str) -> dict[str, Any]:
     """Appelé par le callback du popup Inline.js juste après le paiement : revérifie

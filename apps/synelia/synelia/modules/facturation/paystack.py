@@ -19,8 +19,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 import httpx
+from sqlalchemy.exc import IntegrityError
 from synelia_contract import modeles as m
 from synelia_db import rls
+from synelia_db.modeles import Ressource
 from synelia_db.session import fabrique
 from synelia_kernel.config import reglages
 from synelia_kernel.journal import journal
@@ -34,6 +36,7 @@ log = journal("paystack")
 
 _SEPARATEUR = "--"
 _PREFIXE = "SYN"
+_MARQUEUR_PREPAIEMENT = "PREPAIE"
 
 
 def cle_secrete() -> str | None:
@@ -54,6 +57,16 @@ def generer_reference(org_id: str, facture_id: str) -> str:
     # token_hex, pas token_urlsafe : ce dernier peut produire un `-`, ce qui casserait le
     # découpage sur `--` au retour.
     return _SEPARATEUR.join([_PREFIXE, org_id, facture_id, secrets.token_hex(6)])
+
+
+def generer_reference_prepaiement(org_id: str, montant: int) -> str:
+    """Paiement exigé avant qu'aucune ressource — Espace Cloud, domaine — n'existe : pas de
+    facture à référencer, le montant attendu voyage donc dans la référence elle-même (`.`,
+    jamais produit par `token_hex` ni par un identifiant, ne collisionne pas avec `--`).
+    Paystack rejette une référence contenant un caractère hors `[a-zA-Z0-9.=-]` (« Invalid
+    character in transaction reference ») : `:` en faisait partie, `.` est accepté."""
+    marqueur = f"{_MARQUEUR_PREPAIEMENT}.{montant}"
+    return _SEPARATEUR.join([_PREFIXE, org_id, marqueur, secrets.token_hex(6)])
 
 
 def _decoder_reference(reference: str) -> tuple[str, str] | None:
@@ -131,6 +144,53 @@ async def confirmer_paiement(
         rls.org_id_transaction.reset(jeton)
 
 
+async def confirmer_prepaiement(
+    org_id: str, montant_paye: int, *, moyen: str, reference: str
+) -> bool:
+    """Prépaiement libre (pas de facture) : le crédit est écrit avec un `id` déterministe
+    dérivé de la référence Paystack, donc une deuxième confirmation de la même référence
+    (webhook + callback client, tous deux appelés à dessein) heurte la contrainte d'unicité
+    plutôt que de créditer deux fois — pas de lecture-puis-écriture, donc pas de fenêtre de
+    course entre les deux chemins."""
+    jeton = rls.org_id_transaction.set(org_id)
+    try:
+        async with fabrique()() as session:
+            id_ecriture = f"px-{reference}"[:64]
+            r = Ressource(
+                id=id_ecriture,
+                org_id=org_id,
+                type="ecriture",
+                nom="Prépaiement Paystack",
+                donnees={
+                    "id": id_ecriture,
+                    "orgId": org_id,
+                    "libelle": "Prépaiement Paystack",
+                    "type": "credit",
+                    "montant": montant_paye,
+                },
+            )
+            session.add(r)
+            try:
+                await session.commit()
+            except IntegrityError:
+                await session.rollback()
+                log.info("paystack.prepaiement_deja_confirme", reference=reference)
+                return False
+            ctx = _ContexteService(session=session, reglages=reglages(), org_id_force=org_id)
+            await journaliser(
+                ctx,
+                action="prepaiement.paystack",
+                cible_type="ecriture",
+                cible_id=id_ecriture,
+                details={"fournisseur": "paystack", "reference": reference, "moyen": moyen, "montant": montant_paye},
+            )
+            await session.commit()
+            log.info("paystack.prepaiement_confirme", reference=reference, montant=montant_paye)
+            return True
+    finally:
+        rls.org_id_transaction.reset(jeton)
+
+
 _MOYEN_PAR_CANAL = {
     "card": "carte",
     "mobile_money": "orange_money",  # canal générique Paystack ; l'opérateur exact
@@ -144,16 +204,24 @@ async def traiter_evenement_charge_reussie(donnees: dict[str, Any]) -> bool:
     if decode is None:
         log.warning("paystack.reference_inconnue", reference=reference)
         return False
-    org_id, facture_id = decode
+    org_id, cible = decode
     if donnees.get("status") != "success":
         return False
     canal = donnees.get("channel", "card")
+    moyen = _MOYEN_PAR_CANAL.get(canal, "carte")
+    montant_paye = int(donnees.get("amount", 0)) // 100
+    if cible.startswith(f"{_MARQUEUR_PREPAIEMENT}."):
+        montant_attendu = int(cible.split(".", 1)[1])
+        if montant_paye != montant_attendu:
+            log.warning(
+                "paystack.montant_incoherent_prepaiement",
+                attendu=montant_attendu,
+                recu=montant_paye,
+            )
+            return False
+        return await confirmer_prepaiement(org_id, montant_paye, moyen=moyen, reference=reference)
     return await confirmer_paiement(
-        org_id,
-        facture_id,
-        montant_paye=int(donnees.get("amount", 0)) // 100,
-        moyen=_MOYEN_PAR_CANAL.get(canal, "carte"),
-        reference=reference,
+        org_id, cible, montant_paye=montant_paye, moyen=moyen, reference=reference
     )
 
 
