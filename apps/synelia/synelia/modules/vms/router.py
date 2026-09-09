@@ -496,6 +496,17 @@ async def supprimer_instantane_vm(
     instantaneId: str, ctx: Contexte = Depends(exige("backup.plan.write"))
 ) -> Any:  # noqa: N803
     await instantane_depot.obtenir(ctx, instantaneId)
+    # Sans cet appel, la suppression ne retirait que la ligne DB : l'image Glance réelle
+    # capturée par `vm.snapshot` (cf. `ExecuteurVmSnapshot`, secret `image_id`) restait active
+    # indéfiniment — un snapshot « supprimé » du point de vue de l'interface continuait de
+    # consommer de la capacité Glance. Même motif que `serveur_id` sur `ExecuteurVmDelete`.
+    try:
+        secrets = await instantane_depot.secrets(ctx, instantaneId)
+    except Exception:  # noqa: BLE001
+        secrets = {}
+    image_id = secrets.get("image_id")
+    if image_id:
+        await asyncio.to_thread(amont().supprimer_image, image_id)
     await instantane_depot.supprimer(ctx, instantaneId, logique=False)
     await journaliser(
         ctx, action="vm.instantane.suppression", cible_type="instantane_vm", cible_id=instantaneId

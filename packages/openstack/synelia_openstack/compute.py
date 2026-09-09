@@ -177,6 +177,9 @@ class ComputeSimule:
     def statut_image(self, image_id: str, identifiants: dict[str, Any] | None = None) -> str:
         return "active"
 
+    def supprimer_image(self, image_id: str) -> None:
+        return None
+
     def statut_serveur(self, serveur_id: str, identifiants: dict[str, Any] | None = None) -> str:
         return "ACTIVE"
 
@@ -445,6 +448,15 @@ class ComputeOpenStack(ComputeSimule):
         c = self._connexion_pour(identifiants)
         img = c.image.find_image(image_id, ignore_missing=True)
         return str(img.status) if img else "absente"
+
+    def supprimer_image(self, image_id: str) -> None:
+        """Supprime réellement l'image Glance d'un instantané — sans cet appel, `DELETE
+        .../instantanes/{id}` ne retirait que la ligne DB (constaté en direct : l'image Glance
+        d'un snapshot supprimé depuis l'interface restait `active`, capacité jamais rendue au
+        cluster). `ignore_missing=True` : une image déjà purgée (politique de rétention Glance,
+        ou double-suppression après une reprise de travail) est déjà le résultat recherché, pas
+        un échec."""
+        self._c().image.delete_image(image_id, ignore_missing=True)
 
     def statut_serveur(self, serveur_id: str, identifiants: dict[str, Any] | None = None) -> str:
         """Statut Nova réel du serveur — `absente` si Nova ne le connaît plus du tout (supprimé
