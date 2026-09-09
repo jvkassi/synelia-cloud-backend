@@ -348,10 +348,23 @@ async def modifier_materiel_vm(
 async def obtenir_metriques_vm(
     vmId: str, fenetre: str | None = None, ctx: Contexte = Depends(exige(None))
 ) -> Any:  # noqa: N803
-    await _vm(ctx, vmId)
+    vm = await _vm(ctx, vmId)
     fen = fenetre if fenetre in ("24h", "7j", "30j") else "24h"
+    # Point instantané réel (diagnostics Nova/libvirt), pas un historique : rien ne persiste
+    # de série dans le temps côté backend, seulement le second relevé qui a servi à calculer
+    # le point. `disque` reste toujours vide — les diagnostics donnent des E/S, jamais
+    # l'occupation du disque, qu'aucune intégration ne remonte aujourd'hui pour une VM.
+    valeurs = await service.diagnostics_instantanes(ctx, vm) if vm.statut == "running" else None
+    ts = maintenant()
     series = [
-        m.Serie(metrique=metrique, unite=unite, fenetre=fen, points=[])
+        m.Serie(
+            metrique=metrique,
+            unite=unite,
+            fenetre=fen,
+            points=[m.PointSerie(ts=ts, valeur=valeurs[metrique])]
+            if valeurs and metrique in valeurs
+            else [],
+        )
         for metrique, unite in _SERIES
     ]
     return m.VmsVmIdMetriquesGetResponse(series=series)

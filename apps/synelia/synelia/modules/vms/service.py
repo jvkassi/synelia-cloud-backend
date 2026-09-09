@@ -46,6 +46,55 @@ async def serveur_id(ctx: Contexte, vm_id: str, travail: Travail | None = None) 
     return str(sec.get("serveur_id") or vm_id)
 
 
+def _diagnostics_vers_valeurs(
+    avant: dict, apres: dict, delta_s: float, vcpu: int
+) -> dict[str, float]:
+    """CPU et réseau sont des compteurs cumulés côté hyperviseur (temps CPU en ns depuis le
+    démarrage, octets depuis le démarrage de l'interface) : un seul relevé `diagnostics` ne
+    donne qu'un total, jamais un pourcentage ni un débit — d'où les deux relevés espacés de
+    `delta_s` passés par l'appelant. La mémoire, elle, est déjà une jauge instantanée
+    (`memory-actual`/`memory-unused`), lue sur le second relevé seul."""
+
+    def _somme(d: dict, suffixe: str, prefixe: str = "") -> float:
+        return sum(v for k, v in d.items() if k.endswith(suffixe) and k.startswith(prefixe))
+
+    cpu_pct = 0.0
+    if delta_s > 0 and vcpu > 0:
+        delta_ns = _somme(apres, "_time", "cpu") - _somme(avant, "_time", "cpu")
+        cpu_pct = max(0.0, min(100.0, delta_ns / (delta_s * 1e9 * vcpu) * 100))
+
+    reseau_mo_s = 0.0
+    if delta_s > 0:
+        delta_rx = _somme(apres, "_rx") - _somme(avant, "_rx")
+        reseau_mo_s = max(0.0, delta_rx / delta_s / 1_000_000)
+
+    actuelle = float(apres.get("memory-actual") or 0)
+    libre = float(apres.get("memory-unused") or apres.get("memory-available") or 0)
+    ram_pct = max(0.0, min(100.0, (1 - libre / actuelle) * 100)) if actuelle else 0.0
+
+    return {"cpu": cpu_pct, "ram": ram_pct, "reseau_entrant": reseau_mo_s}
+
+
+_DELTA_DIAGNOSTICS_S = 0.6
+
+
+async def diagnostics_instantanes(ctx: Contexte, vm: m.Vm) -> dict[str, float] | None:
+    """CPU/RAM/réseau instantanés d'une VM active, dérivés de deux relevés Nova
+    `.../diagnostics` (données réelles de l'hyperviseur) espacés de `_DELTA_DIAGNOSTICS_S`.
+    `None` en simulation ou si Nova ne répond pas (VM en train de basculer d'état, par
+    exemple) : l'appelant retombe alors sur des séries vides plutôt qu'une valeur inventée —
+    même politique que le reste du module (`journaux`, `console`)."""
+    sid = await serveur_id(ctx, vm.id)
+    avant = await asyncio.to_thread(amont().diagnostics, sid)
+    if avant is None:
+        return None
+    await asyncio.sleep(_DELTA_DIAGNOSTICS_S)
+    apres = await asyncio.to_thread(amont().diagnostics, sid)
+    if apres is None:
+        return None
+    return _diagnostics_vers_valeurs(avant, apres, _DELTA_DIAGNOSTICS_S, vm.vcpu)
+
+
 # États contrôlés à la lecture : une VM dans l'un de ces statuts **doit** avoir un serveur Nova
 # derrière elle, qui peut avoir disparu depuis le dernier relevé — elle vaut la peine d'être
 # vérifiée en direct (cf. `reconcilier_statut`). `creating` en est exclu volontairement : entre la
@@ -291,6 +340,7 @@ class ExecuteurVmCompose(Executeur):
                         org_id=ctx.org_id_ou_none,
                         espace_id=espace_id,
                         cle_ssh=entre.get("cleSsh"),
+                        cloud_init=entre.get("cloudInit"),
                     )
                     serveurs.append(
                         {

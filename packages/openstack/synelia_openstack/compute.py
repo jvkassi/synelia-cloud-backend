@@ -189,6 +189,9 @@ class ComputeSimule:
     def journaux(self, serveur_id: str, lignes: int = 20) -> list[str]:
         return [f"[cloud-init] ligne {i} — démarrage nominal" for i in range(1, lignes + 1)]
 
+    def diagnostics(self, serveur_id: str) -> dict[str, Any] | None:
+        return None
+
     def capacite_plateforme(self) -> dict[str, Any] | None:
         """Capacité agrégée réelle du parc d'hyperviseurs Nova — `None` en simulation :
         rien à interroger, l'appelant garde alors ses valeurs de secours."""
@@ -496,6 +499,21 @@ class ComputeOpenStack(ComputeSimule):
                 raise
             raise traduire(exc, "Machine virtuelle") from None
         return ((sortie or {}).get("output") or "").splitlines()
+
+    def diagnostics(self, serveur_id: str) -> dict[str, Any] | None:
+        """Diagnostics bruts de l'hyperviseur (`GET /servers/{id}/diagnostics`) : compteurs
+        cumulés de temps CPU, mémoire et E/S disque/réseau directement depuis libvirt/QEMU —
+        pas la forme structurée (`>= microversion 2.48`), le pilote libvirt de ce lab répond
+        toujours l'ancien dict à plat (`cpuN_time`, `memory-*`, `vdX_read`/`write`,
+        `<tap>_rx`/`tx`), vérifié en direct. `None` si le serveur n'est pas actif (Nova répond
+        409 hors `ACTIVE`) ou a disparu (404) : pas une exception qui casserait la tuile pour
+        une VM éteinte, la même politique que `statut_serveur`."""
+        try:
+            r = self._c().compute.get(f"/servers/{serveur_id}/diagnostics")
+            r.raise_for_status()
+        except Exception:  # noqa: BLE001 — VM éteinte/absente : dégradé, pas une panne
+            return None
+        return dict(r.json())
 
     def capacite_plateforme(self) -> dict[str, Any] | None:
         """Capacité agrégée réelle du parc d'hyperviseurs Nova (`/os-hypervisors/statistics`) :
