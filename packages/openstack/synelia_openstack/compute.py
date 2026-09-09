@@ -294,6 +294,19 @@ class ComputeOpenStack(ComputeSimule):
             import base64
 
             params["user_data"] = base64.b64encode(kw["cloud_init"].encode()).decode()
+        if kw.get("groupes_securite"):
+            # openstacksdk/Nova attendent une liste de noms de groupe, pas d'id — la ressource
+            # `security_group` du SDK ne s'obtient qu'en listant/cherchant par id, contrairement
+            # au réseau qui accepte directement un `uuid`. Une résolution silencieusement
+            # ignorée (groupe supprimé entre-temps côté Neutron) ne doit pas faire échouer la
+            # création : Nova pose alors le groupe `default` du projet, jamais aucun groupe.
+            noms = []
+            for gid in kw["groupes_securite"]:
+                grp = c.network.find_security_group(gid, ignore_missing=True)
+                if grp:
+                    noms.append(grp.name)
+            if noms:
+                params["security_groups"] = [{"name": n} for n in noms]
         s = c.compute.create_server(**params)
         try:
             s = c.compute.wait_for_server(s, wait=600)

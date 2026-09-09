@@ -46,6 +46,28 @@ async def serveur_id(ctx: Contexte, vm_id: str, travail: Travail | None = None) 
     return str(sec.get("serveur_id") or vm_id)
 
 
+async def _groupes_securite_neutron(ctx: Contexte, groupes_locaux: list[str] | None) -> list[str]:
+    """`groupesSecurite` (contrat `VmLotCreation`/`VmCreation`) donne des id locaux (dépôt
+    `groupe_securite`) : Nova attend l'id Neutron réel, posé dans les secrets du groupe par
+    `creer_groupe_amont` (`reseau/service.py`), pas l'id local. Un groupe introuvable ou sans
+    secret réel (encore en cours de provisioning, ou id périmé) est ignoré plutôt que de faire
+    échouer toute la création de VM pour une sélection annexe."""
+    if not groupes_locaux:
+        return []
+    from synelia.modules.reseau.service import depot_groupe
+
+    ids: list[str] = []
+    for gid in groupes_locaux:
+        try:
+            secrets = await depot_groupe.secrets(ctx, gid)
+        except Exception:  # noqa: BLE001, S112 — groupe introuvable/périmé, ignoré pas fatal
+            continue
+        neutron_id = secrets.get("groupe_id")
+        if neutron_id:
+            ids.append(str(neutron_id))
+    return ids
+
+
 def _diagnostics_vers_valeurs(
     avant: dict, apres: dict, delta_s: float, vcpu: int
 ) -> dict[str, float]:
@@ -263,6 +285,7 @@ class ExecuteurVmCreate(Executeur):
             from synelia.modules.espaces.service import depot as depot_espaces
 
             secrets_espace = await depot_espaces.secrets(ctx, vm.espaceId)
+            groupes_neutron = await _groupes_securite_neutron(ctx, entre.get("groupesSecurite"))
             # `creer_serveur` (comme les autres appels `amont()` de ce fichier) est un appel
             # openstacksdk synchrone/bloquant : exécuté tel quel dans la coroutine, il bloquerait
             # toute la boucle asyncio — donc toute l'API, pour tous les tenants — jusqu'à sa fin
@@ -282,6 +305,7 @@ class ExecuteurVmCreate(Executeur):
                 espace_id=vm.espaceId,
                 cle_ssh=entre.get("cleSsh"),
                 cloud_init=entre.get("cloudInit"),
+                groupes_securite=groupes_neutron,
             )
             c = dict(travail.contexte)
             c["serveur_id"] = srv["id"]
@@ -325,6 +349,7 @@ class ExecuteurVmCompose(Executeur):
 
             secrets_espace = await depot_espaces.secrets(ctx, espace_id) if espace_id else {}
             gabarits = entre.get("gabarits") or {}
+            groupes_neutron = await _groupes_securite_neutron(ctx, entre.get("groupesSecurite"))
             serveurs = []
             for mac in entre.get("machines") or []:
                 quantite = mac.get("quantite") or 1
@@ -341,6 +366,7 @@ class ExecuteurVmCompose(Executeur):
                         espace_id=espace_id,
                         cle_ssh=entre.get("cleSsh"),
                         cloud_init=entre.get("cloudInit"),
+                        groupes_securite=groupes_neutron,
                     )
                     serveurs.append(
                         {
