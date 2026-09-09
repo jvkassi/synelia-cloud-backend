@@ -4074,6 +4074,9 @@ class VmLotCreation(BaseModel):
         list[Machine], Field(description="Plan de déploiement composé dans l’écran de composition.")
     ]
     cleSsh: str | None = None
+    cloudInit: Annotated[
+        str | None, Field(description="Script d’amorçage, encodé en clair, commun au lot.")
+    ] = None
     antiAffinite: Annotated[
         bool | None, Field(description="Répartit les machines du lot sur des hôtes distincts.")
     ] = None
