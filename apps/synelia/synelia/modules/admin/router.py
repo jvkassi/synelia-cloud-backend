@@ -1032,19 +1032,17 @@ async def obtenir_sante_plateforme(ctx: Contexte = Depends(exige_admin("capacity
     return {
         "backends": [_backend_usage(b, usage) for b in backends],
         "filesProvisioning": {"enAttente": en_attente, "enCours": en_cours, "enEchec24h": en_echec},
-        "integrations": [
-            {"nom": "Centreon", "statut": "ok", "dernierControle": maintenant()},
-            {"nom": "Grafana", "statut": "ok", "dernierControle": maintenant()},
-            {"nom": "VictoriaLogs", "statut": "ok", "dernierControle": maintenant()},
-            {"nom": "OpenStack", "statut": "ok", "dernierControle": maintenant()},
-            {"nom": "Temporal", "statut": "ok", "dernierControle": maintenant()},
-        ],
+        "integrations": await service.sante_integrations(ctx),
         "alertes": [],
         "accesRefuses24h": 0,
         "ticketsSlaRisque": 0,
     }
 
 
+# Seul le site ABJ est réellement adossé au lab OpenStack. Un second site "Grand-Bassam"
+# (GBM) figurait ici avec des specs inventées (Tier III, 800 kW, ISO 27001, latence 4ms) —
+# retiré le 2026-09-09, même règle que `backend-gbm` dans service.py : un site fantôme avec
+# des chiffres précis est plus trompeur qu'un site absent.
 SITES_PHYSIQUES = [
     {
         "code": "ABJ",
@@ -1056,21 +1054,7 @@ SITES_PHYSIQUES = [
         "energie": "Double alimentation",
         "redondance": "2N",
         "capacite": "1,2 MW",
-        "latencesMs": [{"vers": "GBM", "ms": 4}],
         "photoUrl": "/images/sites/abj.jpg",
-    },
-    {
-        "code": "GBM",
-        "nom": "Datacenter Grand-Bassam",
-        "ville": "Grand-Bassam",
-        "site": "GBM",
-        "operateur": "Synelia Cloud",
-        "certifications": ["ISO 27001", "Tier III"],
-        "energie": "Double alimentation",
-        "redondance": "2N",
-        "capacite": "800 kW",
-        "latencesMs": [{"vers": "ABJ", "ms": 4}],
-        "photoUrl": "/images/sites/gbm.jpg",
     },
 ]
 
