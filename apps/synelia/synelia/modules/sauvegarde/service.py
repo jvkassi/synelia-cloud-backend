@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import timedelta
 from typing import Any
 
@@ -142,12 +143,15 @@ class ExecuteurSauvegarde(Executeur):
             point.tailleGo = float(travail.contexte["taille_go"])
         await points.creer(ctx, point)
         if travail.contexte.get("snapshot_ids"):
+            # `definir_secrets` chiffre des chaînes (`chiffrer(clair: str)`) : les identifiants
+            # sont une liste, donc sérialisés en JSON avant chiffrement, désérialisés à la lecture
+            # (`supprimer_snapshots_reels`, `ExecuteurVerification`, `ExecuteurRestauration`).
             await points.definir_secrets(
                 ctx,
                 point.id,
                 {
-                    "snapshot_ids": travail.contexte["snapshot_ids"],
-                    "volume_ids": travail.contexte.get("volume_ids", []),
+                    "snapshot_ids": json.dumps(travail.contexte["snapshot_ids"]),
+                    "volume_ids": json.dumps(travail.contexte.get("volume_ids", [])),
                 },
             )
         await depot.modifier(ctx, plan.id, {"dernierResultat": "ok"})
@@ -160,8 +164,8 @@ async def supprimer_snapshots_reels(ctx: Contexte, point_id: str) -> None:
     facturée ni nettoyée). Best-effort : un volume déjà supprimé ou un snapshot déjà absent ne
     doit pas empêcher la suppression du point côté application."""
     secrets = await points.secrets(ctx, point_id)
-    snapshot_ids = secrets.get("snapshot_ids") or []
-    volume_ids = secrets.get("volume_ids") or []
+    snapshot_ids = json.loads(secrets.get("snapshot_ids") or "[]")
+    volume_ids = json.loads(secrets.get("volume_ids") or "[]")
     if not snapshot_ids or not volume_ids:
         return
     try:
@@ -181,8 +185,8 @@ class ExecuteurVerification(Executeur):
     async def terminer(self, ctx: Contexte, travail: Travail) -> None:
         point_id = travail.cible_id or ""
         secrets = await points.secrets(ctx, point_id)
-        snapshot_ids = secrets.get("snapshot_ids") or []
-        volume_ids = secrets.get("volume_ids") or []
+        snapshot_ids = json.loads(secrets.get("snapshot_ids") or "[]")
+        volume_ids = json.loads(secrets.get("volume_ids") or "[]")
         verifie = True
         if snapshot_ids and volume_ids:
             vol = await depot_volume.obtenir(ctx, volume_ids[0])
@@ -204,8 +208,8 @@ class ExecuteurRestauration(Executeur):
         restauration = await restaurations.obtenir(ctx, restauration_id)
         point = await points.obtenir(ctx, restauration.pointId)
         secrets = await points.secrets(ctx, point.id)
-        snapshot_ids = secrets.get("snapshot_ids") or []
-        volume_ids = secrets.get("volume_ids") or []
+        snapshot_ids = json.loads(secrets.get("snapshot_ids") or "[]")
+        volume_ids = json.loads(secrets.get("volume_ids") or "[]")
         if snapshot_ids and volume_ids:
             vol = await depot_volume.obtenir(ctx, volume_ids[0])
             identifiants = await identifiants_espace(ctx, vol.espaceId)
@@ -219,7 +223,9 @@ class ExecuteurRestauration(Executeur):
                 for sid in snapshot_ids
             ]
             await restaurations.definir_secrets(
-                ctx, restauration_id, {"volumes_restaures": [r["id"] for r in restaures]}
+                ctx,
+                restauration_id,
+                {"volumes_restaures": json.dumps([r["id"] for r in restaures])},
             )
         await restaurations.definir_statut(ctx, restauration_id, "done")
 

@@ -135,8 +135,12 @@ class BlockStorageOpenStack(BlockStorageSimule):
     def creer_snapshot(
         self, volume_id: str, nom: str, identifiants: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        # `force=True` : un volume de données réellement utilisé pour une sauvegarde est presque
+        # toujours attaché (`in-use`), pas `available` — sans ce drapeau, Cinder refuse
+        # l'instantané (« Invalid volume: ... status must be available »), ce qui rendrait le
+        # chemin de sauvegarde réel inutilisable dans le cas même qu'il est censé couvrir.
         c = self._connexion(identifiants)
-        snap = c.block_storage.create_snapshot(volume_id=volume_id, name=nom)
+        snap = c.block_storage.create_snapshot(volume_id=volume_id, name=nom, force=True)
         snap = c.block_storage.wait_for_status(snap, "available", wait=600)
         return {"id": snap.id, "statut": snap.status}
 
