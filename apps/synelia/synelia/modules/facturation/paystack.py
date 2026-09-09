@@ -14,6 +14,7 @@ import hashlib
 import hmac
 import os
 import secrets
+import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -37,6 +38,7 @@ log = journal("paystack")
 _SEPARATEUR = "--"
 _PREFIXE = "SYN"
 _MARQUEUR_PREPAIEMENT = "PREPAIE"
+_NAMESPACE_PREPAIEMENT = uuid.UUID("f0d1f7f4-3f6a-4b9a-9c9a-4a3f6a4b9a9c")
 
 
 def cle_secrete() -> str | None:
@@ -104,6 +106,14 @@ class _ContexteService:
     def org_id(self) -> str:
         return self.org_id_force
 
+    @property
+    def ip(self) -> str | None:
+        # `journaliser()` (synelia.audit) lit `ctx.ip` sans garde — un webhook n'a pas de
+        # requête HTTP entrante à qui l'attribuer. Constaté en direct : un paiement réel
+        # confirmé plantait quand même, cette fois sur `AttributeError` plutôt que sur la
+        # troncature de l'id (voir le commentaire sur `id_ecriture` plus haut).
+        return None
+
 
 async def confirmer_paiement(
     org_id: str, facture_id: str, *, montant_paye: int, moyen: str, reference: str
@@ -155,7 +165,15 @@ async def confirmer_prepaiement(
     jeton = rls.org_id_transaction.set(org_id)
     try:
         async with fabrique()() as session:
-            id_ecriture = f"px-{reference}"[:64]
+            # `ressources.id` est un VARCHAR(36) (String(36) sur `Identifie`, cf.
+            # packages/db/synelia_db/base.py) : un id lisible dérivé de la référence
+            # (`f"px-{reference}"`) dépasse largement cette longueur et fait échouer
+            # l'insertion (`StringDataRightTruncationError`), constaté en direct après un
+            # vrai paiement Paystack — le webhook ET le callback client échouaient tous
+            # les deux avec un 500, sans jamais créditer. Un UUID5 déterministe (même
+            # référence → même id, toujours 36 caractères) donne l'idempotence sans
+            # dépendre de la longueur de la référence.
+            id_ecriture = str(uuid.uuid5(_NAMESPACE_PREPAIEMENT, reference))
             r = Ressource(
                 id=id_ecriture,
                 org_id=org_id,
