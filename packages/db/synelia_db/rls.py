@@ -10,10 +10,12 @@ Sur SQLite (dev, Vercel sans Postgres) seule la couche applicative s'applique.""
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from contextvars import ContextVar
 
 from sqlalchemy import event, text
-from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncConnection, AsyncEngine, AsyncSession
 
 org_id_transaction: ContextVar[str | None] = ContextVar("org_id_transaction", default=None)
 
@@ -33,6 +35,34 @@ def brancher(engine: AsyncEngine) -> None:
     def _poser_org(conn) -> None:  # type: ignore[no-untyped-def]
         org = org_id_transaction.get()
         conn.execute(text("SELECT set_config('app.org_id', :org, true)"), {"org": org or ""})
+
+
+@asynccontextmanager
+async def sans_org(session: AsyncSession) -> AsyncIterator[None]:
+    """Lève temporairement le filtre RLS par organisation sur la transaction déjà ouverte de
+    `session`, pour une requête qui doit volontairement traverser plusieurs organisations —
+    ex. `appartenances()` qui liste toutes les organisations d'un utilisateur pour le
+    sélecteur : sans ceci, la RLS de `memberships` (ceinture en plus des bretelles, cf.
+    module) ne laissait voir que l'organisation active de la session, et un utilisateur
+    multi-organisation ne voyait jamais ses autres organisations dans le sélecteur (constaté
+    en direct : `admin@synelia.cloud`, `org_admin` sur deux organisations, n'en voyait qu'une).
+
+    `_poser_org` (l'écouteur `begin` ci-dessus) ne pose `app.org_id` qu'à l'ouverture de la
+    transaction Postgres : changer `org_id_transaction` en cours de route, sur une transaction
+    déjà commencée, ne le repose pas. On manipule donc directement le paramètre de session
+    Postgres, restauré à la sortie — no-op hors Postgres (SQLite n'a pas `set_config`, et
+    `TABLES_TENANT` n'y est de toute façon filtré que par la couche applicative)."""
+    from synelia_kernel.config import reglages
+
+    if not reglages().est_postgres:
+        yield
+        return
+    org = org_id_transaction.get() or ""
+    await session.execute(text("SELECT set_config('app.org_id', '', true)"))
+    try:
+        yield
+    finally:
+        await session.execute(text("SELECT set_config('app.org_id', :org, true)"), {"org": org})
 
 
 def _sql_politique(table: str) -> str:

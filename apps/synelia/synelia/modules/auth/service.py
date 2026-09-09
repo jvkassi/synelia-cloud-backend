@@ -6,6 +6,7 @@ from typing import Any
 
 from sqlalchemy import select
 from synelia_contract import rbac
+from synelia_db import rls
 from synelia_db.modeles import Membership, Organisation, SessionAuth, Utilisateur
 from synelia_kernel.config import reglages
 from synelia_kernel.dates import dans, maintenant
@@ -29,13 +30,18 @@ def utilisateur_contrat(u: Utilisateur) -> dict[str, Any]:
 
 
 async def appartenances(session, u: Utilisateur) -> list[dict[str, Any]]:
-    lignes = (
-        await session.execute(
-            select(Membership, Organisation)
-            .join(Organisation, Organisation.id == Membership.org_id)
-            .where(Membership.utilisateur_id == u.id, Membership.scope_type == "org")
-        )
-    ).all()
+    """Liste **toutes** les organisations de l'utilisateur, pas seulement celle active dans la
+    session courante — cf. `rls.sans_org` : sans lever temporairement la RLS de `memberships`
+    ici, un utilisateur multi-organisation ne verrait jamais ses autres organisations dans le
+    sélecteur (`/select-organisation`, la bascule de la barre supérieure)."""
+    async with rls.sans_org(session):
+        lignes = (
+            await session.execute(
+                select(Membership, Organisation)
+                .join(Organisation, Organisation.id == Membership.org_id)
+                .where(Membership.utilisateur_id == u.id, Membership.scope_type == "org")
+            )
+        ).all()
     return [
         {
             "orgId": o.id,
