@@ -58,6 +58,10 @@ x-env-backend: &env-backend
   # optionnelle, l'utilisateur décide de l'adresse — pas de valeur inventée ici. Sans elle,
   # seul le journal structuré (`audit.ancrage`, logs Docker du worker) sert d'ancrage.
   SYNELIA_AUDIT_ANCRAGE_EMAIL: ${SYNELIA_AUDIT_ANCRAGE_EMAIL:-}
+  # Paystack (sandbox) — voir modules/facturation/paystack.py. Vide tant que non configuré :
+  # l'API répond alors `clePublique: ""` plutôt que de planter au démarrage.
+  PAYSTACK_PUBLIC_KEY: ${PAYSTACK_PUBLIC_KEY:-}
+  PAYSTACK_SECRET_KEY: ${PAYSTACK_SECRET_KEY:-}
   # IA — bases de connaissances (module ia_agents/connaissances.py) : Docling extrait,
   # Infinity vectorise (BGE-M3), Qdrant indexe. `SYNELIA_QDRANT_URL` est le seul signal
   # « réel » — les deux autres ont des valeurs par défaut docker-compose, données ici pour
@@ -104,6 +108,7 @@ services:
       # disponibles. Valeur résiduelle : un `to_thread` oublié dans un gestionnaire de requête
       # ne gèle plus que la moitié de la capacité ; le superviseur uvicorn relance un worker
       # mort sans redémarrage de conteneur.
+      #
       SYNELIA_API_WORKERS: "2"
     ports: ["127.0.0.1:4010:4000"]
     healthcheck:

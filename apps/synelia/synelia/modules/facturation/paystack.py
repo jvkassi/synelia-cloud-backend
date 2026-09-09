@@ -13,6 +13,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -22,7 +23,6 @@ from synelia_contract import modeles as m
 from synelia_db import rls
 from synelia_db.session import fabrique
 from synelia_kernel.config import reglages
-from synelia_kernel.ids import nouvel_id
 from synelia_kernel.journal import journal
 
 from synelia.audit import journaliser
@@ -51,7 +51,9 @@ def verifier_signature(corps_brut: bytes, signature: str | None) -> bool:
 def generer_reference(org_id: str, facture_id: str) -> str:
     # Séparateur double tiret : les identifiants (org-…, fa-…) n'en contiennent
     # jamais, ce qui permet de les retrouver sans ambiguïté au retour.
-    return _SEPARATEUR.join([_PREFIXE, org_id, facture_id, nouvel_id("px")])
+    # token_hex, pas token_urlsafe : ce dernier peut produire un `-`, ce qui casserait le
+    # découpage sur `--` au retour.
+    return _SEPARATEUR.join([_PREFIXE, org_id, facture_id, secrets.token_hex(6)])
 
 
 def _decoder_reference(reference: str) -> tuple[str, str] | None:
