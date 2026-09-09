@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
+import os
 import re
 from datetime import date
 from typing import Any
 
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from synelia_contract import modeles as m
 from synelia_db.modeles import Utilisateur
 from synelia_kernel import courriel, erreurs
@@ -17,7 +19,7 @@ from synelia.audit import journaliser
 from synelia.depot import Depot
 from synelia.deps import Page, exige
 from synelia.deps.contexte import Contexte
-from synelia.modules.facturation import metrologie, service, tarification
+from synelia.modules.facturation import metrologie, paystack, service, tarification
 from synelia.modules.facturation.service import crediter
 from synelia.travaux import demarrer_travail
 
@@ -194,6 +196,58 @@ async def obtenir_pdf_facture(
         media_type="application/pdf",
         headers={"Content-Disposition": f'inline; filename="{facture.numero}.pdf"'},
     )
+
+
+@router.post("/factures/{factureId}/paystack/initier")
+async def initier_paiement_paystack(
+    factureId: str, ctx: Contexte = Depends(exige("payment.update"))
+) -> dict[str, Any]:  # noqa: N803
+    """Prépare le popup Inline.js côté client : une référence propre à Synelia (pas celle
+    de Paystack), pour retrouver la facture au retour sans dépendre d'un état côté serveur."""
+    facture = await Depot("facture", m.Facture).obtenir(ctx, factureId)
+    if facture.statut == "payee":
+        raise erreurs.conflit("Cette facture est déjà payée.", code="facture_deja_payee")
+    cle_publique = os.environ.get("PAYSTACK_PUBLIC_KEY", "")
+    u = await ctx.session.get(Utilisateur, ctx.utilisateur_id) if ctx.utilisateur_id else None
+    return {
+        "reference": paystack.generer_reference(ctx.org_id, factureId),
+        "clePublique": cle_publique,
+        "montant": facture.total,
+        "devise": facture.devise,
+        "email": u.email if u else ctx.principal.email if ctx.principal else "",
+        # XOF n'a pas de sous-unité mais l'API Paystack attend systématiquement le montant
+        # x100 — vérifié en sandbox : envoyer la valeur brute la divise par cent à l'affichage.
+        "montantMineur": facture.total * 100,
+        "canaux": ["card", "mobile_money"],
+    }
+
+
+@router.get("/paystack/verifier/{reference}")
+async def verifier_paiement_paystack(reference: str) -> dict[str, Any]:
+    """Appelé par le callback du popup Inline.js juste après le paiement : revérifie
+    auprès de Paystack (jamais en faisant confiance au client) puis crédite. Volontairement
+    public — la vérification, pas une signature, est ce qui rend l'appel sûr — de sorte que
+    la démo n'échoue pas si le webhook n'atteint jamais ce labo."""
+    donnees = await paystack.verifier_aupres_de_paystack(reference)
+    if donnees is None:
+        raise erreurs.introuvable("Transaction Paystack", reference)
+    confirme = await paystack.traiter_evenement_charge_reussie(donnees)
+    return {"reference": reference, "statut": "payee" if confirme or donnees.get("status") == "success" else "en_attente"}
+
+
+@router.post("/paystack/webhook", status_code=status.HTTP_200_OK)
+async def webhook_paystack(requete: Request) -> dict[str, str]:
+    """Chemin redondant du précédent : si Paystack arrive à joindre dev01, aussi bien.
+    Toujours répondre 200 une fois le corps lu, signature valide ou non — sinon Paystack
+    réessaie pendant des jours sur une erreur qui ne se corrigera jamais toute seule."""
+    corps_brut = await requete.body()
+    signature = requete.headers.get("x-paystack-signature")
+    if not paystack.verifier_signature(corps_brut, signature):
+        return {"statut": "signature_invalide"}
+    evenement = json.loads(corps_brut)
+    if evenement.get("event") == "charge.success":
+        await paystack.traiter_evenement_charge_reussie(evenement.get("data", {}))
+    return {"statut": "recu"}
 
 
 @router.get("/moyens-paiement", response_model=list[m.MoyenPaiement])
